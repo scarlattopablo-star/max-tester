@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Max — La Casa del Cubreasiento</title>
+<style>
+  :root{ --rojo:#C81E1E; --bg:#0D0D10; --bubbleBot:#262630; --bubbleUser:#C81E1E; --txt:#fff; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  body{ display:flex; flex-direction:column; height:100dvh; background:#0b141a; color:var(--txt); }
+  header{ background:var(--bg); padding:12px 16px; display:flex; align-items:center; gap:12px; box-shadow:0 2px 8px rgba(0,0,0,.4); z-index:2; }
+  .avatar{ width:42px; height:42px; border-radius:50%; background:var(--rojo); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:20px; flex:0 0 auto; }
+  header .info{ line-height:1.2; }
+  header .name{ font-weight:600; font-size:16px; }
+  header .sub{ font-size:12px; color:#8aa; }
+  header .reset{ margin-left:auto; background:transparent; border:1px solid #444; color:#aaa; border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
+  #chat{ flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px;
+    background:#0b141a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Ccircle cx='2' cy='2' r='1' fill='%23ffffff08'/%3E%3C/svg%3E"); }
+  .msg{ max-width:80%; padding:9px 13px; border-radius:14px; font-size:15px; line-height:1.35; white-space:pre-wrap; word-wrap:break-word; animation:pop .15s ease; }
+  @keyframes pop{ from{ transform:translateY(6px); opacity:0; } }
+  .bot{ align-self:flex-start; background:var(--bubbleBot); border-bottom-left-radius:4px; }
+  .user{ align-self:flex-end; background:var(--bubbleUser); border-bottom-right-radius:4px; }
+  .typing{ align-self:flex-start; background:var(--bubbleBot); border-radius:14px; padding:12px 14px; display:none; }
+  .typing span{ display:inline-block; width:7px; height:7px; margin:0 2px; background:#9aa; border-radius:50%; animation:blink 1.2s infinite both; }
+  .typing span:nth-child(2){ animation-delay:.2s; } .typing span:nth-child(3){ animation-delay:.4s; }
+  @keyframes blink{ 0%,80%,100%{ opacity:.3; } 40%{ opacity:1; } }
+  footer{ display:flex; padding:10px; gap:8px; background:var(--bg); align-items:center; }
+  #file{ display:none; }
+  #attach{ width:42px; height:42px; border:none; border-radius:50%; background:#1f2c33; color:#fff; font-size:18px; cursor:pointer; flex:0 0 auto; }
+  #txt{ flex:1; border:none; border-radius:22px; padding:12px 16px; font-size:15px; outline:none; background:#1f2c33; color:#fff; }
+  #send{ width:46px; height:46px; border:none; border-radius:50%; background:var(--rojo); color:#fff; font-size:20px; cursor:pointer; flex:0 0 auto; }
+  #send:disabled{ opacity:.5; }
+  .msg img{ max-width:200px; border-radius:10px; display:block; }
+  #preview{ display:none; align-items:center; gap:10px; padding:8px 12px; background:#11202a; border-top:1px solid #233; }
+  #preview img{ width:46px; height:46px; object-fit:cover; border-radius:8px; }
+  #preview span{ font-size:13px; color:#9bb; }
+  #previewX{ background:#333; border:none; color:#fff; border-radius:50%; width:24px; height:24px; cursor:pointer; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="avatar">M</div>
+    <div class="info">
+      <div class="name">Max</div>
+      <div class="sub">La Casa del Cubreasiento</div>
+    </div>
+    <button class="reset" onclick="reiniciar()">Reiniciar</button>
+  </header>
+  <div id="chat">
+    <div class="msg bot">¡Hola! Soy Max, de La Casa del Cubreasiento 🙂 ¿En qué te doy una mano?</div>
+    <div class="typing" id="typing"><span></span><span></span><span></span></div>
+  </div>
+  <div id="preview"><img id="previewImg" src="" alt="" /><button id="previewX" onclick="quitarFoto()">✕</button><span>Foto lista para enviar</span></div>
+  <footer>
+    <button id="attach" title="Adjuntar foto" onclick="document.getElementById('file').click()">📎</button>
+    <input type="file" id="file" accept="image/*" />
+    <input id="txt" placeholder="Escribí un mensaje…" autocomplete="off" />
+    <button id="send" onclick="enviar()">➤</button>
+  </footer>
+<script>
+  // Cada visitante tiene su propia conversación.
+  let chatId = localStorage.getItem("maxChatId");
+  if(!chatId){ chatId = "web-" + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("maxChatId", chatId); }
+  const chat = document.getElementById("chat");
+  const typing = document.getElementById("typing");
+  const txt = document.getElementById("txt");
+  const send = document.getElementById("send");
+  const file = document.getElementById("file");
+  const preview = document.getElementById("preview");
+  const previewImg = document.getElementById("previewImg");
+  let pendingImage = null; // data URI de la foto a enviar
+
+  file.addEventListener("change", () => {
+    const f = file.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = () => { pendingImage = reader.result; previewImg.src = pendingImage; preview.style.display = "flex"; };
+    reader.readAsDataURL(f);
+    file.value = "";
+  });
+  function quitarFoto(){ pendingImage = null; preview.style.display = "none"; }
+
+  function add(text, who){
+    const d = document.createElement("div");
+    d.className = "msg " + who;
+    d.textContent = text;
+    chat.insertBefore(d, typing);
+    chat.scrollTop = chat.scrollHeight;
+  }
+  function addImage(src, who){
+    const d = document.createElement("div");
+    d.className = "msg " + who;
+    const img = document.createElement("img");
+    img.src = src;
+    d.appendChild(img);
+    chat.insertBefore(d, typing);
+    chat.scrollTop = chat.scrollHeight;
+  }
+  function showTyping(on){ typing.style.display = on ? "block" : "none"; if(on) chat.scrollTop = chat.scrollHeight; }
+
+  async function enviar(){
+    const t = txt.value.trim();
+    const img = pendingImage;
+    if(!t && !img) return;
+    if(img) addImage(img, "user");
+    if(t) add(t, "user");
+    txt.value = "";
+    quitarFoto();
+    send.disabled = true;
+    showTyping(true);
+    try{
+      const r = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ chatId, texto: t, imagen: img }) });
+      const data = await r.json();
+      showTyping(false);
+      add(data.texto || "…", "bot");
+    }catch(e){
+      showTyping(false);
+      add("Uy, se cortó la conexión. Probá de nuevo 🙏", "bot");
+    }
+    send.disabled = false;
+    txt.focus();
+  }
+  async function reiniciar(){
+    try{ await fetch("/api/reset", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ chatId }) }); }catch(e){}
+    [...document.querySelectorAll(".msg")].forEach(m=>m.remove());
+    add("¡Hola! Soy Max, de La Casa del Cubreasiento 🙂 ¿En qué te doy una mano?", "bot");
+  }
+  txt.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); enviar(); } });
+
+  // Al abrir, si el cliente ya habló antes, cargamos la conversación anterior.
+  async function cargarHistorial(){
+    try{
+      const r = await fetch("/api/history?chatId=" + encodeURIComponent(chatId));
+      const data = await r.json();
+      if(data.mensajes && data.mensajes.length){
+        [...document.querySelectorAll(".msg")].forEach(m=>m.remove()); // saco el saludo estático
+        for(const m of data.mensajes){ add(m.content, m.role === "user" ? "user" : "bot"); }
+      }
+    }catch(e){}
+  }
+  cargarHistorial();
+  txt.focus();
+</script>
+</body>
+</html>

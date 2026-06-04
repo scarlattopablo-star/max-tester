@@ -1,0 +1,14 @@
+node_modules/
+.env
+auth_baileys/
+data/agenda.json
+data/pedidos.json
+data/conversaciones.json
+data/derivaciones.json
+data/*.json
+*.log
+tunnel_url.txt
+tunnel_err.txt
+lt_url.txt
+test_*.mjs
+test_smoke.mjs

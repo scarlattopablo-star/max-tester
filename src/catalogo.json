@@ -1,0 +1,103 @@
+{
+  "_nota": "Catálogo que alimenta al bot. Nutrido con la web, Instagram y el proyecto. Agregá precios/stock cuando los tengas. Para sumar Mercado Libre, pegá los productos en la lista 'productos' con su link.",
+  "productos": [
+    {
+      "id": "alfombra-bandeja-3d",
+      "nombre": "Alfombra Bandeja Rígida 3D Antiderrame",
+      "categoria": "Alfombras",
+      "material": "Goma / caucho rígido de alta densidad (NO es cuero)",
+      "descripcion": "Alfombra rígida 3D tipo bandeja, bordes altos que contienen líquidos y suciedad. Fácil de limpiar · anti barro · anti agua · anti suciedad.",
+      "beneficios": ["Fácil de limpiar", "Anti barro", "Anti agua", "Anti suciedad", "Calce exacto por modelo"],
+      "a_medida": true,
+      "modelos_disponibles": [
+        "VW Polo", "BMW X3 2026", "VW Nivus", "Chevrolet Montana 2025 Doble Cabina",
+        "Fiat Toro", "Toyota Hilux", "BYD Yuan Up", "Changan Uni-T", "BYD Song Plus",
+        "JMEV EV3", "BYD Seagull", "BYD New E2", "Ford Ranger"
+      ],
+      "precio": null,
+      "moneda": "UYU"
+    },
+    {
+      "id": "cubreasientos-medida",
+      "nombre": "Cubreasientos a medida",
+      "categoria": "Cubreasientos",
+      "material": "Cuero ecológico premium",
+      "descripcion": "Fundas/cubreasientos fabricados a medida para cualquier vehículo y modelo. Materiales de alta gama, diseños exclusivos, con garantía.",
+      "beneficios": ["A medida exacta", "Cuero ecológico premium", "Impermeable", "Lavable", "Diseños exclusivos", "Garantía"],
+      "a_medida": true,
+      "precio": null,
+      "moneda": "UYU"
+    },
+    {
+      "id": "cubreasientos-gr",
+      "nombre": "Cubreasientos a medida estilo GR (deportivo)",
+      "categoria": "Cubreasientos",
+      "material": "Cuero ecológico premium, 8mm de espuma, impermeable, lavable",
+      "descripcion": "Terminación deportiva estilo GR (Gazoo Racing): negro con costura roja, rombos y logo GR bordado. A medida (ej: Toyota Hilux).",
+      "beneficios": ["Terminación deportiva GR", "8mm de espuma", "Impermeable", "Lavable", "A medida"],
+      "a_medida": true,
+      "precio": null,
+      "moneda": "UYU"
+    },
+    {
+      "id": "funda-volante-cuero",
+      "nombre": "Funda de volante de cuero",
+      "categoria": "Accesorios",
+      "material": "Cuero 100% genuino",
+      "descripcion": "Funda de volante en cuero genuino, calce ajustado y terminación premium.",
+      "beneficios": ["Cuero genuino", "Mejor agarre", "Look premium"],
+      "a_medida": false,
+      "precio": null,
+      "moneda": "UYU"
+    },
+    {
+      "id": "cubreauto-antigranizo",
+      "nombre": "Cubreauto antigranizo",
+      "categoria": "Accesorios",
+      "material": "Neoprene 6mm",
+      "descripcion": "Cubreauto antigranizo en neoprene de 6mm, protege la chapa del granizo y el sol.",
+      "beneficios": ["Protección antigranizo", "Neoprene 6mm", "Protege del sol"],
+      "a_medida": false,
+      "precio": null,
+      "moneda": "UYU"
+    },
+    {
+      "id": "alfombra-baul",
+      "nombre": "Alfombra de baúl de goma",
+      "categoria": "Alfombras",
+      "material": "Goma",
+      "descripcion": "Alfombra de goma para el baúl, contiene líquidos y suciedad, fácil de limpiar.",
+      "beneficios": ["Protege el baúl", "Fácil de limpiar", "Impermeable"],
+      "a_medida": true,
+      "precio": null,
+      "moneda": "UYU"
+    },
+    {
+      "id": "alfombra-logo",
+      "nombre": "Alfombras de goma con logo del vehículo",
+      "categoria": "Alfombras",
+      "material": "Goma",
+      "descripcion": "Alfombras de goma con el logo del vehículo. Disponibles para varios modelos.",
+      "modelos_disponibles": ["Saveiro", "Duster", "Stepway", "Amarok", "Creta", "HB20", "Onix", "Gol", "Ranger", "Swift", "Tiguan"],
+      "beneficios": ["Logo del vehículo", "Goma resistente", "Fácil de limpiar"],
+      "a_medida": false,
+      "precio": null,
+      "moneda": "UYU"
+    }
+  ],
+  "promos": [],
+  "preguntas_frecuentes": [
+    {
+      "q": "¿Las alfombras son de cuero?",
+      "a": "No, las alfombras bandeja son de goma/caucho rígido de alta densidad. El cuero ecológico es para los cubreasientos a medida."
+    },
+    {
+      "q": "¿Hacen envíos al interior?",
+      "a": "Sí, hacemos envíos a todo el país."
+    },
+    {
+      "q": "¿Son a medida?",
+      "a": "Los cubreasientos y las alfombras bandeja 3D se fabrican a medida según tu vehículo y modelo."
+    }
+  ]
+}
