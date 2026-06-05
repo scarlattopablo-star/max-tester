@@ -16,6 +16,13 @@ export const NEGOCIO = {
   enviosTodoElPais: true,
   mediosPago: ["Tarjetas de crédito/débito", "Mercado Pago", "Transferencia bancaria", "Efectivo en el local"],
   descuentoTransferencia: 10, // % de descuento si paga por transferencia
+  // DATOS DE COBRO que Max le comparte al cliente cuando quiere pagar.
+  // Completá estos campos (dejá "" lo que no tengas). Si están vacíos, Max coordina con un humano.
+  datosCobro: {
+    transferencia: "", // ej: "Banco Itaú, caja de ahorro $ 1234567, a nombre de La Casa del Cubreasiento" (o alias)
+    mercadoPagoAlias: "", // alias o CVU de Mercado Pago para transferir
+    mercadoPagoLink: "", // link de pago para tarjetas (lo generás en tu cuenta de Mercado Pago)
+  },
 };
 
 // Link directo a WhatsApp del humano (para derivar desde Instagram).

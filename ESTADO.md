@@ -1,7 +1,20 @@
-# ESTADO del Agente IA "Vale" — RETOMAR ACÁ
+# ESTADO del Agente IA "Max" — RETOMAR ACÁ
 
 Bot de WhatsApp (Baileys, sin API de Meta) + derivación de Instagram, para La Casa del Cubreasiento.
 Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`.
+
+## 🟢 ÚLTIMA SESIÓN (5 jun, noche) — RETOMAR ACÁ
+- **Link permanente EN VIVO:** https://max-tester.onrender.com (Render, gratis, anda con la PC apagada). Para actualizarlo: `git push` + Render → "Manual Deploy → Deploy latest commit".
+- **Mejoras de comunicación hechas y PUSHEADAS a GitHub (commit ed16438) pero FALTA REDESPLEGAR en Render** (el link en vivo todavía muestra la versión anterior; hay que hacer "Manual Deploy → Deploy latest commit"):
+  - SIN emojis/emoticones (obligatorio en el prompt).
+  - NO repreguntar lo ya respondido / no insistir; si el cliente confirma ("ese está bien"), seguir su ritmo.
+  - Rioplatense en TODA la charla (no solo el saludo): "dale, bárbaro, joya, ta, mirá", voseo.
+  - Saludo según hora de Uruguay (UTC-3): buenos días / buenas tardes / buenas noches (`momentoUruguay()` en cerebro.js).
+  - Recomienda y OPINA ("quedan divinos", "te queda re lindo puesto"), con humor agradable, genera vínculo sutil.
+  - Llama al cliente por su NOMBRE si se presenta o tras preguntar "¿con quién tengo el gusto?".
+  - **Transferencia = 10% de descuento** (`NEGOCIO.descuentoTransferencia=10`). Probado: Max lo dice bien.
+- **⏳ PENDIENTE MAÑANA — DATOS DE COBRO:** estructura lista en `config.js` → `NEGOCIO.datosCobro` (campos vacíos: `transferencia`, `mercadoPagoAlias`, `mercadoPagoLink`). El usuario los pasa mañana (no los tenía ahora). Max ya sabe usarlos: si están cargados los comparte cuando el cliente quiere pagar; si están vacíos, coordina con un humano sin inventar (lógica `datosPagoTexto()` en cerebro.js). Puede usar la MISMA cuenta de Mercado Pago de la tienda ML (solo falta el alias o el link de pago). Claude NO escribe datos financieros ni accede a la config de pagos: los pega/da el usuario.
+- **Después de cargar el cobro → redesplegar en Render** (un solo deploy con todo).
 
 ## ✅ Lo que YA funciona (probado)
 - **Cerebro: Claude** (`IA_PROVIDER=claude`, modelo `claude-sonnet-4-6`) vía endpoint OpenAI-compatible de Anthropic (`https://api.anthropic.com/v1/`).

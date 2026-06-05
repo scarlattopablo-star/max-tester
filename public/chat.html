@@ -48,7 +48,6 @@
     <button class="reset" onclick="reiniciar()">Reiniciar</button>
   </header>
   <div id="chat">
-    <div class="msg bot">Hola, soy Max de La Casa del Cubreasiento. ¿En qué te puedo ayudar?</div>
     <div class="typing" id="typing"><span></span><span></span><span></span></div>
   </div>
   <div id="preview"><img id="previewImg" src="" alt="" /><button id="previewX" onclick="quitarFoto()">✕</button><span>Foto lista para enviar</span></div>
@@ -125,22 +124,34 @@
   async function reiniciar(){
     try{ await fetch("/api/reset", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ chatId }) }); }catch(e){}
     [...document.querySelectorAll(".msg")].forEach(m=>m.remove());
-    add("Hola, soy Max de La Casa del Cubreasiento. ¿En qué te puedo ayudar?", "bot");
+    showTyping(true);
+    try{
+      const g = await fetch("/api/greeting?chatId=" + encodeURIComponent(chatId)).then(r=>r.json());
+      showTyping(false);
+      if(g.texto) add(g.texto, "bot");
+    }catch(e){ showTyping(false); }
   }
   txt.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); enviar(); } });
 
-  // Al abrir, si el cliente ya habló antes, cargamos la conversación anterior.
-  async function cargarHistorial(){
+  // Al abrir: si ya hubo charla, cargamos el historial; si no, pedimos el saludo (UNA vez).
+  async function iniciar(){
     try{
       const r = await fetch("/api/history?chatId=" + encodeURIComponent(chatId));
       const data = await r.json();
       if(data.mensajes && data.mensajes.length){
-        [...document.querySelectorAll(".msg")].forEach(m=>m.remove()); // saco el saludo estático
         for(const m of data.mensajes){ add(m.content, m.role === "user" ? "user" : "bot"); }
+        return;
       }
     }catch(e){}
+    // sin historial -> saludo nuevo del servidor
+    showTyping(true);
+    try{
+      const g = await fetch("/api/greeting?chatId=" + encodeURIComponent(chatId)).then(r=>r.json());
+      showTyping(false);
+      if(g.texto) add(g.texto, "bot");
+    }catch(e){ showTyping(false); }
   }
-  cargarHistorial();
+  iniciar();
   txt.focus();
 </script>
 </body>

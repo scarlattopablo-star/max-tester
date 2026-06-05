@@ -7,7 +7,8 @@ import { writeFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { procesarMensaje } from "./handler.js";
-import { reiniciar, historial } from "./memoria.js";
+import { saludoInicial } from "./cerebro.js";
+import { reiniciar, historial, agregar } from "./memoria.js";
 import { sleep, delayEscritura } from "./humano.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -42,6 +43,17 @@ app.get("/api/history", (req, res) => {
   const chatId = req.query.chatId;
   if (!chatId) return res.json({ mensajes: [] });
   res.json({ mensajes: historial(String(chatId)) });
+});
+
+// Saludo inicial: genera UNA presentación variada, la guarda en memoria y la devuelve.
+// Así Max no se vuelve a presentar cuando el cliente responde.
+app.get("/api/greeting", (req, res) => {
+  const chatId = req.query.chatId ? String(req.query.chatId) : "";
+  const previo = chatId ? historial(chatId) : [];
+  if (previo.length) return res.json({ texto: null, yaSaludo: true }); // ya hay charla, no saludar de nuevo
+  const texto = saludoInicial();
+  if (chatId) agregar(chatId, "assistant", texto);
+  res.json({ texto });
 });
 
 app.post("/api/reset", (req, res) => {

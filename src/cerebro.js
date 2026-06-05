@@ -59,6 +59,20 @@ function momentoUruguay() {
   return { fecha, dia, hora: h, parte, saludos };
 }
 
+const _al = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const _cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Saludo inicial: VARIADO, según la hora, con "¿cómo estás?". Se usa UNA vez por
+// conversación (lo guarda en memoria el servidor, así Max no se re-presenta).
+export function saludoInicial() {
+  const m = momentoUruguay();
+  const salu = _al(m.saludos);
+  const como = _al(["¿cómo andás?", "¿cómo va?", "¿cómo estás?", "¿todo bien?", "¿qué tal?", "¿cómo andamos?"]);
+  const pres = _al([`soy ${ASISTENTE} de ${NEGOCIO.nombre}`, `acá ${ASISTENTE}, de ${NEGOCIO.nombre}`, `te habla ${ASISTENTE} de ${NEGOCIO.nombre}`, `${ASISTENTE} de ${NEGOCIO.nombre}, a la orden`]);
+  const ofr = _al(["¿En qué te puedo ayudar?", "Contame qué estás buscando.", "¿En qué te doy una mano?", "¿Qué andás necesitando?", "Decime en qué te ayudo."]);
+  return `${salu}, ${como} ${_cap(pres)}. ${ofr}`;
+}
+
 // Resumen COMPACTO del catálogo (mucho más barato en tokens que el JSON entero).
 function resumenCatalogo() {
   const lineas = (CATALOGO.productos || []).map((p) => {
@@ -67,6 +81,16 @@ function resumenCatalogo() {
     return `- ${p.nombre} [${p.categoria}] — ${p.material}. ${p.descripcion} (${precio}).${modelos}`;
   });
   return lineas.join("\n");
+}
+
+function datosPagoTexto() {
+  const dc = NEGOCIO.datosCobro || {};
+  const partes = [];
+  if (dc.transferencia) partes.push(`- Transferencia (tiene ${NEGOCIO.descuentoTransferencia}% de descuento): ${dc.transferencia}`);
+  if (dc.mercadoPagoAlias) partes.push(`- Mercado Pago (transferir al alias): ${dc.mercadoPagoAlias}`);
+  if (dc.mercadoPagoLink) partes.push(`- Tarjetas / Mercado Pago (link de pago): ${dc.mercadoPagoLink}`);
+  if (partes.length) return `Cuando el cliente decidió comprar y quiere pagar, pasale estos datos:\n${partes.join("\n")}\nDespués de que diga que pagó, tomá el pedido y avisá que el equipo confirma el pago.`;
+  return `AÚN NO tenés cargados los datos de pago (cuenta/alias/link). Si el cliente quiere pagar, decile con naturalidad que enseguida le pasás los datos y usá "derivar_a_humano" para que alguien del equipo se los mande. NUNCA inventes números de cuenta, alias ni links.`;
 }
 
 function systemPrompt() {
@@ -86,11 +110,11 @@ function systemPrompt() {
 - NOMBRE DEL CLIENTE: si el cliente se presenta o te dice su nombre, usalo de vez en cuando (NO en cada mensaje, que no quede robótico). Si la charla avanza hacia una compra o un turno y no sabés su nombre, preguntalo natural ("¿Con quién tengo el gusto?" o "¿Cómo es tu nombre?") y de ahí en más llamalo por su nombre.
 - Paciente y tranquilo. Nunca apurás ni presionás. Si necesita pensarlo, le das espacio ("tranqui, cuando quieras me escribís").
 - ⛔ NO USÉS EMOJIS NI EMOTICONES. Nada de caritas, manitos, cámaras, ni ningún símbolo. Texto limpio, como una persona que tipea normal. Esto es OBLIGATORIO en TODOS tus mensajes.
-- La PRIMERA vez que saludás te presentás incluyendo el negocio y preguntás en qué ayudás, en un mensaje cortito. Saludá según el momento del día (ver arriba) y variá la frase cada vez. SIN emojis. Variantes (no las copies literal):
-  · "${op}, soy ${ASISTENTE} de ${NEGOCIO.nombre}. ¿En qué te puedo ayudar?"
-  · "${op}, acá ${ASISTENTE} de ${NEGOCIO.nombre}. Contame qué estás buscando."
-  · "${op}. Soy ${ASISTENTE}, de ${NEGOCIO.nombre}. ¿Qué necesitás?"
-  Esa presentación va UNA SOLA VEZ, al inicio.
+- La PRIMERA vez que saludás te presentás (con el negocio), preguntás "¿cómo estás?" y ofrecés ayuda, en un mensaje cortito. Saludá según el momento del día (ver arriba) y variá SIEMPRE la frase. SIN emojis. Variantes (no las copies literal):
+  · "${op}, ¿cómo andás? Soy ${ASISTENTE} de ${NEGOCIO.nombre}. ¿En qué te puedo ayudar?"
+  · "${op}, ¿todo bien? Acá ${ASISTENTE} de ${NEGOCIO.nombre}. Contame qué estás buscando."
+  · "${op}, ¿qué tal? Te habla ${ASISTENTE}, de ${NEGOCIO.nombre}. ¿Qué necesitás?"
+  ⛔ Esa presentación (con el "¿cómo estás?") va UNA SOLA VEZ, SOLO si es el PRIMER mensaje de la charla. Si ya saludaste antes, NUNCA te vuelvas a presentar.
 - Si en la charla YA hay mensajes previos (el cliente ya habló antes), NO te vuelvas a presentar ni repitas tu nombre. Saludá como a un conocido ("Hola de nuevo", "Buenas, ¿cómo va eso?") o seguí directo, recordando lo que venían hablando.
 - Sonás natural y espontáneo: variás cómo decís las cosas, no repetís frases armadas.
 
@@ -140,6 +164,9 @@ function systemPrompt() {
 - Web: ${NEGOCIO.web}
 - (La fecha y el momento del día están arriba, en "Momento actual".)
 - Descuento: si el cliente paga por TRANSFERENCIA bancaria, tiene un ${NEGOCIO.descuentoTransferencia}% de descuento sobre el total. Mencionalo cuando se hable de precio/pago o cuando ayude a cerrar, sin ser insistente.
+
+# CÓMO PAGAR (datos de cobro)
+${datosPagoTexto()}
 
 # REGLAS DE ORO (no las rompas nunca)
 - Las ALFOMBRAS BANDEJA son de GOMA / caucho rígido. NUNCA digas que son de cuero.
