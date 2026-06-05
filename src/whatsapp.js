@@ -85,7 +85,7 @@ async function iniciar() {
     procesando.add(jid);
     try {
       await sock.sendPresenceUpdate("composing", jid);
-      const { texto: respuesta, acciones } = await procesarMensaje({ chatId: jid, texto, canal: "whatsapp", imagenes });
+      const { texto: respuesta, acciones, imagenesEnviar = [] } = await procesarMensaje({ chatId: jid, texto, canal: "whatsapp", imagenes });
       // Si el cliente escribió MÁS mientras Max pensaba, no mandamos esta respuesta:
       // reprocesamos para considerar también esos mensajes nuevos.
       if (b.textos.length || b.imagenes.length) {
@@ -96,7 +96,11 @@ async function iniciar() {
       await sleep(delayEscritura(respuesta));
       await sock.sendPresenceUpdate("paused", jid);
       await sock.sendMessage(jid, { text: respuesta });
-      console.log(`📤 ${jid}: ${respuesta}`);
+      // Si Max decidió mandar fotos, las enviamos como imágenes.
+      for (const url of imagenesEnviar) {
+        try { await sock.sendMessage(jid, { image: { url } }); } catch (e) { console.log("⚠ no pude enviar foto:", e.message); }
+      }
+      console.log(`📤 ${jid}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
       for (const a of acciones) console.log(`   ⚙ ${a.herramienta} → ${JSON.stringify(a.resultado)}`);
     } catch (e) {
       console.log(`⚠ Error respondiendo a ${jid}: ${e.message}`);

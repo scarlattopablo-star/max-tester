@@ -113,7 +113,8 @@
       const r = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ chatId, texto: t, imagen: img }) });
       const data = await r.json();
       showTyping(false);
-      add(data.texto || "…", "bot");
+      if(data.texto) add(data.texto, "bot");
+      if(data.fotos && data.fotos.length){ for(const f of data.fotos){ addImage(f, "bot"); } }
     }catch(e){
       showTyping(false);
       add("Uy, se cortó la conexión. Probá de nuevo 🙏", "bot");

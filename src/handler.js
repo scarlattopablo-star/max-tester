@@ -18,10 +18,10 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
 
   // WhatsApp / simulador / web: agente completo con IA.
   const previo = historial(chatId);
-  const { texto: respuesta, acciones } = await responder(texto, previo, imagenes);
+  const { texto: respuesta, acciones, imagenesEnviar = [] } = await responder(texto, previo, imagenes);
   // En la memoria guardamos solo texto (no el base64 de la imagen, que es pesado).
   const marca = imagenes && imagenes.length ? (texto ? texto + " [+foto]" : "[el cliente mandó una foto]") : texto;
   agregar(chatId, "user", marca);
   agregar(chatId, "assistant", respuesta);
-  return { texto: respuesta, acciones };
+  return { texto: respuesta, acciones, imagenesEnviar };
 }

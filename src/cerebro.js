@@ -27,7 +27,7 @@ function buscarPrecio(consulta) {
     .filter((x) => x.aciertos > 0)
     .sort((a, b) => b.aciertos - a.aciertos)
     .slice(0, 6)
-    .map((x) => ({ nombre: x.item.n, precio: x.item.p, precio_lista: x.item.l }));
+    .map((x) => ({ nombre: x.item.n, precio: x.item.p, precio_lista: x.item.l, img: (x.item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") }));
 }
 
 let _client = null;
@@ -102,6 +102,11 @@ function systemPrompt() {
 - Asociá lo que ves con nuestro catálogo y seguí la charla en consecuencia. Ej: si ves una camioneta, "¡Ah, una Hilux! 👍 Para esa tenemos..."; si ves un asiento, comentá qué cubreasiento le va.
 - Si NO estás seguro de qué modelo/año es (a veces por la foto no se distingue), decílo con humildad y preguntá para confirmar ("Por la foto parece una Strada, ¿me confirmás el año?"). No afirmes un modelo si no estás seguro.
 
+# MANDAR FOTOS DE PRODUCTOS (vos le mandás fotos al cliente)
+- Si el cliente te pide una foto, imagen o ejemplo de un producto ("tenés foto?", "mandame una imagen", "cómo es?", "mostrame"), usá la herramienta "enviar_foto" con el producto/modelo. La foto se manda sola.
+- Acompañá la foto con un texto CORTO (ej: "¡Mirá! Te paso una foto 📸" o "Acá tenés cómo queda 👇"). NO describas la foto con mil palabras ni pegues el link, solo el comentario corto.
+- Si te piden ver algo, es mejor mostrar que solo describir: usá enviar_foto.
+
 # SI NO SABÉS O NO PODÉS RESOLVER ALGO (clave)
 - NUNCA inventes datos, precios, plazos ni características que no tenés.
 - Si te preguntan algo que no sabés o que no podés resolver, NO te quedes trabado ni mandes a otro lado de mala manera. Decílo natural y con buena onda, tipo: "Mirá, eso lo consulto con el equipo y te confirmo enseguida 🙌" o "Dejame chequearlo bien y te aviso al toque".
@@ -161,6 +166,18 @@ const TOOLS = [
         type: "object",
         properties: { modelo: { type: "string", description: "Qué busca: producto y/o modelo del auto. Ej: 'cubreasiento Hilux', 'alfombra Nivus', 'cubre volante cuero', 'cubreauto'" } },
         required: ["modelo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "enviar_foto",
+      description: "Manda al cliente la FOTO real de un producto (de Mercado Libre). Usar cuando el cliente pide una foto, imagen o ejemplo de algo (ej: 'tenés foto?', 'mandame un ejemplo', 'cómo es?'). La foto se envía sola; vos solo acompañá con un texto corto.",
+      parameters: {
+        type: "object",
+        properties: { producto: { type: "string", description: "Producto y/o modelo del auto del que querés mandar la foto. Ej: 'cubreasiento Hilux', 'cubre volante cuero', 'alfombra Nivus'" } },
+        required: ["producto"],
       },
     },
   },
@@ -240,6 +257,12 @@ function ejecutarHerramienta(nombre, input) {
       if (!encontrados.length) return { encontrado: false, mensaje: "No aparece ese producto exacto en la lista; pedí más datos (modelo/año) u ofrecé cotizarlo." };
       return { encontrado: true, moneda: PRODUCTOS.moneda, resultados: encontrados };
     }
+    if (nombre === "enviar_foto") {
+      const encontrados = buscarPrecio(input.producto || input.modelo || "").filter((x) => x.img);
+      if (!encontrados.length) return { ok: false, mensaje: "No tengo foto exacta de eso; pedí más datos del modelo." };
+      const elegidas = encontrados.slice(0, 2); // hasta 2 fotos
+      return { ok: true, enviadas: elegidas.length, fotos: elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio })) };
+    }
     if (nombre === "consultar_disponibilidad") {
       const libres = disponibilidad(input.fecha);
       return { fecha: input.fecha, franjas_libres: libres, hay_disponibilidad: libres.length > 0 };
@@ -295,7 +318,11 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
       continue;
     }
 
-    return { texto: (msg.content || "").trim(), acciones };
+    const imagenesEnviar = acciones
+      .filter((a) => a.herramienta === "enviar_foto" && a.resultado?.ok)
+      .flatMap((a) => a.resultado.fotos.map((f) => f.img))
+      .filter(Boolean);
+    return { texto: (msg.content || "").trim(), acciones, imagenesEnviar };
   }
-  return { texto: "Disculpá, se me complicó procesar eso. ¿Lo podés repetir o preferís que te pase con un asesor?", acciones };
+  return { texto: "Disculpá, se me complicó procesar eso. ¿Lo podés repetir o preferís que te pase con un asesor?", acciones, imagenesEnviar: [] };
 }

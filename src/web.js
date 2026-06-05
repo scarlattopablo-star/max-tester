@@ -15,31 +15,8 @@ const PUBLIC = join(__dirname, "..", "public");
 const PORT = process.env.PORT || 3000;
 
 const app = express();
-app.use(express.json({ limit: "20mb" })); // permite fotos en base64
-// CORS (para el ingest temporal de datos desde el navegador de ML)
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "*");
-  res.header("Access-Control-Allow-Private-Network", "true");
-  if (req.method === "OPTIONS") return res.sendStatus(200);
-  next();
-});
+app.use(express.json({ limit: "15mb" })); // permite fotos en base64
 app.use(express.static(PUBLIC));
-
-// Endpoint temporal: recibe el catálogo scrapeado y lo guarda como productos_ml.json.
-app.post("/api/_ingest", (req, res) => {
-  const productos = req.body?.productos;
-  if (!Array.isArray(productos) || !productos.length) return res.status(400).json({ error: "no productos" });
-  const out = {
-    _nota: "TODOS los productos en venta de Mercado Libre (snapshot 2026-06-04). n=nombre, p=precio venta, l=precio lista, img=URL foto principal.",
-    moneda: "UYU",
-    fuente: "Mercado Libre - Mis publicaciones",
-    actualizado: "2026-06-04",
-    productos,
-  };
-  writeFileSync(join(__dirname, "productos_ml.json"), JSON.stringify(out), "utf8");
-  res.json({ ok: true, n: productos.length });
-});
 
 app.get("/", (_req, res) => res.sendFile(join(PUBLIC, "chat.html")));
 
@@ -48,10 +25,10 @@ app.post("/api/chat", async (req, res) => {
   const imagenes = imagen ? [imagen] : [];
   if (!chatId || (!texto && !imagenes.length)) return res.status(400).json({ error: "faltan datos" });
   try {
-    const { texto: respuesta } = await procesarMensaje({ chatId: String(chatId), texto: String(texto || ""), canal: "web", imagenes });
+    const { texto: respuesta, imagenesEnviar = [] } = await procesarMensaje({ chatId: String(chatId), texto: String(texto || ""), canal: "web", imagenes });
     // Pausa humana (que se tome su tiempo, como en el tester).
     await sleep(delayEscritura(respuesta));
-    res.json({ texto: respuesta });
+    res.json({ texto: respuesta, fotos: imagenesEnviar });
   } catch (e) {
     const msg = String(e?.message || e);
     if (msg.includes("FALTA_API_KEY")) return res.json({ texto: "⚠ Falta cargar la clave de IA en el servidor (.env)." });
