@@ -15,6 +15,7 @@ export const NEGOCIO = {
   horario: "Lunes a viernes de 9:00 a 18:00 hs. Sábados y domingos cerrado.",
   enviosTodoElPais: true,
   mediosPago: ["Tarjetas de crédito/débito", "Mercado Pago", "Transferencia bancaria", "Efectivo en el local"],
+  descuentoTransferencia: 10, // % de descuento si paga por transferencia
 };
 
 // Link directo a WhatsApp del humano (para derivar desde Instagram).
