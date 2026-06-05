@@ -40,7 +40,8 @@ Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`
 - **Saludo:** una sola vez, con el negocio, VARIADO (OPENERS random) y rioplatense. Si hay historial previo, NO se re-presenta (saluda como conocido). ✅
 - **Memoria:** sube a 40 mensajes; el tester web carga el historial al abrir (`/api/history`). ✅
 - **Visión (Max VE fotos):** ✅ hecho y probado (web + WhatsApp). Ver parte 3 arriba.
-- **DEPLOY PERMANENTE (Render) — A MEDIO HACER:**
+- **✅ DEPLOY PERMANENTE (Render) — HECHO (5 jun):** Max vive en la nube en **https://max-tester.onrender.com** (link fijo, anda con la PC apagada, gratis). Cuenta Render de scarlattopablo@gmail.com (login con GitHub, email verificado). Web Service "max-tester", plan Free, repo público `scarlattopablo-star/max-tester` (branch main), build `npm install`, start `npm run start` (= node src/web.js), env vars `IA_PROVIDER=claude` + `ANTHROPIC_API_KEY` (cargada por el usuario). ⚠️ Free duerme tras 15 min idle (arranque en frío ~50s). Para actualizar el deploy: `git push` + en Render "Manual Deploy → Deploy latest commit" (auto-deploy NO está, porque se conectó como repo público). Probado: chat + clave + envío de fotos OK en la nube.
+- **DEPLOY (notas históricas):**
   - Código preparado para nube: `package.json` "start" = `node src/web.js`; `web.js` usa `process.env.PORT`. ✅
   - Repo git creado y **pusheado a GitHub**: `https://github.com/scarlattopablo-star/max-tester` (usuario GitHub: scarlattopablo-star, ya logueado en su Chrome). El `.env` NO se subió (gitignored). ✅
   - Render: cuenta a nombre de scarlattopablo@gmail.com, **autorizó Render en GitHub** ✅, pero **falta verificar el email** (el mail de verificación de Render no llegaba al inbox al cierre — revisar Spam o reintentar "Resend"). Render no deja entrar al dashboard hasta verificar.

@@ -48,7 +48,7 @@
     <button class="reset" onclick="reiniciar()">Reiniciar</button>
   </header>
   <div id="chat">
-    <div class="msg bot">¡Hola! Soy Max, de La Casa del Cubreasiento 🙂 ¿En qué te doy una mano?</div>
+    <div class="msg bot">Hola, soy Max de La Casa del Cubreasiento. ¿En qué te puedo ayudar?</div>
     <div class="typing" id="typing"><span></span><span></span><span></span></div>
   </div>
   <div id="preview"><img id="previewImg" src="" alt="" /><button id="previewX" onclick="quitarFoto()">✕</button><span>Foto lista para enviar</span></div>
@@ -125,7 +125,7 @@
   async function reiniciar(){
     try{ await fetch("/api/reset", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ chatId }) }); }catch(e){}
     [...document.querySelectorAll(".msg")].forEach(m=>m.remove());
-    add("¡Hola! Soy Max, de La Casa del Cubreasiento 🙂 ¿En qué te doy una mano?", "bot");
+    add("Hola, soy Max de La Casa del Cubreasiento. ¿En qué te puedo ayudar?", "bot");
   }
   txt.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); enviar(); } });
 
