@@ -5,6 +5,7 @@ export const ASISTENTE = "Max";
 export const NEGOCIO = {
   nombre: "La Casa del Cubreasiento",
   direccion: "Paysandú 944, esquina Río Branco, Montevideo, Uruguay",
+  ubicacionGoogle: "https://maps.google.com/?q=-34.9026396,-56.1965533", // ubicación para enviar al cliente
   telefonoFijo: "2 901 55 88",
   whatsappHumano: "091 629 784", // número PRINCIPAL (humano) al que derivamos desde Instagram
   whatsappHumanoIntl: "59891629784", // para armar el link wa.me
@@ -14,13 +15,13 @@ export const NEGOCIO = {
   instagram: "@lacasadelcubreasiento",
   horario: "Lunes a viernes de 9:00 a 18:00 hs. Sábados y domingos cerrado.",
   enviosTodoElPais: true,
-  mediosPago: ["Tarjetas de crédito/débito", "Mercado Pago", "Transferencia bancaria", "Efectivo en el local"],
+  mediosPago: ["Tarjetas Visa, OCA y Master (hasta 6 pagos)", "Mercado Pago", "Transferencia bancaria (10% de descuento)", "Efectivo en el local"],
   descuentoTransferencia: 10, // % de descuento si paga por transferencia
   // DATOS DE COBRO que Max le comparte al cliente cuando quiere pagar.
   // Completá estos campos (dejá "" lo que no tengas). Si están vacíos, Max coordina con un humano.
   datosCobro: {
-    transferencia: "", // ej: "Banco Itaú, caja de ahorro $ 1234567, a nombre de La Casa del Cubreasiento" (o alias)
-    mercadoPagoAlias: "", // alias o CVU de Mercado Pago para transferir
+    transferencia: "Banco Itaú, cuenta Nº 5022900, a nombre de Everbox SA",
+    mercadoPagoAlias: "", // alias o CVU de Mercado Pago (cargar si lo querés)
     mercadoPagoLink: "", // link de pago para tarjetas (lo generás en tu cuenta de Mercado Pago)
   },
 };

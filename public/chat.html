@@ -87,12 +87,15 @@
     chat.insertBefore(d, typing);
     chat.scrollTop = chat.scrollHeight;
   }
-  function addImage(src, who){
+  function addImage(foto, who){
+    const url = (foto && typeof foto === "object") ? foto.url : foto;
+    const caption = (foto && typeof foto === "object") ? foto.caption : "";
     const d = document.createElement("div");
     d.className = "msg " + who;
     const img = document.createElement("img");
-    img.src = src;
+    img.src = url;
     d.appendChild(img);
+    if(caption){ const c = document.createElement("div"); c.style.cssText = "font-size:13px;margin-top:4px;"; c.textContent = caption; d.appendChild(c); }
     chat.insertBefore(d, typing);
     chat.scrollTop = chat.scrollHeight;
   }

@@ -13,6 +13,8 @@ Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`
   - Recomienda y OPINA ("quedan divinos", "te queda re lindo puesto"), con humor agradable, genera vínculo sutil.
   - Llama al cliente por su NOMBRE si se presenta o tras preguntar "¿con quién tengo el gusto?".
   - **Transferencia = 10% de descuento** (`NEGOCIO.descuentoTransferencia=10`). Probado: Max lo dice bien.
+  - **FIX saludo (5 jun, deployado):** se presentaba 2 veces en el tester web (burbuja fija + LLM). Ahora el saludo lo genera el SERVIDOR una sola vez (`saludoInicial()` en cerebro.js, endpoint `/api/greeting` en web.js, se guarda en memoria), con "¿cómo estás?", variado y según la hora UY. El LLM no se re-presenta (lo ve en el historial). `chat.html`: sacada la burbuja fija; al abrir pide `/api/history` y si vacío `/api/greeting`. Probado en vivo OK. (commit 8f662df, ya desplegado en Render).
+  - ⚠️ **Para actualizar Render**: el panel se cuelga seguido; el truco que funciona = abrir **pestaña NUEVA** en `.../deploys` y ejecutar JS que clickea "Manual Deploy" → "Deploy latest commit".
 - **⏳ PENDIENTE MAÑANA — DATOS DE COBRO:** estructura lista en `config.js` → `NEGOCIO.datosCobro` (campos vacíos: `transferencia`, `mercadoPagoAlias`, `mercadoPagoLink`). El usuario los pasa mañana (no los tenía ahora). Max ya sabe usarlos: si están cargados los comparte cuando el cliente quiere pagar; si están vacíos, coordina con un humano sin inventar (lógica `datosPagoTexto()` en cerebro.js). Puede usar la MISMA cuenta de Mercado Pago de la tienda ML (solo falta el alias o el link de pago). Claude NO escribe datos financieros ni accede a la config de pagos: los pega/da el usuario.
 - **Después de cargar el cobro → redesplegar en Render** (un solo deploy con todo).
 

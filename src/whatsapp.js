@@ -96,9 +96,9 @@ async function iniciar() {
       await sleep(delayEscritura(respuesta));
       await sock.sendPresenceUpdate("paused", jid);
       await sock.sendMessage(jid, { text: respuesta });
-      // Si Max decidió mandar fotos, las enviamos como imágenes.
-      for (const url of imagenesEnviar) {
-        try { await sock.sendMessage(jid, { image: { url } }); } catch (e) { console.log("⚠ no pude enviar foto:", e.message); }
+      // Si Max decidió mandar fotos, las enviamos como imágenes con su epígrafe.
+      for (const f of imagenesEnviar) {
+        try { await sock.sendMessage(jid, { image: { url: f.url }, caption: f.caption || "" }); } catch (e) { console.log("⚠ no pude enviar foto:", e.message); }
       }
       console.log(`📤 ${jid}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
       for (const a of acciones) console.log(`   ⚙ ${a.herramienta} → ${JSON.stringify(a.resultado)}`);
