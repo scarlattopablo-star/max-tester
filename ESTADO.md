@@ -26,6 +26,10 @@ Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`
 - **Datos de cobro:** transferencia cargada (Itaú/Everbox). Falta (opcional) alias o link de pago de Mercado Pago para tarjetas.
 - **Método transferir datos scrapeados al server:** endpoint TEMPORAL `/api/_ingest` en web.js + POST desde la página de ML al túnel HTTPS lhr.life. Se AGREGA para cargar y se QUITA después (seguridad). Hoy NO está en el código.
 
+## 🔧 FIX búsqueda (7 jun, deployado)
+- Problema: Max mandaba fotos de cubreasientos de OTRO modelo (ej: para "HB20" mandaba Fiat Strada y universal). Causa: `buscarPrecio` matcheaba por palabras genéricas (cubreasiento/cuero/negro).
+- Solución: `buscarPrecio` ahora ignora una lista de palabras genéricas (`STOP_BUSQUEDA`) y exige que el producto contenga las palabras DISTINTIVAS (modelo/marca, ej: "hb20", "toyota"+"hilux"). Probado en vivo: "HB20" → solo HB20 (cubreasiento + alfombras HB20). commit 9c163ef, desplegado.
+
 ## ✅ Lo que YA funciona (probado)
 - **Cerebro: Claude** (`IA_PROVIDER=claude`, modelo `claude-sonnet-4-6`) vía endpoint OpenAI-compatible de Anthropic (`https://api.anthropic.com/v1/`).
   - API key **"Vale - Casa Cubreasiento"** creada en la cuenta Anthropic de **Pablo Scarlatto** (scarlattopablo@gmail.com), ~USD 15 de crédito. Está en `.env` (gitignored), **separada** de las otras keys de esa cuenta (`Buda`, `buda bot`, `bot`, `pablo`).
