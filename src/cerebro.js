@@ -27,12 +27,29 @@ const STOP_BUSQUEDA = new Set([
 const _normTxt = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const _mapProd = (item) => ({ nombre: item.n, precio: item.p, precio_lista: item.l, img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
 
+// Detecta la CATEGORÍA de producto que pide el cliente (alfombra, cubreasiento, cubre volante,
+// cubreauto) para NO mezclar tipos: si pide "alfombra para Saveiro", solo alfombras de Saveiro.
+// Devuelve una función que valida el nombre del producto, o null si la consulta no nombra un tipo.
+// El ORDEN importa: "cubre volante" contiene "cubre", por eso volante va primero.
+function categoriaDe(consulta) {
+  const q = _normTxt(consulta);
+  if (/(cubre ?volante|volante)/.test(q)) return (n) => /volante/.test(n);
+  if (/alfombra/.test(q)) return (n) => /alfombra/.test(n);
+  if (/(cubre ?auto|cubreauto|antigranizo|cobertor)/.test(q)) return (n) => /(cubre ?auto|cubreauto|antigranizo|cobertor)/.test(n);
+  if (/(cubre ?asiento|cubreasiento|funda|butaca|tapizado)/.test(q)) return (n) => /(cubre ?asiento|cubreasiento|funda|butaca)/.test(n) && !/volante/.test(n);
+  return null;
+}
+
 // Busca productos del catálogo priorizando el MODELO/marca (no las palabras genéricas).
-function buscarPrecio(consulta) {
+export function buscarPrecio(consulta) {
   const palabras = _normTxt(consulta).split(/\s+/).filter((w) => w.length > 1);
   if (!palabras.length) return [];
   const distintivas = palabras.filter((w) => !STOP_BUSQUEDA.has(w)); // modelo, marca, etc.
-  const pool = PRODUCTOS.productos || [];
+  // Filtro por TIPO de producto: si el cliente nombra un tipo, NO mezclamos categorías.
+  const catFiltro = categoriaDe(consulta);
+  const pool = catFiltro
+    ? (PRODUCTOS.productos || []).filter((item) => catFiltro(_normTxt(item.n)))
+    : (PRODUCTOS.productos || []);
 
   if (distintivas.length) {
     // "fuertes" = términos identificatorios (modelo/marca): con letras y largo >=3.
@@ -49,7 +66,9 @@ function buscarPrecio(consulta) {
     return res.map(_mapProd);
   }
 
-  // Sin palabras distintivas (consulta solo genérica): match por todas las palabras.
+  // Sin palabras distintivas (ej: "alfombra" sin modelo): si hay tipo, devolvemos ese tipo;
+  // si no, match por todas las palabras.
+  if (catFiltro) return pool.slice(0, 6).map(_mapProd);
   return pool.filter((item) => { const m = _normTxt(item.n); return palabras.every((p) => m.includes(p)); }).slice(0, 6).map(_mapProd);
 }
 
