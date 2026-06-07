@@ -3,6 +3,25 @@
 Bot de WhatsApp (Baileys, sin API de Meta) + derivación de Instagram, para La Casa del Cubreasiento.
 Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`.
 
+## 🟢🟢 SESIÓN 7 jun (tarde/noche) — RETOMAR ACÁ (lo más nuevo)
+- **Link en vivo:** https://max-tester.onrender.com
+- **AUTO-DEPLOY RESUELTO con DEPLOY HOOK:** el auto-deploy nativo de Render por webhook de GitHub NO dispara (el repo no tiene el webhook; arreglarlo requiere reconectar GitHub con OAuth del usuario). Solución: se usa el **Deploy Hook** de Render (URL privada guardada en `agente_ia/.deploy_hook`, gitignored). Hay un git hook **`.git/hooks/pre-push`** que tras cada `git push` dispara el Deploy Hook (curl con 6s de delay). ⇒ **Ahora alcanza con `git push` y se redespliega solo.** (Si el hook se pierde, recrearlo; o disparar manual: `curl -s "$(cat agente_ia/.deploy_hook)"`). El Auto-Deploy del panel quedó en "On Commit".
+- **CATÁLOGO ACTUALIZADO: 270 productos** (antes 232) en `src/productos_ml.json`. Re-scrapeado de ML (cuenta Everbox, seller_id 164590340) leyendo `window._n.ctx.r.appProps.pageProps.viewData.rows` de cada página de `/publicaciones?page=N` (22 páginas, 657 crudas → 270 activas con stock). Método de extracción out-of-browser: **descarga Blob** (botón inyectado + click real de la extensión = gesto de usuario; el `.crdownload` ya trae el JSON completo) → se mueve con PowerShell. (La API pública de ML da 403; clipboard API cuelga vía CDP; el output del tool trunca >~20KB.)
+  - Formato item: `{n,p,l,img,usd?}`. `p`=precio venta (con promo si hay), `l`=precio lista/tachado, `usd:1`=precio en DÓLARES (11 productos). En `price.lines`: la línea `highlight:true` es el precio de LISTA; `"en promoción a $X"` es el precio de VENTA. Puntos=miles, coma=decimal.
+- **Mejoras de atención (todas en vivo):**
+  1. **Pago:** Max pregunta PRIMERO cómo quiere abonar y da solo los datos de ESE medio; si preguntan "¿qué medios tienen?" enumera todos (`datosPagoTexto()` reescrito).
+  2. **Entrega:** tras el pago pregunta envío / retiro / colocación.
+  3. **Colocación:** explica seña 50% (transferencia o MP), dura ~1h30, y pregunta "¿Desea agendar? Lo contactamos a la brevedad" → deriva a humano.
+  4. **Cabina simple/doble** SOLO en camionetas (no autos). Filtro suave `cabinaDe()` + STOP_BUSQUEDA ampliado.
+  5. **Opciones NUMERADAS** (1,2,3…) y pregunta qué número.
+  6. **Específico por TIPO** de producto (`categoriaDe()`: alfombra/cubreasiento/cubrevolante/cubreauto) — no mezcla categorías.
+  7. **Modelos cortos** (q5/x3/a3) tratados como término obligatorio (`esModeloCorto`).
+  8. **Moneda USD:** `_fmtPrecio()` muestra "US$ X" para usd:1; el resto "$ X" (formato es-UY). Prompt avisa al LLM.
+  9. **Fotos reforzadas:** ofrecer opciones de un modelo SIEMPRE con `enviar_foto` (no solo texto). Verificado: Audi Q5 manda 2 fotos numeradas con US$.
+- **Backup catálogo viejo (232):** estaba en git history (commit con productos_ml.json de 232). 
+- Commits clave: d92cfe3 (búsqueda estricta), da21b84 (filtro por tipo), 0ee117d (pago/entrega/colocación/cabina/numeración), adfb75a (catálogo 270 + USD), a11170a (refuerzo fotos).
+- **PENDIENTE opcional:** alias/link de Mercado Pago para tarjetas (sigue sin cargar); conectar WhatsApp real con chip dedicado; API oficial ML para sync precios/stock automático.
+
 ## 🟢 ÚLTIMA SESIÓN (5 jun, noche) — RETOMAR ACÁ
 - **Link permanente EN VIVO:** https://max-tester.onrender.com (Render, gratis, anda con la PC apagada). Para actualizarlo: `git push` + Render → "Manual Deploy → Deploy latest commit".
 - **Mejoras de comunicación hechas y PUSHEADAS a GitHub (commit ed16438) pero FALTA REDESPLEGAR en Render** (el link en vivo todavía muestra la versión anterior; hay que hacer "Manual Deploy → Deploy latest commit"):
