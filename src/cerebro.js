@@ -26,7 +26,9 @@ const STOP_BUSQUEDA = new Set([
 ]);
 
 const _normTxt = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-const _mapProd = (item) => ({ nombre: item.n, precio: item.p, precio_lista: item.l, img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
+const _mapProd = (item) => ({ nombre: item.n, precio: item.p, precio_lista: item.l, moneda: item.usd ? "USD" : "UYU", img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
+// Formatea un precio con su símbolo de moneda. USD => "US$ 60"; UYU => "$ 8.010".
+const _fmtPrecio = (precio, moneda) => `${moneda === "USD" ? "US$ " : "$ "}${Number(precio).toLocaleString("es-UY")}`;
 
 // Detecta la CATEGORÍA de producto que pide el cliente (alfombra, cubreasiento, cubre volante,
 // cubreauto) para NO mezclar tipos: si pide "alfombra para Saveiro", solo alfombras de Saveiro.
@@ -77,7 +79,9 @@ export function buscarPrecio(consulta) {
   if (distintivas.length) {
     // "fuertes" = términos identificatorios (modelo/marca): con letras y largo >=3.
     // Los años/números sueltos (ej "2020") quedan como opcionales para no excluir de más.
-    const fuertes = distintivas.filter((w) => w.length >= 3 && /[a-z]/.test(w));
+    // Modelos cortos alfanuméricos (q5, x3, a3, t5, c3...) también identifican: son obligatorios.
+    const esModeloCorto = (w) => /^[a-z]+\d+$|^\d+[a-z]+$/.test(w);
+    const fuertes = distintivas.filter((w) => (w.length >= 3 && /[a-z]/.test(w)) || esModeloCorto(w));
     const obligatorias = fuertes.length ? fuertes : distintivas;
     // ESTRICTO: el producto DEBE contener TODAS las obligatorias. Sin comodín a genéricos.
     let res = pool
@@ -269,6 +273,7 @@ ${datosPagoTexto()}
 - Los CUBREASIENTOS a medida SÍ son de cuero ecológico premium (eso está bien).
 - PRECIOS: cuando te preguntan cuánto sale CUALQUIER cosa (cubreasiento, alfombra, cubre volante, cubreauto, llavero, accesorio…), usá SIEMPRE la herramienta "consultar_precio" con lo que pide (producto + modelo del auto) y decile el precio que te devuelve (ej: "El cubre volante de cuero sale $X."). Tenés TODO el catálogo de Mercado Libre cargado, así que casi siempre vas a encontrar el precio.
 - Si la herramienta devuelve varios resultados parecidos, ofrecé las opciones cortitas (no más de 2-3) y preguntá cuál es el modelo/versión exacta.
+- MONEDA: casi todos los precios están en PESOS uruguayos ($). Si un resultado trae "moneda":"USD", ese precio está en DÓLARES: decilo como "US$ X" (dólares), nunca como pesos. Si es "UYU" o no aclara, son pesos ($).
 - Si NO encuentra el producto, no inventes ningún número: pedí más datos (modelo/año) u ofrecé cotizarlo.
 - Una pregunta de precio NUNCA es motivo para pasar a un humano; la resolvés vos.
 - NO inventes stock ni plazos que no sabés.
@@ -399,7 +404,7 @@ function ejecutarHerramienta(nombre, input) {
       const encontrados = buscarPrecio(input.producto || input.modelo || "").filter((x) => x.img);
       if (!encontrados.length) return { ok: false, mensaje: "No tengo foto exacta de eso; pedí más datos del modelo." };
       const elegidas = encontrados.slice(0, 4); // hasta 4 fotos (opciones del modelo)
-      return { ok: true, enviadas: elegidas.length, fotos: elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio })) };
+      return { ok: true, enviadas: elegidas.length, fotos: elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio, moneda: x.moneda })) };
     }
     if (nombre === "consultar_disponibilidad") {
       const libres = disponibilidad(input.fecha);
@@ -458,7 +463,7 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
 
     const imagenesEnviar = acciones
       .filter((a) => a.herramienta === "enviar_foto" && a.resultado?.ok)
-      .flatMap((a) => a.resultado.fotos.map((f) => ({ url: f.img, caption: f.precio ? `${f.nombre} - $${f.precio}` : f.nombre })))
+      .flatMap((a) => a.resultado.fotos.map((f) => ({ url: f.img, caption: f.precio ? `${f.nombre} - ${_fmtPrecio(f.precio, f.moneda)}` : f.nombre })))
       .filter((x) => x.url);
     return { texto: (msg.content || "").trim(), acciones, imagenesEnviar };
   }
