@@ -31,22 +31,22 @@ const _mapProd = (item) => ({ nombre: item.n, precio: item.p, precio_lista: item
 function buscarPrecio(consulta) {
   const palabras = _normTxt(consulta).split(/\s+/).filter((w) => w.length > 1);
   if (!palabras.length) return [];
-  const distintivas = palabras.filter((w) => !STOP_BUSQUEDA.has(w)); // modelo, marca, año, etc.
+  const distintivas = palabras.filter((w) => !STOP_BUSQUEDA.has(w)); // modelo, marca, etc.
   const pool = PRODUCTOS.productos || [];
 
   if (distintivas.length) {
-    // 1) productos que contienen TODAS las palabras distintivas (ej: "hb20", o "toyota"+"hilux")
-    let res = pool.filter((item) => { const m = _normTxt(item.n); return distintivas.every((d) => m.includes(d)); });
-    // 2) si ninguno las tiene todas, los que tengan más coincidencias distintivas (mínimo 1)
-    if (!res.length) {
-      res = pool
-        .map((item) => ({ item, sc: distintivas.filter((d) => _normTxt(item.n).includes(d)).length }))
-        .filter((x) => x.sc > 0)
-        .sort((a, b) => b.sc - a.sc)
-        .slice(0, 6)
-        .map((x) => x.item);
-    }
-    return res.slice(0, 6).map(_mapProd);
+    // "fuertes" = términos identificatorios (modelo/marca): con letras y largo >=3.
+    // Los años/números sueltos (ej "2020") quedan como opcionales para no excluir de más.
+    const fuertes = distintivas.filter((w) => w.length >= 3 && /[a-z]/.test(w));
+    const obligatorias = fuertes.length ? fuertes : distintivas;
+    // ESTRICTO: el producto DEBE contener TODAS las obligatorias. Sin comodín a genéricos.
+    const res = pool
+      .filter((item) => { const m = _normTxt(item.n); return obligatorias.every((d) => m.includes(d)); })
+      .map((item) => ({ item, sc: distintivas.filter((d) => _normTxt(item.n).includes(d)).length }))
+      .sort((a, b) => b.sc - a.sc) // más específicos primero
+      .slice(0, 6)
+      .map((x) => x.item);
+    return res.map(_mapProd);
   }
 
   // Sin palabras distintivas (consulta solo genérica): match por todas las palabras.
