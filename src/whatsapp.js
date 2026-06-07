@@ -96,9 +96,15 @@ async function iniciar() {
       await sleep(delayEscritura(respuesta));
       await sock.sendPresenceUpdate("paused", jid);
       await sock.sendMessage(jid, { text: respuesta });
-      // Si Max decidió mandar fotos, las enviamos como imágenes con su epígrafe.
+      // Si Max decidió mandar fotos, las enviamos de a UNA, con una pequeña espera
+      // entre cada una (mostrando "escribiendo…") para que se sienta humano.
       for (const f of imagenesEnviar) {
-        try { await sock.sendMessage(jid, { image: { url: f.url }, caption: f.caption || "" }); } catch (e) { console.log("⚠ no pude enviar foto:", e.message); }
+        try {
+          await sock.sendPresenceUpdate("composing", jid);
+          await sleep(1000 + Math.floor(Math.random() * 1000)); // 1 a 2 s entre fotos
+          await sock.sendPresenceUpdate("paused", jid);
+          await sock.sendMessage(jid, { image: { url: f.url }, caption: f.caption || "" });
+        } catch (e) { console.log("⚠ no pude enviar foto:", e.message); }
       }
       console.log(`📤 ${jid}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
       for (const a of acciones) console.log(`   ⚙ ${a.herramienta} → ${JSON.stringify(a.resultado)}`);

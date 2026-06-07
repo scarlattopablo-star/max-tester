@@ -69,6 +69,7 @@
   const preview = document.getElementById("preview");
   const previewImg = document.getElementById("previewImg");
   let pendingImage = null; // data URI de la foto a enviar
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   file.addEventListener("change", () => {
     const f = file.files[0];
@@ -116,7 +117,15 @@
       const data = await r.json();
       showTyping(false);
       if(data.texto) add(data.texto, "bot");
-      if(data.fotos && data.fotos.length){ for(const f of data.fotos){ addImage(f, "bot"); } }
+      // Fotos de a UNA, con una pequeña espera entre cada una (como si las fuera mandando una persona).
+      if(data.fotos && data.fotos.length){
+        for(const f of data.fotos){
+          showTyping(true);
+          await sleep(1000 + Math.random()*900); // pausa humana entre fotos
+          showTyping(false);
+          addImage(f, "bot");
+        }
+      }
     }catch(e){
       showTyping(false);
       add("Uy, se cortó la conexión. Probá de nuevo 🙏", "bot");
