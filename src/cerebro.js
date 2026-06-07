@@ -23,6 +23,7 @@ const STOP_BUSQUEDA = new Set([
   "alto", "densidad", "nuevo", "nueva", "color", "tela", "tapiceria", "neopreno", "logo", "bordado",
   "universal", "universales", "automotriz", "resistencia", "maxima", "calidad", "piezas", "instalado", "colocado",
   "cabina", "cabinas", "simple", "sencilla", "doble", "puertas", "scab", "dcab", "economico", "economica", "barato", "barata",
+  "sedan", "hatch", "hatchback", "cross",
 ]);
 
 const _normTxt = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -57,6 +58,19 @@ function _matchCabina(nombre, cab) {
   if (cab === "doble") return /(doble cabina|cabina doble|doble cab|doble)/.test(m);
   return true;
 }
+// Carrocería (sedán / hatchback) — filtro suave, igual que cabina.
+function carroceriaDe(consulta) {
+  const q = _normTxt(consulta);
+  if (/hatchback|hatch/.test(q)) return "hatch";
+  if (/sedan/.test(q)) return "sedan";
+  return null;
+}
+function _matchCarroceria(nombre, carr) {
+  const m = _normTxt(nombre);
+  if (carr === "hatch") return /hatch/.test(m);
+  if (carr === "sedan") return /sedan/.test(m);
+  return true;
+}
 
 // Busca productos del catálogo priorizando el MODELO/marca (no las palabras genéricas).
 export function buscarPrecio(consulta) {
@@ -66,14 +80,17 @@ export function buscarPrecio(consulta) {
   // Filtro por TIPO de producto: si el cliente nombra un tipo, NO mezclamos categorías.
   const catFiltro = categoriaDe(consulta);
   const cab = cabinaDe(consulta); // filtro suave por cabina simple/doble
+  const carr = carroceriaDe(consulta); // filtro suave por sedán/hatch
   const pool = catFiltro
     ? (PRODUCTOS.productos || []).filter((item) => catFiltro(_normTxt(item.n)))
     : (PRODUCTOS.productos || []);
-  // Aplica el filtro de cabina SOLO si quedan resultados; si no, no descarta (mejor ofrecer y preguntar).
+  // Aplica los filtros suaves (cabina, carrocería) SOLO si quedan resultados; si no, no descarta
+  // (mejor ofrecer lo del modelo y, si hace falta, preguntar la variante).
   const aplicarCab = (lista) => {
-    if (!cab) return lista;
-    const f = lista.filter((it) => _matchCabina(it.n, cab));
-    return f.length ? f : lista;
+    let r = lista;
+    if (cab) { const f = r.filter((it) => _matchCabina(it.n, cab)); if (f.length) r = f; }
+    if (carr) { const f = r.filter((it) => _matchCarroceria(it.n, carr)); if (f.length) r = f; }
+    return r;
   };
 
   if (distintivas.length) {
@@ -241,7 +258,9 @@ function systemPrompt() {
 # REGLAS DE ATENCIÓN (importante, seguilas)
 - OFRECER TODO EL MODELO CON FOTOS (REGLA ESTRICTA, NO LA ROMPAS): SIEMPRE que vayas a mostrar/ofrecer/listar opciones o precios de un producto para un vehículo (ej: "cubreasiento para Hilux", "alfombra para Audi Q5"), TENÉS QUE llamar a la herramienta "enviar_foto" con ese producto+modelo. Esa herramienta manda TODAS las opciones publicadas, cada una con su FOTO + nombre + precio. ⛔ PROHIBIDO listar opciones/precios SOLO en texto: si nombrás una opción con su precio, esa opción DEBE ir acompañada de su foto vía "enviar_foto". NO uses "consultar_precio" para mostrar opciones de un modelo (esa es solo para una consulta puntual de "cuánto sale X"). El orden de tu lista numerada debe coincidir con el orden de las fotos. Acompañá con un texto breve y formal ("Le comparto las opciones disponibles para su Hilux:").
 - "enviar_foto" ya incluye el precio de cada opción, así que para ofrecer/mostrar productos de un modelo NO necesitás llamar también a "consultar_precio".
-- CUBRE VOLANTE POR MARCA: los cubre volantes están publicados por MARCA, no por modelo (ej: "Cubrevolante Hyundai", no "HB20"). Por eso, cuando ofrezcas productos para un modelo, hacé TAMBIÉN una llamada extra a "enviar_foto" con la MARCA del vehículo + "cubre volante" para mostrar el cubre volante de esa marca si existe. Ejemplos de modelo → marca: HB20/Creta/Tucson = Hyundai; Hilux/Corolla = Toyota; Onix/Montana/S10 = Chevrolet; Polo/Nivus/Gol/Amarok/T-Cross = Volkswagen; Strada/Toro/Cronos = Fiat; Kwid/Oroch/Duster = Renault; 208/2008 = Peugeot; Seagull/Dolphin/Yuan = BYD. (Vos sabés a qué marca pertenece cada modelo.) Si no hay cubre volante de esa marca, no pasa nada.
+- ⛔ ENVIÁ SOLO LO QUE EL CLIENTE PIDE (REGLA DE ORO, NO LA ROMPAS): si el cliente pregunta por CUBREASIENTOS, mandá únicamente cubreasientos. Si pregunta por ALFOMBRAS, solo alfombras. Si pregunta por CUBRE VOLANTE, solo cubre volante. NUNCA agregues otros productos/accesorios que el cliente NO pidió (no sumes el cubre volante, ni alfombras, ni cubreauto "de yapa"). Llamá a "enviar_foto" UNA sola vez, con el TIPO de producto que pidió + el modelo. Nada de productos sorpresa.
+- VENTA ADICIONAL (solo si el cliente abre la puerta): recién DESPUÉS de resolver lo que pidió, y solo si el cliente muestra interés o pregunta "¿qué más tienen?", podés MENCIONAR en texto (sin mandar fotos sin que las pida) que también hay otros accesorios para su vehículo (ej: "Si le interesa, también tenemos cubre volante para su marca"). Nunca al inicio ni sin que lo pida.
+- CUBRE VOLANTE — DATO ÚTIL: los cubre volantes están publicados por MARCA, no por modelo (ej: "Cubrevolante Hyundai"). Entonces, cuando el cliente SÍ pide un cubre volante, buscalo por la MARCA del vehículo. Modelo → marca: HB20/Creta/Tucson = Hyundai; Hilux/Corolla = Toyota; Onix/Montana/S10 = Chevrolet; Polo/Nivus/Gol/Amarok/T-Cross = Volkswagen; Strada/Toro/Cronos = Fiat; Kwid/Oroch/Duster = Renault; 208/2008 = Peugeot; Seagull/Dolphin/Yuan = BYD.
 - CAMIONETAS — CABINA SIMPLE O DOBLE: esto aplica SOLO a camionetas/pick-up (Hilux, Ranger, Amarok, Saveiro, Strada, Toro, S10, Frontier, L200, Oroch, Montana, Hilux, etc.). En esos casos, ANTES de ofrecer las opciones preguntá si es CABINA SIMPLE o DOBLE CABINA, porque el producto y las medidas cambian, y mostrá solo lo que corresponda. ⛔ Los AUTOS comunes (HB20, Onix, Polo, Nivus, Corolla, Creta, Tucson, Gol, T-Cross, 208, Kwid, Yaris, etc.) NO tienen tipo de cabina: con un auto NUNCA preguntes por cabina simple/doble, mostrale directamente las opciones.
 - ENTREGA — ENVÍO O RETIRO/COLOCACIÓN (después de definir el producto y los medios de pago): preguntá cómo desea recibirlo. Tres caminos:
   1. ENVÍO: hacemos envíos a todo el país.
