@@ -42,7 +42,10 @@ app.post("/api/chat", async (req, res) => {
 app.get("/api/history", (req, res) => {
   const chatId = req.query.chatId;
   if (!chatId) return res.json({ mensajes: [] });
-  res.json({ mensajes: historial(String(chatId)) });
+  // Recortamos el contexto interno (después del separador invisible ⁣) que guardamos
+  // para el modelo: el cliente solo ve la parte visible del mensaje.
+  const mensajes = historial(String(chatId)).map((m) => ({ ...m, content: String(m.content || "").split("⁣")[0] }));
+  res.json({ mensajes });
 });
 
 // Saludo inicial: genera UNA presentación variada, la guarda en memoria y la devuelve.

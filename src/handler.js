@@ -22,6 +22,15 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
   // En la memoria guardamos solo texto (no el base64 de la imagen, que es pesado).
   const marca = imagenes && imagenes.length ? (texto ? texto + " [+foto]" : "[el cliente mandó una foto]") : texto;
   agregar(chatId, "user", marca);
-  agregar(chatId, "assistant", respuesta);
+  // IMPORTANTE: si Max mostró opciones con foto numeradas, las registramos como CONTEXTO
+  // interno en el historial (después del separador ⁣) para que en el próximo turno
+  // el LLM sepa qué es "la 1", "la 2", etc. El cliente NO ve esto (se recorta en /api/history
+  // y nunca se le envía como mensaje; solo vive en la memoria que lee el modelo).
+  let contenidoAssistant = respuesta;
+  if (imagenesEnviar.length) {
+    const ops = imagenesEnviar.map((f) => f.caption).join("; ");
+    contenidoAssistant = `${respuesta}⁣[Contexto interno — opciones que le mostré al cliente con foto, numeradas: ${ops}. Si el cliente elige un número ("la 1", "el 2", "quiero la primera"), corresponde a ESTA lista; NO vuelvas a mostrar las opciones: avanzá con la que eligió.]`;
+  }
+  agregar(chatId, "assistant", contenidoAssistant);
   return { texto: respuesta, acciones, imagenesEnviar };
 }
