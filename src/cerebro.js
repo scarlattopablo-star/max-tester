@@ -13,21 +13,44 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const CATALOGO = JSON.parse(readFileSync(join(__dirname, "catalogo.json"), "utf8"));
 const PRODUCTOS = JSON.parse(readFileSync(join(__dirname, "productos_ml.json"), "utf8"));
 
-// Busca CUALQUIER producto del catálogo de Mercado Libre por palabras del nombre/modelo.
+// Palabras genéricas que NO sirven para identificar el modelo (no deben matchear solas).
+const STOP_BUSQUEDA = new Set([
+  "cubreasiento", "cubreasientos", "cubre", "asiento", "asientos", "funda", "fundas", "cubrevolante",
+  "alfombra", "alfombras", "cubreauto", "cubreautos", "cuero", "ecologico", "eco", "cuerina", "ecologica",
+  "negro", "negra", "gris", "rojo", "premium", "alta", "gama", "capitoneado", "capitoneados", "capitone",
+  "impermeable", "impermeables", "medida", "medidas", "para", "del", "con", "set", "juego", "completo",
+  "completa", "auto", "vehiculo", "original", "originales", "goma", "engomado", "bandeja", "rigida", "rigido",
+  "alto", "densidad", "nuevo", "nueva", "color", "tela", "tapiceria", "neopreno", "logo", "bordado",
+  "universal", "universales", "automotriz", "resistencia", "maxima", "calidad", "piezas", "instalado", "colocado",
+]);
+
+const _normTxt = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const _mapProd = (item) => ({ nombre: item.n, precio: item.p, precio_lista: item.l, img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
+
+// Busca productos del catálogo priorizando el MODELO/marca (no las palabras genéricas).
 function buscarPrecio(consulta) {
-  const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  const palabras = norm(consulta).split(/\s+/).filter((w) => w.length > 1);
+  const palabras = _normTxt(consulta).split(/\s+/).filter((w) => w.length > 1);
   if (!palabras.length) return [];
-  return (PRODUCTOS.productos || [])
-    .map((item) => {
-      const m = norm(item.n);
-      const aciertos = palabras.filter((p) => m.includes(p)).length;
-      return { item, aciertos };
-    })
-    .filter((x) => x.aciertos > 0)
-    .sort((a, b) => b.aciertos - a.aciertos)
-    .slice(0, 6)
-    .map((x) => ({ nombre: x.item.n, precio: x.item.p, precio_lista: x.item.l, img: (x.item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") }));
+  const distintivas = palabras.filter((w) => !STOP_BUSQUEDA.has(w)); // modelo, marca, año, etc.
+  const pool = PRODUCTOS.productos || [];
+
+  if (distintivas.length) {
+    // 1) productos que contienen TODAS las palabras distintivas (ej: "hb20", o "toyota"+"hilux")
+    let res = pool.filter((item) => { const m = _normTxt(item.n); return distintivas.every((d) => m.includes(d)); });
+    // 2) si ninguno las tiene todas, los que tengan más coincidencias distintivas (mínimo 1)
+    if (!res.length) {
+      res = pool
+        .map((item) => ({ item, sc: distintivas.filter((d) => _normTxt(item.n).includes(d)).length }))
+        .filter((x) => x.sc > 0)
+        .sort((a, b) => b.sc - a.sc)
+        .slice(0, 6)
+        .map((x) => x.item);
+    }
+    return res.slice(0, 6).map(_mapProd);
+  }
+
+  // Sin palabras distintivas (consulta solo genérica): match por todas las palabras.
+  return pool.filter((item) => { const m = _normTxt(item.n); return palabras.every((p) => m.includes(p)); }).slice(0, 6).map(_mapProd);
 }
 
 let _client = null;
