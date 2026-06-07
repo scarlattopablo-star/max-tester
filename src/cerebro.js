@@ -22,6 +22,7 @@ const STOP_BUSQUEDA = new Set([
   "completa", "auto", "vehiculo", "original", "originales", "goma", "engomado", "bandeja", "rigida", "rigido",
   "alto", "densidad", "nuevo", "nueva", "color", "tela", "tapiceria", "neopreno", "logo", "bordado",
   "universal", "universales", "automotriz", "resistencia", "maxima", "calidad", "piezas", "instalado", "colocado",
+  "cabina", "cabinas", "simple", "sencilla", "doble", "puertas", "scab", "dcab", "economico", "economica", "barato", "barata",
 ]);
 
 const _normTxt = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -40,6 +41,21 @@ function categoriaDe(consulta) {
   return null;
 }
 
+// Detecta si el cliente especificó tipo de CABINA (camionetas): simple o doble.
+// Devuelve "simple" | "doble" | null. Se usa como filtro suave (solo si hay coincidencias).
+function cabinaDe(consulta) {
+  const q = _normTxt(consulta);
+  if (/(doble cabina|cabina doble|doble cab|d ?cab|cuatro puertas|4 puertas)/.test(q)) return "doble";
+  if (/(cabina simple|simple cabina|cab simple|s ?cab|cabina sencilla|dos puertas|2 puertas)/.test(q)) return "simple";
+  return null;
+}
+function _matchCabina(nombre, cab) {
+  const m = _normTxt(nombre);
+  if (cab === "simple") return /(cabina simple|cab simple|simple|sencilla)/.test(m);
+  if (cab === "doble") return /(doble cabina|cabina doble|doble cab|doble)/.test(m);
+  return true;
+}
+
 // Busca productos del catálogo priorizando el MODELO/marca (no las palabras genéricas).
 export function buscarPrecio(consulta) {
   const palabras = _normTxt(consulta).split(/\s+/).filter((w) => w.length > 1);
@@ -47,9 +63,16 @@ export function buscarPrecio(consulta) {
   const distintivas = palabras.filter((w) => !STOP_BUSQUEDA.has(w)); // modelo, marca, etc.
   // Filtro por TIPO de producto: si el cliente nombra un tipo, NO mezclamos categorías.
   const catFiltro = categoriaDe(consulta);
+  const cab = cabinaDe(consulta); // filtro suave por cabina simple/doble
   const pool = catFiltro
     ? (PRODUCTOS.productos || []).filter((item) => catFiltro(_normTxt(item.n)))
     : (PRODUCTOS.productos || []);
+  // Aplica el filtro de cabina SOLO si quedan resultados; si no, no descarta (mejor ofrecer y preguntar).
+  const aplicarCab = (lista) => {
+    if (!cab) return lista;
+    const f = lista.filter((it) => _matchCabina(it.n, cab));
+    return f.length ? f : lista;
+  };
 
   if (distintivas.length) {
     // "fuertes" = términos identificatorios (modelo/marca): con letras y largo >=3.
@@ -57,19 +80,20 @@ export function buscarPrecio(consulta) {
     const fuertes = distintivas.filter((w) => w.length >= 3 && /[a-z]/.test(w));
     const obligatorias = fuertes.length ? fuertes : distintivas;
     // ESTRICTO: el producto DEBE contener TODAS las obligatorias. Sin comodín a genéricos.
-    const res = pool
+    let res = pool
       .filter((item) => { const m = _normTxt(item.n); return obligatorias.every((d) => m.includes(d)); })
       .map((item) => ({ item, sc: distintivas.filter((d) => _normTxt(item.n).includes(d)).length }))
       .sort((a, b) => b.sc - a.sc) // más específicos primero
-      .slice(0, 6)
       .map((x) => x.item);
+    res = aplicarCab(res).slice(0, 6);
     return res.map(_mapProd);
   }
 
   // Sin palabras distintivas (ej: "alfombra" sin modelo): si hay tipo, devolvemos ese tipo;
   // si no, match por todas las palabras.
-  if (catFiltro) return pool.slice(0, 6).map(_mapProd);
-  return pool.filter((item) => { const m = _normTxt(item.n); return palabras.every((p) => m.includes(p)); }).slice(0, 6).map(_mapProd);
+  if (catFiltro) return aplicarCab(pool).slice(0, 6).map(_mapProd);
+  const base = pool.filter((item) => { const m = _normTxt(item.n); return palabras.every((p) => m.includes(p)); });
+  return aplicarCab(base).slice(0, 6).map(_mapProd);
 }
 
 let _client = null;
@@ -127,12 +151,24 @@ function resumenCatalogo() {
 
 function datosPagoTexto() {
   const dc = NEGOCIO.datosCobro || {};
-  const partes = [];
-  if (dc.transferencia) partes.push(`- Transferencia (tiene ${NEGOCIO.descuentoTransferencia}% de descuento): ${dc.transferencia}`);
-  if (dc.mercadoPagoAlias) partes.push(`- Mercado Pago (transferir al alias): ${dc.mercadoPagoAlias}`);
-  if (dc.mercadoPagoLink) partes.push(`- Tarjetas / Mercado Pago (link de pago): ${dc.mercadoPagoLink}`);
-  if (partes.length) return `Cuando el cliente decidió comprar y quiere pagar, pasale estos datos:\n${partes.join("\n")}\nDespués de que diga que pagó, tomá el pedido y avisá que el equipo confirma el pago.`;
-  return `AÚN NO tenés cargados los datos de pago (cuenta/alias/link). Si el cliente quiere pagar, decile con naturalidad que enseguida le pasás los datos y usá "derivar_a_humano" para que alguien del equipo se los mande. NUNCA inventes números de cuenta, alias ni links.`;
+  const medios = NEGOCIO.mediosPago.map((m) => `  · ${m}`).join("\n");
+  // Datos concretos por medio (los que SÍ tenemos cargados).
+  const detalle = [];
+  detalle.push(`- TRANSFERENCIA bancaria (tiene ${NEGOCIO.descuentoTransferencia}% de descuento): ${dc.transferencia || "(pedí los datos al equipo con derivar_a_humano; NO los inventes)"}`);
+  detalle.push(`- MERCADO PAGO: ${dc.mercadoPagoAlias ? `transferir al alias ${dc.mercadoPagoAlias}` : (dc.mercadoPagoLink ? `link de pago ${dc.mercadoPagoLink}` : `aún no tengo el alias/link cargado; decile que el equipo se lo pasa enseguida y usá "derivar_a_humano". NO inventes alias ni links`)}`);
+  detalle.push(`- TARJETAS (Visa, OCA, Master, hasta 6 pagos): se abonan en el local, o el equipo le pasa un link de pago. Si necesita el link, usá "derivar_a_humano". NO inventes links.`);
+  detalle.push(`- EFECTIVO: en el local (${NEGOCIO.direccion}).`);
+
+  return `FLUJO DE PAGO (seguilo así, sin abrumar):
+1. Cuando el cliente YA decidió comprar, PREGUNTALE PRIMERO cómo le gustaría abonar. Ej: "¿Cómo le gustaría abonar: transferencia, Mercado Pago, tarjeta o efectivo?". NO mandes todos los medios y todos los datos de una.
+2. Según lo que elija, dale enseguida la información de ESE medio (no hace falta pedirle nombre/teléfono antes para pasarle los datos de pago; eso se lo pedís recién al tomar el pedido):
+${detalle.join("\n")}
+3. EXCEPCIÓN: si el cliente PREGUNTA "¿qué medios de pago tienen?" (o similar), ahí SÍ enumerá todos los medios disponibles, cortito:
+${medios}
+   y recién cuando elija uno, le pasás los datos concretos de ese medio.
+4. Recordale el ${NEGOCIO.descuentoTransferencia}% de descuento si elige transferencia.
+5. Después de pasar los datos de pago, preguntá cómo desea recibir el producto (envío, retiro o colocación; ver sección de ENTREGA).
+6. Cuando diga que pagó, tomá el pedido (tomar_pedido) y avisá que el equipo confirma el pago a la brevedad. NUNCA inventes números de cuenta, alias ni links.`;
 }
 
 function systemPrompt() {
@@ -181,6 +217,12 @@ function systemPrompt() {
 # MANDAR FOTOS DE PRODUCTOS (vos le enviás fotos al cliente)
 - Cuando el cliente pide una foto/imagen, o cuando le ofrecés opciones de un producto, usá la herramienta "enviar_foto" con el producto/modelo. Las fotos se envían solas, CADA UNA con el nombre y precio del producto.
 - Acompañá con un texto breve y formal ("Le comparto las opciones disponibles:" o "Aquí tiene la imagen del producto:"). Sin emojis, sin describir de más ni pegar el link.
+- NUMERAR LAS OPCIONES (OBLIGATORIO cuando hay más de una): en tu texto listá cada opción NUMERADA, en el MISMO orden en que se envían las fotos, con nombre y precio. Ejemplo:
+  "Le comparto las opciones disponibles:
+  1) Cubreasiento Hyundai HB20 Cuero Ecológico Premium - $9304
+  2) Cubreasiento HB20 Eco Cuero Impermeable a Medida - $6500
+  ¿Cuál de las opciones le interesa? Indíqueme el número."
+  Después PREGUNTÁ con qué número se queda. Mostrá TODAS las opciones que devuelve la herramienta (no escondas las más económicas): el cliente decide.
 
 # SI NO ENCONTRÁS EL PRODUCTO o NO SABÉS ALGO (importante)
 - NUNCA inventes datos, precios, plazos ni características.
@@ -196,9 +238,17 @@ function systemPrompt() {
 - OFRECER TODO EL MODELO CON FOTOS: cuando el cliente consulta por un producto para un vehículo (ej: "cubreasiento para Hilux"), usá SIEMPRE la herramienta "enviar_foto" con ese modelo. Esa herramienta manda TODAS las opciones publicadas para el modelo, cada una con su FOTO + nombre + precio. NO uses solo "consultar_precio" (texto) para esto: el cliente tiene que VER las opciones con foto. Acompañá con un texto breve y formal ("Le comparto las opciones disponibles para su Hilux:").
 - "enviar_foto" ya incluye el precio de cada opción, así que para ofrecer/mostrar productos de un modelo NO necesitás llamar también a "consultar_precio".
 - CUBRE VOLANTE POR MARCA: los cubre volantes están publicados por MARCA, no por modelo (ej: "Cubrevolante Hyundai", no "HB20"). Por eso, cuando ofrezcas productos para un modelo, hacé TAMBIÉN una llamada extra a "enviar_foto" con la MARCA del vehículo + "cubre volante" para mostrar el cubre volante de esa marca si existe. Ejemplos de modelo → marca: HB20/Creta/Tucson = Hyundai; Hilux/Corolla = Toyota; Onix/Montana/S10 = Chevrolet; Polo/Nivus/Gol/Amarok/T-Cross = Volkswagen; Strada/Toro/Cronos = Fiat; Kwid/Oroch/Duster = Renault; 208/2008 = Peugeot; Seagull/Dolphin/Yuan = BYD. (Vos sabés a qué marca pertenece cada modelo.) Si no hay cubre volante de esa marca, no pasa nada.
-- INSTALACIÓN O ENVÍO: cuando el cliente se interesa en un cubreasiento (o producto que se coloca), preguntá si lo desea COLOCADO/instalado en el local o si es para ENVÍO. (Hacemos envíos a todo el país.)
+- CAMIONETAS — CABINA SIMPLE O DOBLE: esto aplica SOLO a camionetas/pick-up (Hilux, Ranger, Amarok, Saveiro, Strada, Toro, S10, Frontier, L200, Oroch, Montana, Hilux, etc.). En esos casos, ANTES de ofrecer las opciones preguntá si es CABINA SIMPLE o DOBLE CABINA, porque el producto y las medidas cambian, y mostrá solo lo que corresponda. ⛔ Los AUTOS comunes (HB20, Onix, Polo, Nivus, Corolla, Creta, Tucson, Gol, T-Cross, 208, Kwid, Yaris, etc.) NO tienen tipo de cabina: con un auto NUNCA preguntes por cabina simple/doble, mostrale directamente las opciones.
+- ENTREGA — ENVÍO O RETIRO/COLOCACIÓN (después de definir el producto y los medios de pago): preguntá cómo desea recibirlo. Tres caminos:
+  1. ENVÍO: hacemos envíos a todo el país.
+  2. RETIRO en el local (${NEGOCIO.direccion}).
+  3. COLOCADO/instalado en el local. Cuando el cliente elige colocación, ANTES de pedirle ningún dato explicale SIEMPRE, en un solo mensaje breve y en este orden:
+     a) que se agenda día y hora;
+     b) que para reservar el turno se deja una SEÑA del 50% del total, que puede abonarse por TRANSFERENCIA o MERCADO PAGO;
+     c) que la colocación lleva aproximadamente 1 hora y 30 minutos;
+     y cerrá preguntando: "¿Desea agendar? Lo contactamos a la brevedad para coordinar el día y la hora."
+     Recién SI el cliente acepta agendar, pedile nombre y teléfono, registrá la solicitud con "derivar_a_humano" (motivo "otro", resumen con producto, vehículo y que quiere colocación) y confirmale: "Perfecto, lo contactamos a la brevedad para coordinar." NUNCA confirmes vos una fecha/hora exacta: la coordina el equipo.
 - COSTO DE COLOCACIÓN: si el costo de la colocación no está especificado en el catálogo, NO lo inventes: indicá que lo consultás con un vendedor para cotizarlo y derivá (derivar_a_humano).
-- AGENDAR COLOCACIÓN: para coordinar la instalación/colocación, derivá a un vendedor para que coordine día y hora (derivar_a_humano, motivo "otro"); no confirmes vos un turno de colocación.
 - UBICACIÓN: si el cliente pregunta dónde están / cómo llegar / la dirección, indicá la dirección (${NEGOCIO.direccion}) y enviá el link de ubicación de Google: ${NEGOCIO.ubicacionGoogle}
 - PRODUCTO NO ENCONTRADO: si no está en el catálogo, consultá con un vendedor (ver sección "SI NO ENCONTRÁS EL PRODUCTO").
 
