@@ -26,6 +26,63 @@ export const NEGOCIO = {
   },
 };
 
+// ───────────────────────────────────────────────────────────────────
+// ENVÍOS — se hacen ÚNICAMENTE por DAC (agencia de encomiendas).
+// Para coordinar un envío Max pide: nombre completo, teléfono y dirección.
+// ───────────────────────────────────────────────────────────────────
+export const ENVIOS = {
+  empresa: "DAC",
+  detalle: "Los envíos se realizan únicamente por DAC (agencia de encomiendas), a todo el país.",
+  datosNecesarios: ["nombre completo", "teléfono", "dirección"],
+};
+
+// Tienda en Mercado Libre del negocio (vendedor Everbox, sellerId 164590340).
+// Link para listar TODOS los artículos del vendedor que matchean un modelo de auto.
+export const SELLER_ML_ID = "164590340";
+export const tiendaMLPorModelo = (modelo) =>
+  `https://listado.mercadolibre.com.uy/${encodeURIComponent(String(modelo || "").trim().replace(/\s+/g, "-"))}_CustId_${SELLER_ML_ID}`;
+
+// ───────────────────────────────────────────────────────────────────
+// CUBREASIENTOS — dos líneas. Las reglas las usa el cerebro (cerebro.js).
+// ───────────────────────────────────────────────────────────────────
+export const CUBREASIENTOS = {
+  // Línea ECONÓMICA: eco cuero. SOLO VENTA (no se coloca).
+  economico: {
+    nombre: "Cubreasiento eco cuero",
+    material: "eco cuero",
+    precioDesde: 6500,
+    precioHasta: 6800,
+    soloVenta: true,
+    colocacion: false,
+    descripcion: "", // el económico NO necesita descripción extra
+  },
+  // Línea PREMIUM: capitoneado. SÍ se coloca (costo a consultar con vendedor).
+  capitoneado: {
+    nombre: "Cubreasiento capitoneado premium",
+    colocacion: true,
+    costoColocacion: "se cotiza con un vendedor (consultar)",
+    coloresCapitoneado: ["Negro", "Rojo"],
+    logoOpcional: true,
+    coloresLogo: ["Rojo", "Negro", "Gris", "Azul"],
+    // Fotos de muestra de color para mostrar como opciones (cargar las del cliente en public/capitoneado/).
+    muestras: {
+      negro: "", // ej: "/capitoneado/negro.jpg"
+      rojo: "",
+    },
+    // Descripción del material (Max la da DESPUÉS de que el cliente elige el capitoneado).
+    descripcion: [
+      "Cubreasientos premium en cuero ecológico capitoneado, fabricados con materiales importados directamente por la empresa.",
+      "Cuero ecológico premium de excelente calidad.",
+      "Capitoneado de lujo con espuma de alta densidad de 8 mm.",
+      "100% impermeables, lavables y de fácil mantenimiento.",
+      "Material resistente al desgaste y al uso diario, con costuras reforzadas y terminaciones premium.",
+      "Protegen los asientos originales y conservan el valor de reventa del vehículo.",
+      "Diseño elegante y moderno, con excelente presentación.",
+      "Garantía de 1 año por defectos de fabricación.",
+    ],
+  },
+};
+
 // Link directo a WhatsApp del humano (para derivar desde Instagram).
 export const WA_LINK = `https://wa.me/${NEGOCIO.whatsappHumanoIntl}`;
 
