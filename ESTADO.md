@@ -18,9 +18,18 @@ Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`
   7. **Modelos cortos** (q5/x3/a3) tratados como término obligatorio (`esModeloCorto`).
   8. **Moneda USD:** `_fmtPrecio()` muestra "US$ X" para usd:1; el resto "$ X" (formato es-UY). Prompt avisa al LLM.
   9. **Fotos reforzadas:** ofrecer opciones de un modelo SIEMPRE con `enviar_foto` (no solo texto). Verificado: Audi Q5 manda 2 fotos numeradas con US$.
-- **Backup catálogo viejo (232):** estaba en git history (commit con productos_ml.json de 232). 
-- Commits clave: d92cfe3 (búsqueda estricta), da21b84 (filtro por tipo), 0ee117d (pago/entrega/colocación/cabina/numeración), adfb75a (catálogo 270 + USD), a11170a (refuerzo fotos).
-- **PENDIENTE opcional:** alias/link de Mercado Pago para tarjetas (sigue sin cargar); conectar WhatsApp real con chip dedicado; API oficial ML para sync precios/stock automático.
+- **AJUSTES POSTERIORES (7 jun, noche — todos en vivo):**
+  10. **SOLO lo que el cliente pide:** se quitó la regla que sumaba el cubre volante "de yapa". Si piden cubreasientos → solo cubreasientos, alfombras → solo alfombras, etc. Venta adicional únicamente si el cliente pregunta "¿qué más tienen?". (REGLA DE ORO en el prompt.)
+  11. **Filtro suave sedán/hatch** (`carroceriaDe()`) + agregadas sedan/hatch/hatchback/cross a STOP_BUSQUEDA, para no quedar vacío.
+  12. **Productos de a UNO con su foto:** la numeración (1,2,3) va en el PIE de cada foto (la arma el código en `responder()`, dedup por url). El texto NO repite la lista (intro breve + pregunta el número). Ver reglas en MANDAR FOTOS.
+  13. **FIX selección "quiero la 1":** las opciones mostradas se guardan como CONTEXTO INTERNO en el historial (en `handler.js`, tras separador invisible `⁣`) para que el LLM sepa qué es "la 1" y AVANCE (no repita). `web.js /api/history` recorta ese contexto (el cliente no lo ve).
+  14. **NO reenviar fotos / no preguntar variante después de mostrar:** si necesita una variante (sedán/hatch, cabina) la pregunta ANTES de mostrar; nunca muestra todo y después pregunta (eso causaba re-envío). Para ALFOMBRAS de auto muestra todas las opciones de una y el cliente elige por número.
+  15. **Fotos de a una con ESPERA humana:** `chat.html` (tester) muestra cada foto con "escribiendo…" + 1-2s entre cada una; `whatsapp.js` hace lo mismo con presencia "composing".
+  16. **Colocación SOLO en CUBREASIENTOS:** cubre volante, alfombras y demás accesorios NO se colocan (solo envío o retiro). Cubreasientos sí (seña 50%, agenda, ~1h30).
+  17. **Cubre volante por MARCA sin pedir modelo exacto:** con la marca alcanza; muestra directo.
+- **Backup catálogo viejo (232):** está en git history.
+- Commits clave: adfb75a (catálogo 270 + USD), a11170a (refuerzo fotos), 0c9f7af (no reenviar fotos), ee375e5 (fix "la 1"), 9586046 (colocación solo cubreasientos). HEAD ~0c9f7af.
+- **PENDIENTE opcional:** (1) que para CUBREASIENTOS no pregunte sedán/hatch (va directo); (2) alias/link de Mercado Pago para tarjetas (sigue sin cargar); (3) conectar WhatsApp real con chip dedicado; (4) API oficial ML para sync precios/stock automático.
 
 ## 🟢 ÚLTIMA SESIÓN (5 jun, noche) — RETOMAR ACÁ
 - **Link permanente EN VIVO:** https://max-tester.onrender.com (Render, gratis, anda con la PC apagada). Para actualizarlo: `git push` + Render → "Manual Deploy → Deploy latest commit".
