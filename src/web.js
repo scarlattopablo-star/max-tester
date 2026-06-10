@@ -13,6 +13,7 @@ import { sleep, delayEscritura } from "./humano.js";
 import { programarSync, haySyncML } from "./sync_ml.js";
 import { infoCatalogo } from "./catalogo_vivo.js";
 import { hayMercadoPago } from "./pagos.js";
+import { proveedorIA } from "./config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "..", "public");
@@ -68,9 +69,10 @@ app.post("/api/reset", (req, res) => {
   res.json({ ok: true });
 });
 
-// Estado rápido del bot (catálogo, sync ML, Mercado Pago) para chequear la config en vivo.
+// Estado rápido del bot (catálogo, sync ML, Mercado Pago, cerebro IA) para chequear la config en vivo.
 app.get("/api/estado", (_req, res) => {
-  res.json({ catalogo: infoCatalogo(), syncML: haySyncML(), mercadoPago: hayMercadoPago() });
+  const ia = proveedorIA();
+  res.json({ catalogo: infoCatalogo(), syncML: haySyncML(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model } });
 });
 
 app.listen(PORT, () => {

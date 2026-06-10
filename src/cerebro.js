@@ -1,6 +1,7 @@
 // Cerebro IA del agente. Atiende, asesora, vende y agenda.
 // Usa un cliente compatible con OpenAI -> funciona con Gemini (gratis), Groq, OpenAI o Claude.
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -133,6 +134,22 @@ function client() {
   return _client;
 }
 
+// Cliente NATIVO de Anthropic (solo para proveedor "claude"): habilita el caché de prompt,
+// que el modo compatible-OpenAI no soporta.
+let _anthropic = null;
+function anthropicClient() {
+  if (!_anthropic) {
+    if (!_proveedor) _proveedor = proveedorIA();
+    if (!_proveedor.apiKey) {
+      const e = new Error("FALTA_API_KEY");
+      e.detalle = `Falta la clave ${_proveedor.envKey} en .env (proveedor: ${_proveedor.nombre}).`;
+      throw e;
+    }
+    _anthropic = new Anthropic({ apiKey: _proveedor.apiKey });
+  }
+  return _anthropic;
+}
+
 // Fecha y momento del día en Uruguay (UTC-3, sin horario de verano).
 function momentoUruguay() {
   const dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -192,13 +209,11 @@ ${medios}
 6. Cuando diga que pagó, tomá el pedido (tomar_pedido) y avisá que el equipo confirma el pago a la brevedad. NUNCA inventes números de cuenta, alias ni links.`;
 }
 
-function systemPrompt() {
-  const m = momentoUruguay();
-  const op = m.saludos[Math.floor(Math.random() * m.saludos.length)];
+// Parte FIJA del prompt (cacheable): reglas, catálogo y datos del negocio.
+// ⛔ NO meter acá nada que cambie entre llamadas (fecha, hora, saludos aleatorios):
+// rompería el caché de prompt de Anthropic. Lo dinámico va en systemPromptDinamico().
+function systemPromptEstatico() {
   return `Te llamás ${ASISTENTE} y sos el asistente de "${NEGOCIO.nombre}", una tienda de accesorios para autos en Montevideo, Uruguay. Atendés por WhatsApp.
-
-# Momento actual (Uruguay)
-- Ahora en Uruguay es ${m.dia}, de ${m.parte} (hora ${m.hora}). Saludá acorde al momento: de mañana "buenos días/buen día", de tarde "buenas tardes", de noche "buenas noches". Hoy es ${m.fecha} (formato para agendar: YYYY-MM-DD; usalo para entender "mañana", "el viernes", etc.).
 
 # Tu personalidad (TONO FORMAL Y PROFESIONAL — IMPORTANTE)
 - Te llamás ${ASISTENTE}, asesor/a de ${NEGOCIO.nombre}. Atendés con un trato FORMAL, profesional, cordial y respetuoso.
@@ -209,8 +224,8 @@ function systemPrompt() {
 - NOMBRE DEL CLIENTE: si se presenta, dirigite a él por su nombre de forma respetuosa (no en cada mensaje). Si la conversación avanza hacia una compra o coordinación y no sabés su nombre, preguntá con cortesía: "¿Con quién tengo el gusto?" y a partir de ahí utilícelo.
 - Paciente, sin presionar. Si el cliente necesita pensarlo, le da su espacio con cortesía ("Por supuesto, quedo a su disposición cuando lo desee").
 - PRESENTACIÓN (una sola vez, al inicio): saludo según el momento del día + consulta cordial por cómo está + presentación con el negocio + ofrecimiento de ayuda. Variá SIEMPRE la frase. SIN emojis. Ejemplos (no copiar literal):
-  · "${op}, ¿cómo está? Le habla ${ASISTENTE}, de ${NEGOCIO.nombre}. ¿En qué puedo ayudarlo?"
-  · "${op}. Le habla ${ASISTENTE} de ${NEGOCIO.nombre}. ¿En qué puedo asistirlo hoy?"
+  · "[Saludo del momento], ¿cómo está? Le habla ${ASISTENTE}, de ${NEGOCIO.nombre}. ¿En qué puedo ayudarlo?"
+  · "[Saludo del momento]. Le habla ${ASISTENTE} de ${NEGOCIO.nombre}. ¿En qué puedo asistirlo hoy?"
   ⛔ Esa presentación va UNA SOLA VEZ, SOLO si es el PRIMER mensaje. Si ya hay mensajes previos en la charla, NO te vuelvas a presentar: continuá la conversación recordando lo hablado.
 
 # CÓMO CONVERSÁS (clave — respetalo SIEMPRE)
@@ -287,7 +302,7 @@ Hay DOS tipos de cubreasiento a medida. Cuando el cliente consulta por cubreasie
 - Envíos a todo el país: ${NEGOCIO.enviosTodoElPais ? "sí" : "no"}
 - Medios de pago: ${NEGOCIO.mediosPago.join(", ")}
 - Web: ${NEGOCIO.web}
-- (La fecha y el momento del día están arriba, en "Momento actual".)
+- (La fecha y el momento del día están en la sección "Momento actual".)
 - Descuento: si el cliente paga por TRANSFERENCIA bancaria, tiene un ${NEGOCIO.descuentoTransferencia}% de descuento sobre el total. Mencionalo cuando se hable de precio/pago o cuando ayude a cerrar, sin ser insistente.
 
 # CÓMO PAGAR (datos de cobro)
@@ -322,6 +337,19 @@ ${resumenCatalogo()}
 - No ofrezcas agendar un turno hasta que el cliente muestre interés real en comprar/ir. Primero conversá y asesorá.
 - Para agendar necesitás: nombre, teléfono, qué servicio/producto, fecha y hora. Confirmá al final.
 - No uses ninguna herramienta solo para charlar: respondé con texto normal.`;
+}
+
+// Parte DINÁMICA del prompt (NO se cachea): fecha, hora y saludo del momento.
+function systemPromptDinamico() {
+  const m = momentoUruguay();
+  const op = m.saludos[Math.floor(Math.random() * m.saludos.length)];
+  return `# Momento actual (Uruguay)
+- Ahora en Uruguay es ${m.dia}, de ${m.parte} (hora ${m.hora}). Saludá acorde al momento: ahora corresponde "${op}" (de mañana "buenos días/buen día", de tarde "buenas tardes", de noche "buenas noches"). Hoy es ${m.fecha} (formato para agendar: YYYY-MM-DD; usalo para entender "mañana", "el viernes", etc.).`;
+}
+
+// Prompt completo (camino compatible-OpenAI: Gemini/Groq/OpenAI, sin caché).
+function systemPrompt() {
+  return `${systemPromptEstatico()}\n\n${systemPromptDinamico()}`;
 }
 
 const TOOLS = [
@@ -491,10 +519,111 @@ async function ejecutarHerramienta(nombre, input) {
   }
 }
 
+// Las mismas herramientas en formato nativo de Anthropic (usa input_schema).
+const TOOLS_ANTHROPIC = TOOLS.map((t) => ({
+  name: t.function.name,
+  description: t.function.description,
+  input_schema: t.function.parameters,
+}));
+
+const RESPUESTA_FALLBACK = "Disculpá, se me complicó procesar eso. ¿Lo podés repetir o preferís que te pase con un asesor?";
+
+// Arma la respuesta final: texto + fotos numeradas sin duplicados (compartido por ambos caminos).
+// Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption.
+function armarRespuesta(texto, acciones) {
+  let fotosCrudas = acciones
+    .filter((a) => (a.herramienta === "enviar_foto" || a.herramienta === "mostrar_capitoneado") && a.resultado?.ok)
+    .flatMap((a) => a.resultado.fotos)
+    .filter((f) => f && f.img);
+  const _vistas = new Set();
+  fotosCrudas = fotosCrudas.filter((f) => { if (_vistas.has(f.img)) return false; _vistas.add(f.img); return true; });
+  const imagenesEnviar = fotosCrudas.map((f, i) => ({
+    url: f.img,
+    caption: f.precio ? `${i + 1}) ${f.nombre} - ${_fmtPrecio(f.precio, f.moneda)}` : `${i + 1}) ${f.nombre}`,
+  }));
+  return { texto: (texto || "").trim(), acciones, imagenesEnviar };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Camino NATIVO de Anthropic (proveedor "claude") con CACHÉ DE PROMPT.
+// El bloque fijo (reglas + catálogo) se marca con cache_control: las llamadas
+// siguientes lo pagan al 10% (la caché dura 5 min y se renueva con cada uso).
+// ─────────────────────────────────────────────────────────────────────
+function _imagenAnthropic(url) {
+  const m = /^data:([^;]+);base64,(.*)$/s.exec(url || "");
+  if (m) return { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } };
+  return { type: "image", source: { type: "url", url } };
+}
+
+async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes = []) {
+  const cli = anthropicClient();
+  const system = [
+    { type: "text", text: systemPromptEstatico(), cache_control: { type: "ephemeral" } },
+    { type: "text", text: systemPromptDinamico() },
+  ];
+
+  // Anthropic exige roles alternados y que el primer mensaje sea "user".
+  // (El saludo inicial de Max queda guardado como "assistant": por eso el relleno.)
+  const previos = [];
+  for (const m of historialPrevio) {
+    const content = String(m.content || "").trim();
+    if (!content) continue;
+    const role = m.role === "assistant" ? "assistant" : "user";
+    const ult = previos[previos.length - 1];
+    if (ult && ult.role === role) ult.content += `\n${content}`;
+    else previos.push({ role, content });
+  }
+  if (previos.length && previos[0].role === "assistant") previos.unshift({ role: "user", content: "(El cliente abre la conversación.)" });
+
+  let userContent = textoUsuario || "";
+  if (imagenes && imagenes.length) {
+    userContent = [
+      { type: "text", text: textoUsuario || "(El cliente mandó esta foto, mirala y ayudá en consecuencia.)" },
+      ...imagenes.map(_imagenAnthropic),
+    ];
+  }
+  const messages = [...previos, { role: "user", content: userContent }];
+  const acciones = [];
+
+  for (let vuelta = 0; vuelta < 6; vuelta++) {
+    const resp = await cli.messages.create({
+      model: _proveedor.model,
+      max_tokens: 350,
+      temperature: 0.85,
+      system,
+      tools: TOOLS_ANTHROPIC,
+      messages,
+    });
+
+    const toolUses = (resp.content || []).filter((b) => b.type === "tool_use");
+    if (toolUses.length) {
+      messages.push({ role: "assistant", content: resp.content });
+      const resultados = [];
+      for (const tu of toolUses) {
+        const input = tu.input || {};
+        const resultado = await ejecutarHerramienta(tu.name, input);
+        acciones.push({ herramienta: tu.name, input, resultado });
+        resultados.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(resultado) });
+      }
+      messages.push({ role: "user", content: resultados });
+      continue;
+    }
+
+    const texto = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+    return armarRespuesta(texto, acciones);
+  }
+  return { texto: RESPUESTA_FALLBACK, acciones, imagenesEnviar: [] };
+}
+
 // historialPrevio: array de {role:'user'|'assistant', content:string}
-// Devuelve { texto, acciones:[{herramienta, input, resultado}] }
-// imagenes: array de URLs o data-URIs (base64) que el cliente mandó. Claude las "ve".
+// Devuelve { texto, acciones:[{herramienta, input, resultado}], imagenesEnviar }
+// imagenes: array de URLs o data-URIs (base64) que el cliente mandó. El modelo las "ve".
 export async function responder(textoUsuario, historialPrevio = [], imagenes = []) {
+  // Proveedor "claude" -> SDK nativo con caché de prompt (mucho más barato que el modo compat).
+  if ((process.env.IA_PROVIDER || "gemini").toLowerCase() === "claude") {
+    return responderAnthropic(textoUsuario, historialPrevio, imagenes);
+  }
+
   let userContent = textoUsuario;
   if (imagenes && imagenes.length) {
     userContent = [
@@ -533,19 +662,7 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
       continue;
     }
 
-    // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption,
-    // de a uno. Se numeran (1, 2, 3...) y se evitan duplicados.
-    let fotosCrudas = acciones
-      .filter((a) => (a.herramienta === "enviar_foto" || a.herramienta === "mostrar_capitoneado") && a.resultado?.ok)
-      .flatMap((a) => a.resultado.fotos)
-      .filter((f) => f && f.img);
-    const _vistas = new Set();
-    fotosCrudas = fotosCrudas.filter((f) => { if (_vistas.has(f.img)) return false; _vistas.add(f.img); return true; });
-    const imagenesEnviar = fotosCrudas.map((f, i) => ({
-      url: f.img,
-      caption: f.precio ? `${i + 1}) ${f.nombre} - ${_fmtPrecio(f.precio, f.moneda)}` : `${i + 1}) ${f.nombre}`,
-    }));
-    return { texto: (msg.content || "").trim(), acciones, imagenesEnviar };
+    return armarRespuesta(msg.content, acciones);
   }
-  return { texto: "Disculpá, se me complicó procesar eso. ¿Lo podés repetir o preferís que te pase con un asesor?", acciones, imagenesEnviar: [] };
+  return { texto: RESPUESTA_FALLBACK, acciones, imagenesEnviar: [] };
 }
