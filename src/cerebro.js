@@ -8,10 +8,11 @@ import { NEGOCIO, FRANJAS_TURNO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, 
 import { disponibilidad, agendar } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
+import { productos as productosML } from "./catalogo_vivo.js";
+import { crearLinkPago, hayMercadoPago } from "./pagos.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CATALOGO = JSON.parse(readFileSync(join(__dirname, "catalogo.json"), "utf8"));
-const PRODUCTOS = JSON.parse(readFileSync(join(__dirname, "productos_ml.json"), "utf8"));
 
 // Palabras genéricas que NO sirven para identificar el modelo (no deben matchear solas).
 const STOP_BUSQUEDA = new Set([
@@ -82,8 +83,8 @@ export function buscarPrecio(consulta) {
   const cab = cabinaDe(consulta); // filtro suave por cabina simple/doble
   const carr = carroceriaDe(consulta); // filtro suave por sedán/hatch
   const pool = catFiltro
-    ? (PRODUCTOS.productos || []).filter((item) => catFiltro(_normTxt(item.n)))
-    : (PRODUCTOS.productos || []);
+    ? productosML().filter((item) => catFiltro(_normTxt(item.n)))
+    : productosML();
   // Aplica los filtros suaves (cabina, carrocería) SOLO si quedan resultados; si no, no descarta
   // (mejor ofrecer lo del modelo y, si hace falta, preguntar la variante).
   const aplicarCab = (lista) => {
@@ -176,8 +177,7 @@ function datosPagoTexto() {
   // Datos concretos por medio (los que SÍ tenemos cargados).
   const detalle = [];
   detalle.push(`- TRANSFERENCIA bancaria (tiene ${NEGOCIO.descuentoTransferencia}% de descuento): ${dc.transferencia || "(pedí los datos al equipo con derivar_a_humano; NO los inventes)"}`);
-  detalle.push(`- MERCADO PAGO: ${dc.mercadoPagoAlias ? `transferir al alias ${dc.mercadoPagoAlias}` : (dc.mercadoPagoLink ? `link de pago ${dc.mercadoPagoLink}` : `aún no tengo el alias/link cargado; decile que el equipo se lo pasa enseguida y usá "derivar_a_humano". NO inventes alias ni links`)}`);
-  detalle.push(`- TARJETAS (Visa, OCA, Master, hasta 6 pagos): se abonan en el local, o el equipo le pasa un link de pago. Si necesita el link, usá "derivar_a_humano". NO inventes links.`);
+  detalle.push(`- MERCADO PAGO / TARJETAS (Visa, OCA, Master): generá VOS el link de pago con la herramienta "crear_link_pago", por el MONTO EXACTO de la compra (precio normal, SIN el descuento de transferencia), con un título claro (producto + modelo + año). Mandale el link al cliente para que pague directo. ⛔ NUNCA inventes un link: solo el que devuelve la herramienta. Si la herramienta falla o no está configurada, decile que enseguida un compañero le envía el link y usá "derivar_a_humano" con el detalle y el monto.`);
   detalle.push(`- EFECTIVO: en el local (${NEGOCIO.direccion}).`);
 
   return `FLUJO DE PAGO (seguilo así, sin abrumar):
@@ -264,12 +264,12 @@ function systemPrompt() {
 Hay DOS tipos de cubreasiento a medida. Cuando el cliente consulta por cubreasientos para su auto, mostrá las opciones del catálogo (con foto, vía enviar_foto) y tené clara esta diferencia:
 - ECO CUERO (económico): ronda los $${CUBREASIENTOS.economico.precioDesde}–$${CUBREASIENTOS.economico.precioHasta}. Es SOLO VENTA: NO se coloca. No necesita descripción extra del material.
 - CAPITONEADO (premium): es el de mayor gama. SÍ se puede COLOCAR (el costo de colocación se cotiza con un vendedor).
-  · COLORES de capitoneado disponibles: ${CUBREASIENTOS.capitoneado.coloresCapitoneado.join(" o ")}. Cuando el cliente se interese en el capitoneado, ofrecé estos dos colores como opción (si hay fotos de muestra cargadas, mostrálas con enviar_foto; si no, nombralos).
+  · COLORES de capitoneado disponibles: ${CUBREASIENTOS.capitoneado.coloresCapitoneado.join(" o ")}. Cuando el cliente se interese en el capitoneado, usá la herramienta "mostrar_capitoneado" para mandarle las FOTOS REALES del material en ambos colores y preguntale cuál prefiere. Si pide ver el material/espuma de cerca, usá "mostrar_capitoneado" con que:"espuma".
   · LOGO bordado OPCIONAL: se puede agregar el logo (o no). Si lo quiere, los colores de logo son: ${CUBREASIENTOS.capitoneado.coloresLogo.join(", ")}.
   · DESCRIPCIÓN DEL MATERIAL (dala SOLO para el CAPITONEADO, y recién DESPUÉS de que el cliente eligió esa opción / mostró interés; NO la des para el económico ni al principio). Explicá con tus palabras, formal y sin emojis, estos puntos: ${CUBREASIENTOS.capitoneado.descripcion.join(" ")}
 - CERRAR LA COMPRA DE UN CAPITONEADO: para finalizar necesitás confirmar, con el cliente, estos datos (preguntá lo que falte, sin abrumar): (1) AÑO del auto; (2) COLOR del capitoneado (${CUBREASIENTOS.capitoneado.coloresCapitoneado.join("/")}); (3) si quiere LOGO o no, y de qué COLOR (${CUBREASIENTOS.capitoneado.coloresLogo.join("/")}). Con eso definido, pasá al PAGO.
 - PAGO del cubreasiento (hasta que esté el carrito en la web): cuando el cliente confirma la compra, ofrecé pagar por:
-  · LINK DE MERCADO PAGO (para pagar directo con tarjeta) — usá el link de NEGOCIO.datosCobro.mercadoPagoLink si está cargado; si NO está cargado, NO lo inventes: decile que enseguida le pasás el link y derivá con "derivar_a_humano".
+  · LINK DE MERCADO PAGO: generalo VOS con la herramienta "crear_link_pago" por el MONTO EXACTO de la compra (precio normal, sin el descuento de transferencia) y mandáselo para que pague directo con tarjeta o dinero en cuenta. Si la herramienta falla, decile que enseguida un compañero le envía el link y derivá.
   · o TRANSFERENCIA a La Casa del Cubreasiento (10% de descuento): ${NEGOCIO.datosCobro.transferencia}.
 - AL CONFIRMAR LA COMPRA del cubreasiento, OFRECÉ EL RESTO DE ARTÍCULOS para ese mismo auto/modelo: pasale el link a la tienda de Mercado Libre filtrada por su modelo, así ve todo lo que hay para su vehículo. Armá el link con el modelo del auto (ej. para una Hilux: https://listado.mercadolibre.com.uy/Hilux_CustId_${"164590340"}). Texto sugerido: "Además, acá puede ver todos los accesorios que tenemos para su [modelo]: [link]".
 - CAMIONETAS — CABINA SIMPLE O DOBLE: aplica SOLO a camionetas/pick-up (Hilux, Ranger, Amarok, Saveiro, Strada, Toro, S10, Frontier, L200, Oroch, Montana, etc.) y SOLO para ALFOMBRAS (cuyas medidas cambian por cabina). Para alfombras de camioneta, preguntá UNA vez si es cabina simple o doble y mostrá lo que corresponda. ⛔ NO te quedes trabado en esa pregunta: si el cliente no la contesta pero AVANZA (elige producto, color, dice que quiere comprar), NO la repitas; seguí el flujo y, si hace falta, confirmá la cabina al final junto con los demás datos. ⛔ Los AUTOS comunes (HB20, Onix, Polo, Nivus, Corolla, Creta, Tucson, Gol, T-Cross, 208, Kwid, Yaris, etc.) NO tienen tipo de cabina: con un auto NUNCA preguntes por cabina. Para CUBREASIENTOS NO es necesario preguntar la cabina (son a medida); enfocate en el AÑO, el color y el logo.
@@ -402,6 +402,35 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "mostrar_capitoneado",
+      description: "Manda al cliente las FOTOS REALES del material capitoneado premium (muestras de color negro y rojo, y detalle de la espuma de 8mm). Usar cuando el cliente se interesa por el cubreasiento capitoneado y hay que mostrarle los colores disponibles.",
+      parameters: {
+        type: "object",
+        properties: {
+          que: { type: "string", description: "Qué mostrar: 'colores' (negro y rojo, lo habitual), 'negro', 'rojo' o 'espuma' (detalle del material y la espuma de 8mm)" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "crear_link_pago",
+      description: "Genera un LINK DE PAGO de Mercado Pago por el monto EXACTO de la compra, para que el cliente pague directo (tarjeta o dinero en cuenta). Usar cuando el cliente confirmó la compra y eligió pagar por Mercado Pago o tarjeta. NO usar para transferencia bancaria (esa tiene sus propios datos).",
+      parameters: {
+        type: "object",
+        properties: {
+          titulo: { type: "string", description: "Descripción corta de la compra que verá el cliente al pagar. Ej: 'Cubreasiento capitoneado negro - Toyota Hilux 2024'" },
+          monto: { type: "number", description: "Monto TOTAL exacto a cobrar en pesos uruguayos (sin descuento de transferencia)" },
+        },
+        required: ["titulo", "monto"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "derivar_a_humano",
       description: "Marca que esta conversación necesita que la atienda una persona (reclamos, mayorista, alto valor, negociación, o pedido explícito del cliente).",
       parameters: {
@@ -418,12 +447,30 @@ const TOOLS = [
   },
 ];
 
-function ejecutarHerramienta(nombre, input) {
+async function ejecutarHerramienta(nombre, input) {
   try {
+    if (nombre === "mostrar_capitoneado") {
+      const m = CUBREASIENTOS.capitoneado.muestras || {};
+      const que = _normTxt(input.que || "colores");
+      let fotos = [];
+      if (que.includes("negro") && !que.includes("rojo")) fotos = [{ nombre: "Capitoneado premium - Negro", img: m.negro }];
+      else if (que.includes("rojo") && !que.includes("negro")) fotos = [{ nombre: "Capitoneado premium - Rojo", img: m.rojo }];
+      else if (que.includes("espuma") || que.includes("detalle") || que.includes("material")) fotos = [{ nombre: "Detalle del material capitoneado (ambos colores)", img: m.detalle }, { nombre: "Espuma de alta densidad de 8 mm", img: m.espuma }];
+      else fotos = [{ nombre: "Capitoneado premium - Negro", img: m.negro }, { nombre: "Capitoneado premium - Rojo", img: m.rojo }];
+      fotos = fotos.filter((f) => f.img);
+      if (!fotos.length) return { ok: false, mensaje: "No hay fotos de muestra cargadas." };
+      return { ok: true, enviadas: fotos.length, fotos };
+    }
+    if (nombre === "crear_link_pago") {
+      if (!hayMercadoPago()) return { ok: false, mensaje: "El link de pago no está configurado todavía. Decile al cliente que enseguida un compañero le envía el link de pago, y usá derivar_a_humano (motivo otro) con el detalle de la compra y el monto." };
+      const r = await crearLinkPago({ titulo: input.titulo, monto: input.monto });
+      if (!r.ok) return { ok: false, mensaje: `No pude generar el link (${r.motivo}). Decile al cliente que enseguida un compañero le envía el link de pago y derivá con derivar_a_humano.` };
+      return { ok: true, link: r.link, monto: r.monto, instruccion: "Pasale este link al cliente para que pague directo. Es por el monto exacto de su compra." };
+    }
     if (nombre === "consultar_precio") {
       const encontrados = buscarPrecio(input.modelo || input.producto || "");
       if (!encontrados.length) return { encontrado: false, mensaje: "No aparece ese producto exacto en la lista; pedí más datos (modelo/año) u ofrecé cotizarlo." };
-      return { encontrado: true, moneda: PRODUCTOS.moneda, resultados: encontrados };
+      return { encontrado: true, moneda: "UYU", resultados: encontrados };
     }
     if (nombre === "enviar_foto") {
       const encontrados = buscarPrecio(input.producto || input.modelo || "").filter((x) => x.img);
@@ -479,7 +526,7 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
       for (const tc of msg.tool_calls) {
         let args = {};
         try { args = JSON.parse(tc.function.arguments || "{}"); } catch {}
-        const resultado = ejecutarHerramienta(tc.function.name, args);
+        const resultado = await ejecutarHerramienta(tc.function.name, args);
         acciones.push({ herramienta: tc.function.name, input: args, resultado });
         messages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(resultado) });
       }
@@ -489,7 +536,7 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
     // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption,
     // de a uno. Se numeran (1, 2, 3...) y se evitan duplicados.
     let fotosCrudas = acciones
-      .filter((a) => a.herramienta === "enviar_foto" && a.resultado?.ok)
+      .filter((a) => (a.herramienta === "enviar_foto" || a.herramienta === "mostrar_capitoneado") && a.resultado?.ok)
       .flatMap((a) => a.resultado.fotos)
       .filter((f) => f && f.img);
     const _vistas = new Set();

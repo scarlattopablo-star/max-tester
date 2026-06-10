@@ -10,6 +10,9 @@ import { procesarMensaje } from "./handler.js";
 import { saludoInicial } from "./cerebro.js";
 import { reiniciar, historial, agregar } from "./memoria.js";
 import { sleep, delayEscritura } from "./humano.js";
+import { programarSync, haySyncML } from "./sync_ml.js";
+import { infoCatalogo } from "./catalogo_vivo.js";
+import { hayMercadoPago } from "./pagos.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "..", "public");
@@ -65,8 +68,15 @@ app.post("/api/reset", (req, res) => {
   res.json({ ok: true });
 });
 
+// Estado rápido del bot (catálogo, sync ML, Mercado Pago) para chequear la config en vivo.
+app.get("/api/estado", (_req, res) => {
+  res.json({ catalogo: infoCatalogo(), syncML: haySyncML(), mercadoPago: hayMercadoPago() });
+});
+
 app.listen(PORT, () => {
   console.log(`\n🌐 Max está online en: http://localhost:${PORT}`);
   console.log("   Abrí ese link en el navegador para probarlo.");
   console.log("   Para compartirlo por un LINK público (celular/otra persona), ver README (sección Link público).\n");
+  // Sincronización automática del catálogo con la API de Mercado Libre (cada 6 h).
+  programarSync(6);
 });

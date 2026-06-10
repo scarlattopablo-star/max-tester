@@ -64,10 +64,13 @@ export const CUBREASIENTOS = {
     coloresCapitoneado: ["Negro", "Rojo"],
     logoOpcional: true,
     coloresLogo: ["Rojo", "Negro", "Gris", "Azul"],
-    // Fotos de muestra de color para mostrar como opciones (cargar las del cliente en public/capitoneado/).
+    // Fotos REALES de muestra del material (en public/capitoneado/). URLs absolutas
+    // para que funcionen tanto en el tester web como en WhatsApp.
     muestras: {
-      negro: "", // ej: "/capitoneado/negro.jpg"
-      rojo: "",
+      negro: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro.jpg`,
+      rojo: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/rojo.jpg`,
+      detalle: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/detalle.jpg`, // ambos colores + espuma a la vista
+      espuma: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/espuma.jpg`, // grosor de espuma 8mm
     },
     // Descripción del material (Max la da DESPUÉS de que el cliente elige el capitoneado).
     descripcion: [
