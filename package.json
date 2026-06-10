@@ -1,18 +1,19 @@
-{
+﻿{
   "name": "agente-ia-casa-cubreasiento",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Agente IA de atención, venta y agenda para La Casa del Cubreasiento (WhatsApp via Baileys + Instagram redirect).",
+  "description": "Agente IA de atenciÃ³n, venta y agenda para La Casa del Cubreasiento (WhatsApp via Baileys + Instagram redirect).",
   "scripts": {
     "sim": "node src/simulador.js",
     "simulador": "node src/simulador.js",
     "web": "node src/web.js",
     "whatsapp": "node src/whatsapp.js",
-    "start": "node src/web.js"
+    "start": "node src/start.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
+    "@neondatabase/serverless": "^1.1.0",
     "baileys": "^6.7.9",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
@@ -20,3 +21,4 @@
     "qrcode-terminal": "^0.12.0"
   }
 }
+

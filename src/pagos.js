@@ -38,7 +38,8 @@ export async function crearLinkPago({ titulo, monto }) {
             unit_price: precio,
           },
         ],
-        statement_descriptor: "CASACUBREASIENTO",
+        // Máximo 13 caracteres según la doc de MP (más largo se trunca en el resumen de la tarjeta).
+        statement_descriptor: "CUBREASIENTO",
         external_reference: `max-${Date.now()}`,
       }),
     });

@@ -14,6 +14,7 @@ import { programarSync, haySyncML } from "./sync_ml.js";
 import { infoCatalogo } from "./catalogo_vivo.js";
 import { hayMercadoPago } from "./pagos.js";
 import { proveedorIA } from "./config.js";
+import { enviarAviso, hayWhatsApp } from "./notificador.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "..", "public");
@@ -73,6 +74,21 @@ app.post("/api/reset", (req, res) => {
 app.get("/api/estado", (_req, res) => {
   const ia = proveedorIA();
   res.json({ catalogo: infoCatalogo(), syncML: haySyncML(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model } });
+});
+
+// Aviso de venta de la web (Vercel). Autenticado por token compartido.
+app.post("/api/notificar-venta", async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = process.env.NOTIFY_TOKEN;
+  if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "no autorizado" });
+  if (!hayWhatsApp()) return res.status(503).json({ ok: false, whatsapp: false });
+  try {
+    await enviarAviso(req.body || {});
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Aviso de venta falló:", e.message);
+    res.status(503).json({ ok: false, whatsapp: e.whatsapp !== false });
+  }
 });
 
 app.listen(PORT, () => {

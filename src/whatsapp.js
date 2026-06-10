@@ -9,6 +9,8 @@ import { dirname, join } from "path";
 import { procesarMensaje } from "./handler.js";
 import { NEGOCIO } from "./config.js";
 import { sleep, delayEscritura } from "./humano.js";
+import { registrarSock } from "./notificador.js";
+import { useDBAuthState } from "./auth_db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AUTH_DIR = join(__dirname, "..", "auth_baileys");
@@ -33,7 +35,10 @@ async function iniciar() {
     console.log("⚠ Falta ANTHROPIC_API_KEY en .env — el bot no va a poder responder. Copiá .env.example a .env.");
   }
 
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  // Con DATABASE_URL la sesión vive en Neon (sobrevive a Render); sin ella, en disco como siempre.
+  const { state, saveCreds } = process.env.DATABASE_URL
+    ? await useDBAuthState()
+    : await useMultiFileAuthState(AUTH_DIR);
   const sock = makeWASocket({ auth: state, logger: noopLogger, markOnlineOnConnect: false });
 
   sock.ev.on("creds.update", saveCreds);
@@ -47,6 +52,7 @@ async function iniciar() {
     }
     if (connection === "open") {
       console.log("✅ Conectado a WhatsApp. El bot ya está atendiendo.");
+      registrarSock(sock);
     }
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
