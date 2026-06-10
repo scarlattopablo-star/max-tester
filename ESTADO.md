@@ -3,7 +3,24 @@
 Bot de WhatsApp (Baileys, sin API de Meta) + derivación de Instagram, para La Casa del Cubreasiento.
 Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`.
 
-## 🟢🟢 SESIÓN 7 jun (tarde/noche) — RETOMAR ACÁ (lo más nuevo)
+## 🟣🟣 SESIÓN 9 jun — RETOMAR ACÁ (lo más nuevo)
+- **Link en vivo:** https://max-tester.onrender.com · Estado de config en vivo: **/api/estado** (muestra catálogo, syncML, mercadoPago).
+- **REGLAS DE NEGOCIO NUEVAS (pedido del cliente, implementadas y en vivo):**
+  1. **ENVÍOS SOLO POR DAC** (agencia): al elegir envío, Max pide NOMBRE + TELÉFONO + DIRECCIÓN. Config en `config.js` → `ENVIOS`.
+  2. **Cubreasientos, DOS LÍNEAS** (`config.js` → `CUBREASIENTOS`): **eco cuero** $6500–6800 SOLO VENTA (no se coloca, sin descripción extra) vs **capitoneado premium** (SÍ se coloca; costo de colocación lo cotiza un VENDEDOR → derivar).
+  3. **Colores capitoneado: NEGRO o ROJO** con FOTOS REALES del material en `public/capitoneado/` (negro.jpg, rojo.jpg, detalle.jpg, espuma.jpg) — tool **`mostrar_capitoneado`** las manda (también con que:"espuma" para el detalle de espuma 8mm). Fuente de las fotos: Desktop\publicidad...\CUBREASIENTOS_HILUX\WhatsApp Image 2026-06-09*.
+  4. **LOGO bordado opcional**: colores ROJO/NEGRO/GRIS/AZUL.
+  5. **CIERRE de compra capitoneado**: confirmar AÑO del auto + COLOR capitoneado + LOGO sí/no y color → pago.
+  6. **DESCRIPCIÓN del material** (espuma 8mm, impermeable, garantía 1 año, importado): SOLO capitoneado y DESPUÉS de que lo elige. El económico no lleva.
+  7. **Al confirmar compra**: ofrecer el resto de artículos del modelo con link a la tienda ML filtrada: `https://listado.mercadolibre.com.uy/<Modelo>_CustId_164590340` (helper `tiendaMLPorModelo()`). Verificado: da 200.
+  8. **Cabina simple/doble NO bloqueante** y solo para ALFOMBRAS de camioneta; cubreasientos piden AÑO (no cabina).
+- **🔗 LINK DE PAGO MERCADO PAGO GENERADO POR MAX:** tool **`crear_link_pago`** (`src/pagos.js`, Checkout Pro /checkout/preferences) crea un link por el MONTO EXACTO con título producto+modelo+año. ⏳ **Falta `MP_ACCESS_TOKEN`** (token de producción de la cuenta MP del negocio) → hasta entonces Max deriva con elegancia. El token lo pega EL USUARIO (en Render → Environment y en .env local); Claude no maneja credenciales.
+- **🔄 SYNC AUTOMÁTICO CON API OFICIAL ML:** `src/sync_ml.js` (grant client_credentials, sin OAuth de usuario) + `src/catalogo_vivo.js` (catálogo en memoria, reemplaza al import estático en cerebro.js). `web.js` corre `programarSync(6)` al arrancar: sincroniza al boot y cada 6 h; guard anti-pisada (si la API devuelve <30 items no reemplaza). ⏳ **Faltan `ML_CLIENT_ID` + `ML_CLIENT_SECRET`**: crear app en developers.mercadolibre.com.uy (Mis aplicaciones → Crear aplicación, redirect https://max-tester.onrender.com) con la cuenta Everbox y pegar credenciales en Render Environment + .env. Mientras tanto usa el snapshot (270 productos, 7 jun).
+- **ejecutarHerramienta ahora es ASYNC** (await en el loop de responder) por crear_link_pago.
+- **PLAN MAÑANA (en orden):** (1) crear app ML → pegar credenciales → verificar /api/estado syncML:true y que el catálogo se refresque; (2) token MP → mercadoPago:true → probar un link de pago real (monto chico); (3) DESPUÉS: Instagram oficial (API de Meta) — decisión pendiente del cliente: ¿vende completo en IG o atiende y deriva a WhatsApp? Plan: app en developers.facebook.com + webhook en el server + revisión de Meta. NO usar librería no oficial con el IG principal (riesgo de baneo).
+- Commits clave: bc25098 (capitoneado+MP+syncML), dd53bbf (reglas DAC/dos líneas/cierre). 
+
+## 🟢🟢 SESIÓN 7 jun (tarde/noche) — (anterior)
 - **Link en vivo:** https://max-tester.onrender.com
 - **AUTO-DEPLOY RESUELTO con DEPLOY HOOK:** el auto-deploy nativo de Render por webhook de GitHub NO dispara (el repo no tiene el webhook; arreglarlo requiere reconectar GitHub con OAuth del usuario). Solución: se usa el **Deploy Hook** de Render (URL privada guardada en `agente_ia/.deploy_hook`, gitignored). Hay un git hook **`.git/hooks/pre-push`** que tras cada `git push` dispara el Deploy Hook (curl con 6s de delay). ⇒ **Ahora alcanza con `git push` y se redespliega solo.** (Si el hook se pierde, recrearlo; o disparar manual: `curl -s "$(cat agente_ia/.deploy_hook)"`). El Auto-Deploy del panel quedó en "On Commit".
 - **CATÁLOGO ACTUALIZADO: 270 productos** (antes 232) en `src/productos_ml.json`. Re-scrapeado de ML (cuenta Everbox, seller_id 164590340) leyendo `window._n.ctx.r.appProps.pageProps.viewData.rows` de cada página de `/publicaciones?page=N` (22 páginas, 657 crudas → 270 activas con stock). Método de extracción out-of-browser: **descarga Blob** (botón inyectado + click real de la extensión = gesto de usuario; el `.crdownload` ya trae el JSON completo) → se mueve con PowerShell. (La API pública de ML da 403; clipboard API cuelga vía CDP; el output del tool trunca >~20KB.)
