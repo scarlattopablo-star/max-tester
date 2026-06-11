@@ -73,15 +73,21 @@ export const CUBREASIENTOS = {
       espuma: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/espuma.jpg`, // grosor de espuma 8mm
     },
     // Descripción del material (Max la da DESPUÉS de que el cliente elige el capitoneado).
+    // Son los puntos de venta del cuero ecológico capitoneado. Max NO los recita de
+    // corrido: los explica de a poco, en una charla amena (ver reglas en cerebro.js).
     descripcion: [
-      "Cubreasientos premium en cuero ecológico capitoneado, fabricados con materiales importados directamente por la empresa.",
+      "Cubreasientos premium en cuero ecológico capitoneado, de alta gama, pensados para renovar y proteger el interior del vehículo con máxima protección, confort y elegancia.",
       "Cuero ecológico premium de excelente calidad.",
       "Capitoneado de lujo con espuma de alta densidad de 8 mm.",
-      "100% impermeables, lavables y de fácil mantenimiento.",
-      "Material resistente al desgaste y al uso diario, con costuras reforzadas y terminaciones premium.",
-      "Protegen los asientos originales y conservan el valor de reventa del vehículo.",
+      "100% impermeables.",
+      "Lavables y de fácil mantenimiento.",
+      "Material resistente al desgaste y al uso diario.",
+      "Costuras reforzadas y terminaciones premium.",
+      "Protegen los asientos originales conservando el valor de reventa del vehículo.",
       "Diseño elegante y moderno, con excelente presentación.",
+      "Materiales importados directamente por la empresa, seleccionados para garantizar mayor durabilidad, resistencia y una terminación superior.",
       "Garantía de 1 año por defectos de fabricación.",
+      "Combinan protección, confort y estilo: son la opción ideal para mantener el interior del vehículo impecable y con una apariencia exclusiva.",
     ],
   },
 };
