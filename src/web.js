@@ -11,7 +11,7 @@ import { saludoInicial } from "./cerebro.js";
 import { reiniciar, historial, agregar } from "./memoria.js";
 import { sleep, delayEscritura } from "./humano.js";
 import { programarSync, haySyncML, ultimaSync, sincronizar } from "./sync_ml.js";
-import { infoCatalogo } from "./catalogo_vivo.js";
+import { infoCatalogo, productos } from "./catalogo_vivo.js";
 import { hayMercadoPago } from "./pagos.js";
 import { proveedorIA } from "./config.js";
 import { enviarAviso, hayWhatsApp } from "./notificador.js";
@@ -81,6 +81,18 @@ app.get("/api/estado", (_req, res) => {
 app.get("/api/sync-ahora", async (_req, res) => {
   const r = await sincronizar();
   res.json({ resultado: r, catalogo: infoCatalogo() });
+});
+
+// Catálogo en vivo para consumir desde la web (lacasadelcubreasiento.com.uy).
+// Público y de solo lectura (son los mismos productos que ya están en ML).
+// CORS abierto para que el sitio en Vercel lo pueda leer desde el navegador.
+// Cada producto: { n: nombre, p: precio venta, l: precio lista/tachado|null,
+//                  img: foto, usd: 1 si está en dólares, u: link a la publicación de ML }
+app.get("/api/catalogo", (_req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Cache-Control", "public, max-age=300"); // 5 min de caché en el borde
+  const info = infoCatalogo();
+  res.json({ moneda: "UYU", actualizado: info.actualizado, fuente: info.fuente, cantidad: info.cantidad, productos: productos() });
 });
 
 // Aviso de venta de la web (Vercel). Autenticado por token compartido.

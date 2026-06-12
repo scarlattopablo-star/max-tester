@@ -52,7 +52,7 @@ async function tokenApp() {
   return _token;
 }
 
-// Mapea un item de ML al formato del catálogo {n, p, l, img, usd?}.
+// Mapea un item de ML al formato del catálogo {n, p, l, img, usd?, u?}.
 function mapItem(it) {
   const precio = Math.round(Number(it.price) || 0);
   if (!precio || !it.title) return null;
@@ -60,6 +60,7 @@ function mapItem(it) {
   const img = String(it.thumbnail || "").replace(/^http:/, "https:");
   const out = { n: it.title, p: precio, l: lista && lista > precio ? lista : null, img };
   if (it.currency_id === "USD") out.usd = 1;
+  if (it.permalink) out.u = String(it.permalink).replace(/^http:/, "https:"); // link a la publicación de ML
   return out;
 }
 
@@ -96,7 +97,7 @@ async function idsActivos(tk) {
 // ── Detalle (título, precio, foto, stock) de cada publicación, de a 20 (multiget) ──
 async function detallesDe(tk, ids) {
   const out = [];
-  const ATTRS = "id,title,price,original_price,currency_id,thumbnail,available_quantity,status";
+  const ATTRS = "id,title,price,original_price,currency_id,thumbnail,available_quantity,status,permalink";
   for (let i = 0; i < ids.length; i += 20) {
     const grupo = ids.slice(i, i + 20);
     const url = `${API}/items?ids=${grupo.join(",")}&attributes=${ATTRS}`;
