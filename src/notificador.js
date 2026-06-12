@@ -27,7 +27,13 @@ export function formatearAviso(p) {
     ? `📦 Envío DAC a: ${p.cliente?.direccion || "?"}, ${p.cliente?.ciudad || "?"}`
     : "🏪 Retiro en el local";
   const corto = String(p.orderId || "").slice(0, 8).toUpperCase();
-  return `${titulo}\nPedido #${corto}\n\n${items}\n\nTotal: ${fmt(p.total || 0)}\n${entrega}\n👤 ${p.cliente?.nombre || "?"} · ${p.cliente?.telefono || "?"}`;
+  let msg = `${titulo}\nPedido #${corto}\n\n${items}\n\nTotal: ${fmt(p.total || 0)}\n${entrega}\n👤 ${p.cliente?.nombre || "?"} · ${p.cliente?.telefono || "?"}`;
+  // Pedidos por transferencia: botón (link) para confirmar cuando llega la plata.
+  // Al tocarlo, el pedido pasa a PAGADO y se descuenta el stock en Mercado Libre.
+  if (p.medio === "transferencia" && p.confirmarUrl) {
+    msg += `\n\n✅ ¿Llegó la transferencia? Tocá acá para CONFIRMAR la venta (marca el pedido como pagado y baja el stock en ML):\n${p.confirmarUrl}`;
+  }
+  return msg;
 }
 
 export async function enviarAviso(pedido) {
