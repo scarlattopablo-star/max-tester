@@ -15,6 +15,8 @@ import { infoCatalogo, productos } from "./catalogo_vivo.js";
 import { hayMercadoPago } from "./pagos.js";
 import { proveedorIA } from "./config.js";
 import { enviarAviso, hayWhatsApp } from "./notificador.js";
+import { urlAutorizacion, conectarConCode, hayUsuarioML } from "./ml_user.js";
+import { descontarVenta } from "./ml_stock.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "..", "public");
@@ -24,7 +26,12 @@ const app = express();
 app.use(express.json({ limit: "15mb" })); // permite fotos en base64
 app.use(express.static(PUBLIC));
 
-app.get("/", (_req, res) => res.sendFile(join(PUBLIC, "chat.html")));
+app.get("/", (req, res) => {
+  // Retorno de la autorización de Mercado Libre (la callback de la app apunta
+  // a la raíz): viene ?code= → lo canjeamos por el token de usuario.
+  if (req.query.code) return res.redirect(`/api/ml/conectado?code=${encodeURIComponent(String(req.query.code))}`);
+  res.sendFile(join(PUBLIC, "chat.html"));
+});
 
 app.post("/api/chat", async (req, res) => {
   const { chatId, texto, imagen } = req.body || {};
@@ -71,9 +78,43 @@ app.post("/api/reset", (req, res) => {
 });
 
 // Estado rápido del bot (catálogo, sync ML, Mercado Pago, cerebro IA) para chequear la config en vivo.
-app.get("/api/estado", (_req, res) => {
+app.get("/api/estado", async (_req, res) => {
   const ia = proveedorIA();
-  res.json({ catalogo: infoCatalogo(), syncML: haySyncML(), ultimaSync: ultimaSync(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model } });
+  res.json({ catalogo: infoCatalogo(), syncML: haySyncML(), ultimaSync: ultimaSync(), mlUsuario: await hayUsuarioML(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model } });
+});
+
+// ── Autorización de la cuenta de ML (un clic de Pablo, logueado como EVERBOX) ──
+// Habilita ESCRIBIR en ML: bajar stock cuando se vende en la web o por Max.
+app.get("/api/ml/conectar", (_req, res) => res.redirect(urlAutorizacion()));
+
+app.get("/api/ml/conectado", async (req, res) => {
+  try {
+    const r = await conectarConCode(String(req.query.code || ""));
+    const aviso = r.conRefresh
+      ? "<p>Renovación automática activa: no hay que volver a hacerlo. Ya podés cerrar esta pestaña. ✅</p>"
+      : "<p>⚠ Mercado Libre no entregó token de renovación: en developers.mercadolibre.com, editar la app y marcar el permiso <b>offline_access</b>, y volver a entrar a /api/ml/conectar.</p>";
+    res.send(`<body style="font-family:sans-serif;background:#0d0d10;color:#fff;text-align:center;padding-top:80px">
+      <h2>✅ Cuenta de Mercado Libre conectada (usuario ${r.usuario})</h2>${aviso}</body>`);
+  } catch (e) {
+    res.status(400).send(`<body style="font-family:sans-serif;background:#0d0d10;color:#fff;text-align:center;padding-top:80px">
+      <h2>❌ No se pudo conectar: ${String(e.message || e)}</h2><p>Probá de nuevo entrando a /api/ml/conectar.</p></body>`);
+  }
+});
+
+// Venta hecha por FUERA de ML (web o link de Max): baja el stock en ML.
+// Autenticado con el mismo token compartido que el aviso de ventas.
+// body: { ref, items?: [{id, qty}] } — sin items, busca el mapeo del link de Max.
+app.post("/api/ml/venta", async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = process.env.NOTIFY_TOKEN;
+  if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "no autorizado" });
+  try {
+    const r = await descontarVenta(String(req.body?.ref || ""), req.body?.items);
+    res.json(r);
+  } catch (e) {
+    console.error("Descuento de stock falló:", e.message);
+    res.status(503).json({ ok: false, motivo: String(e.message || e) });
+  }
 });
 
 // Fuerza una sincronización con Mercado Libre AHORA y devuelve el resultado
@@ -114,6 +155,7 @@ app.listen(PORT, () => {
   console.log(`\n🌐 Max está online en: http://localhost:${PORT}`);
   console.log("   Abrí ese link en el navegador para probarlo.");
   console.log("   Para compartirlo por un LINK público (celular/otra persona), ver README (sección Link público).\n");
-  // Sincronización automática del catálogo con la API de Mercado Libre (cada 6 h).
-  programarSync(6);
+  // Sincronización automática del catálogo con la API de Mercado Libre cada 30 min
+  // (y además se fuerza una sync inmediata después de cada venta que baja stock).
+  programarSync(0.5);
 });

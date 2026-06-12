@@ -11,6 +11,7 @@ import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
 import { productos as productosML } from "./catalogo_vivo.js";
 import { crearLinkPago, hayMercadoPago } from "./pagos.js";
+import { resolverPorNombre } from "./ml_stock.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CATALOGO = JSON.parse(readFileSync(join(__dirname, "catalogo.json"), "utf8"));
@@ -455,6 +456,8 @@ const TOOLS = [
         properties: {
           titulo: { type: "string", description: "Descripción corta de la compra que verá el cliente al pagar. Ej: 'Cubreasiento capitoneado negro - Toyota Hilux 2024'" },
           monto: { type: "number", description: "Monto TOTAL exacto a cobrar en pesos uruguayos (sin descuento de transferencia)" },
+          producto_catalogo: { type: "string", description: "Nombre EXACTO del producto tal como lo devolvió consultar_precio (campo nombre), copiado sin cambios. Sirve para descontar el stock en Mercado Libre al acreditarse el pago. Si la venta no corresponde a un producto puntual del catálogo (ej: trabajo a medida), omitirlo." },
+          cantidad: { type: "number", description: "Cantidad de unidades de ese producto (por defecto 1)" },
         },
         required: ["titulo", "monto"],
       },
@@ -495,7 +498,12 @@ async function ejecutarHerramienta(nombre, input) {
     }
     if (nombre === "crear_link_pago") {
       if (!hayMercadoPago()) return { ok: false, mensaje: "El link de pago no está configurado todavía. Decile al cliente que enseguida un compañero le envía el link de pago, y usá derivar_a_humano (motivo otro) con el detalle de la compra y el monto." };
-      const r = await crearLinkPago({ titulo: input.titulo, monto: input.monto });
+      // Si el modelo identificó el producto del catálogo, lo asociamos al link
+      // para descontar stock en ML cuando el pago se acredite.
+      let items;
+      const idML = resolverPorNombre(input.producto_catalogo);
+      if (idML) items = [{ id: idML, qty: Math.max(1, Math.round(Number(input.cantidad) || 1)) }];
+      const r = await crearLinkPago({ titulo: input.titulo, monto: input.monto, items });
       if (!r.ok) return { ok: false, mensaje: `No pude generar el link (${r.motivo}). Decile al cliente que enseguida un compañero le envía el link de pago y derivá con derivar_a_humano.` };
       return { ok: true, link: r.link, monto: r.monto, instruccion: "Pasale este link al cliente para que pague directo. Es por el monto exacto de su compra." };
     }
