@@ -21,7 +21,7 @@ export function formatearAviso(p) {
     ? "🏦 PEDIDO POR TRANSFERENCIA (esperando comprobante)"
     : "💰 NUEVA VENTA WEB (pagada con Mercado Pago)";
   const items = (p.items || [])
-    .map((l) => `• ${l.qty}x ${l.nombre} — ${fmt(l.precio_unit * l.qty)}`)
+    .map((l) => `• ${l.qty}x ${l.nombre}${l.color ? ` · Color: ${l.color}` : ""} — ${fmt(l.precio_unit * l.qty)}`)
     .join("\n");
   const entrega = p.entrega === "dac"
     ? `📦 Envío DAC a: ${p.cliente?.direccion || "?"}, ${p.cliente?.ciudad || "?"}`

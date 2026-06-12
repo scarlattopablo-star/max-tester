@@ -52,7 +52,7 @@ async function tokenApp() {
   return _token;
 }
 
-// Mapea un item de ML al formato del catálogo {n, p, l, img, usd?, u?}.
+// Mapea un item de ML al formato del catálogo {n, p, l, img, usd?, u?, v?}.
 function mapItem(it) {
   const precio = Math.round(Number(it.price) || 0);
   if (!precio || !it.title) return null;
@@ -61,6 +61,13 @@ function mapItem(it) {
   const out = { n: it.title, p: precio, l: lista && lista > precio ? lista : null, img };
   if (it.currency_id === "USD") out.usd = 1;
   if (it.permalink) out.u = String(it.permalink).replace(/^http:/, "https:"); // link a la publicación de ML
+  // Variaciones (colores): la web muestra selector y el stock se baja por variación.
+  if (Array.isArray(it.variations) && it.variations.length) {
+    out.v = it.variations.map((x) => {
+      const c = (x.attribute_combinations || []).find((a) => a.id === "COLOR" || a.name === "Color");
+      return { id: String(x.id), c: c?.value_name || "Único", s: Number(x.available_quantity) || 0 };
+    });
+  }
   return out;
 }
 
@@ -97,7 +104,7 @@ async function idsActivos(tk) {
 // ── Detalle (título, precio, foto, stock) de cada publicación, de a 20 (multiget) ──
 async function detallesDe(tk, ids) {
   const out = [];
-  const ATTRS = "id,title,price,original_price,currency_id,thumbnail,available_quantity,status,permalink";
+  const ATTRS = "id,title,price,original_price,currency_id,thumbnail,available_quantity,status,permalink,variations";
   for (let i = 0; i < ids.length; i += 20) {
     const grupo = ids.slice(i, i + 20);
     const url = `${API}/items?ids=${grupo.join(",")}&attributes=${ATTRS}`;

@@ -54,7 +54,7 @@ const aIdML = (id) => {
   return d ? `MLU${d}` : null;
 };
 
-async function bajarStockItem(tk, idML, qty) {
+async function bajarStockItem(tk, idML, qty, varId) {
   const r = await fetch(`${API}/items/${idML}?attributes=id,available_quantity,variations,status`, {
     headers: { Authorization: `Bearer ${tk}` },
   });
@@ -62,9 +62,10 @@ async function bajarStockItem(tk, idML, qty) {
   if (!r.ok) throw new Error(`GET item: ${item.message || r.status}`);
 
   // Publicación con variaciones (colores/talles): el stock vive en cada variación.
-  // La venta web no distingue variación → bajamos de la que más stock tiene.
+  // Si la venta trae la variación elegida (varId), se baja ESA; si no, la de más stock.
   if (Array.isArray(item.variations) && item.variations.length) {
-    const v = [...item.variations].sort((a, b) => (b.available_quantity || 0) - (a.available_quantity || 0))[0];
+    const elegida = varId ? item.variations.find((x) => String(x.id) === String(varId)) : null;
+    const v = elegida || [...item.variations].sort((a, b) => (b.available_quantity || 0) - (a.available_quantity || 0))[0];
     const nuevo = Math.max(0, (v.available_quantity || 0) - qty);
     const put = await fetch(`${API}/items/${idML}`, {
       method: "PUT",
@@ -130,7 +131,7 @@ export async function descontarVenta(ref, items) {
       continue;
     }
     try {
-      const r = await bajarStockItem(tk, idML, qty);
+      const r = await bajarStockItem(tk, idML, qty, it.varId);
       resultados.push({ id: idML, qty, ok: true, ...r });
       console.log(`📉 Stock ML ${idML}: ${r.antes} → ${r.despues} (venta ${ref})`);
     } catch (e) {
