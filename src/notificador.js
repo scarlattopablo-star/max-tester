@@ -3,8 +3,9 @@
 import "./env.js";
 
 let sockActivo = null;
+let alEnviar = null; // callback de whatsapp.js: registra los IDs de los mensajes que manda el bot
 
-export function registrarSock(sock) { sockActivo = sock; }
+export function registrarSock(sock, marcarEnviado) { sockActivo = sock; alEnviar = marcarEnviado || null; }
 export function hayWhatsApp() { return !!sockActivo; }
 
 // "091 629 784" -> "59891629784@s.whatsapp.net"
@@ -17,6 +18,10 @@ export function numeroAJid(numero) {
 
 export function formatearAviso(p) {
   const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
+  // Venta cerrada por Max con su propio link de pago (la dispara el watcher de pagos).
+  if (p.origen === "max") {
+    return `💰 VENTA POR LINK DE PAGO DE MAX (Mercado Pago acreditado)\n${p.titulo || "Venta"}\nTotal: ${fmt(p.monto || 0)}\nRef: ${p.ref || "?"}`;
+  }
   const titulo = p.medio === "transferencia"
     ? "🏦 PEDIDO POR TRANSFERENCIA (esperando comprobante)"
     : "💰 NUEVA VENTA WEB (pagada con Mercado Pago)";
@@ -43,5 +48,18 @@ export async function enviarAviso(pedido) {
     throw e;
   }
   const jid = numeroAJid(process.env.NUMERO_AVISOS || "091629784");
-  await sockActivo.sendMessage(jid, { text: formatearAviso(pedido) });
+  const sent = await sockActivo.sendMessage(jid, { text: formatearAviso(pedido) });
+  alEnviar?.(sent);
+}
+
+// Texto pelado al WhatsApp del negocio (lo usa Max para avisos sueltos, ej: derivación a humano).
+export async function enviarTexto(texto) {
+  if (!sockActivo) {
+    const e = new Error("whatsapp_desconectado");
+    e.whatsapp = false;
+    throw e;
+  }
+  const jid = numeroAJid(process.env.NUMERO_AVISOS || "091629784");
+  const sent = await sockActivo.sendMessage(jid, { text: texto });
+  alEnviar?.(sent);
 }

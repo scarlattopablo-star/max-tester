@@ -17,6 +17,7 @@ import { proveedorIA } from "./config.js";
 import { enviarAviso, hayWhatsApp } from "./notificador.js";
 import { urlAutorizacion, conectarConCode, hayUsuarioML } from "./ml_user.js";
 import { descontarVenta } from "./ml_stock.js";
+import { ordenesML } from "./ml_ordenes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "..", "public");
@@ -113,6 +114,20 @@ app.post("/api/ml/venta", async (req, res) => {
     res.json(r);
   } catch (e) {
     console.error("Descuento de stock falló:", e.message);
+    res.status(503).json({ ok: false, motivo: String(e.message || e) });
+  }
+});
+
+// Ventas hechas DENTRO de Mercado Libre entre dos fechas ISO (para el reporte
+// diario de la web). Mismo token compartido que /api/ml/venta.
+app.get("/api/ml/ordenes", async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = process.env.NOTIFY_TOKEN;
+  if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "no autorizado" });
+  try {
+    res.json(await ordenesML(String(req.query.desde || ""), String(req.query.hasta || "")));
+  } catch (e) {
+    console.error("Órdenes ML falló:", e.message);
     res.status(503).json({ ok: false, motivo: String(e.message || e) });
   }
 });
