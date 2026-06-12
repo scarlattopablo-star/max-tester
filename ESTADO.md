@@ -3,7 +3,14 @@
 Bot de WhatsApp (Baileys, sin API de Meta) + derivación de Instagram, para La Casa del Cubreasiento.
 Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`.
 
-## 🟣🟣 SESIÓN 9 jun — RETOMAR ACÁ (lo más nuevo)
+## 🟢🟢 SESIÓN 12 jun — SYNC ML EN VIVO RESUELTO (lo más nuevo)
+- **✅ CREDENCIALES ML CARGADAS:** se creó la app **"Max Cubreasiento Sync"** en developers.mercadolibre.com.uy con la cuenta **EVERBOX S.A.** (App ID `4018742690592031`). `ML_CLIENT_ID` + `ML_CLIENT_SECRET` cargadas en Render → Environment. `/api/estado` muestra `syncML:true` y `mercadoPago:true` (el `MP_ACCESS_TOKEN` ya estaba cargado, empieza con `APP_USR-`).
+- **✅ FIX DEL ENDPOINT DE SYNC:** el viejo `/sites/MLU/search?seller_id=` ahora da **403** (ML restringió la búsqueda pública). Se reescribió `src/sync_ml.js` para usar el método soportado: **`/users/{seller}/items/search?status=active`** (IDs) + **multiget `/items?ids=...`** (detalles). El `/sites/search` quedó como respaldo. Verificado en vivo vía `/api/sync-ahora`: `ok:true`, `motivo:"ok (users/items)"`, **270 publicaciones**, `fuente:"api-ml"`. Se actualiza solo cada 6 h.
+- **Diagnóstico nuevo:** `/api/estado` ahora incluye `ultimaSync` (ok/motivo/cuándo/cantidad) y se agregó **`/api/sync-ahora`** (fuerza la sync y devuelve el resultado) para verificar sin revisar logs.
+- **`.env.example` documentado** con `MP_ACCESS_TOKEN`, `ML_CLIENT_ID`, `ML_CLIENT_SECRET`, `APP_URL`, `IA_MODEL`.
+- Commit: 865eb53 (en `main`, desplegado en Render). **Pendiente que sigue:** Instagram oficial (API de Meta) — decisión del cliente: ¿vende completo en IG o deriva a WhatsApp?
+
+## 🟣🟣 SESIÓN 9 jun (anterior)
 - **Link en vivo:** https://max-tester.onrender.com · Estado de config en vivo: **/api/estado** (muestra catálogo, syncML, mercadoPago).
 - **REGLAS DE NEGOCIO NUEVAS (pedido del cliente, implementadas y en vivo):**
   1. **ENVÍOS SOLO POR DAC** (agencia): al elegir envío, Max pide NOMBRE + TELÉFONO + DIRECCIÓN. Config en `config.js` → `ENVIOS`.
