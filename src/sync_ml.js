@@ -1,8 +1,11 @@
 // Sincronización AUTOMÁTICA del catálogo con la API oficial de Mercado Libre.
 // Mantiene a Max al día con precios, stock, altas y bajas de publicaciones.
 //
-// Usa el grant "client_credentials" (token de aplicación, sin OAuth de usuario):
-// alcanza para leer las publicaciones ACTIVAS del vendedor vía /sites/MLU/search.
+// Usa el grant "client_credentials" (token de aplicación, sin OAuth de usuario).
+// Método principal (soportado hoy): /users/{seller}/items/search -> IDs de las
+// publicaciones ACTIVAS del vendedor, y luego el multiget /items?ids=... para
+// traer título, precio, foto y stock. Como respaldo, intenta la vieja búsqueda
+// pública /sites/MLU/search?seller_id (que ML restringió y suele dar 403).
 //
 // Credenciales necesarias (variables de entorno, .env local / Environment en Render):
 //   ML_CLIENT_ID     -> App ID de la aplicación creada en developers.mercadolibre.com
@@ -17,6 +20,15 @@ const SITE = "MLU"; // Uruguay
 
 export function haySyncML() {
   return !!(process.env.ML_CLIENT_ID && process.env.ML_CLIENT_SECRET);
+}
+
+// Resultado de la última sincronización (para diagnosticar en vivo vía /api/estado).
+let _ultima = { ok: null, motivo: "todavía no corrió", cuando: null, cantidad: 0 };
+export function ultimaSync() {
+  return _ultima;
+}
+function ahora() {
+  return new Date().toISOString().slice(0, 19).replace("T", " ");
 }
 
 // ── Token de aplicación (dura 6 h; lo cacheamos y renovamos solo) ──
@@ -40,7 +52,7 @@ async function tokenApp() {
   return _token;
 }
 
-// Mapea un resultado de búsqueda de ML al formato del catálogo {n, p, l, img, usd?}.
+// Mapea un item de ML al formato del catálogo {n, p, l, img, usd?}.
 function mapItem(it) {
   const precio = Math.round(Number(it.price) || 0);
   if (!precio || !it.title) return null;
@@ -51,40 +63,116 @@ function mapItem(it) {
   return out;
 }
 
-// Descarga TODAS las publicaciones activas del vendedor y reemplaza el catálogo.
+// Quita repetidos por título (algunas publicaciones se duplican).
+function dedup(items) {
+  const out = [];
+  const vistos = new Set();
+  for (const m of items) {
+    const clave = (m.n || "").toLowerCase().trim();
+    if (!clave || vistos.has(clave)) continue;
+    vistos.add(clave);
+    out.push(m);
+  }
+  return out;
+}
+
+// ── Método principal: IDs de las publicaciones activas del vendedor ──
+async function idsActivos(tk) {
+  const ids = [];
+  let total = Infinity;
+  for (let offset = 0; offset < Math.min(total, 1000); offset += 100) {
+    const url = `${API}/users/${SELLER_ML_ID}/items/search?status=active&limit=100&offset=${offset}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${tk}` } });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`items/search ${res.status}: ${body.message || body.error || ""}`);
+    total = body.paging?.total ?? 0;
+    const batch = body.results || [];
+    ids.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return ids;
+}
+
+// ── Detalle (título, precio, foto, stock) de cada publicación, de a 20 (multiget) ──
+async function detallesDe(tk, ids) {
+  const out = [];
+  const ATTRS = "id,title,price,original_price,currency_id,thumbnail,available_quantity,status";
+  for (let i = 0; i < ids.length; i += 20) {
+    const grupo = ids.slice(i, i + 20);
+    const url = `${API}/items?ids=${grupo.join(",")}&attributes=${ATTRS}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${tk}` } });
+    const body = await res.json().catch(() => []);
+    if (!Array.isArray(body)) continue;
+    for (const wrap of body) {
+      const it = wrap?.body;
+      if (!it || (wrap.code && wrap.code !== 200)) continue;
+      if (it.status && it.status !== "active") continue;
+      if (typeof it.available_quantity === "number" && it.available_quantity <= 0) continue;
+      const m = mapItem(it);
+      if (m) out.push(m);
+    }
+  }
+  return out;
+}
+
+// ── Respaldo: vieja búsqueda pública por seller_id (ML la restringió, suele dar 403) ──
+async function viaSitesSearch(tk) {
+  const items = [];
+  let total = Infinity;
+  for (let offset = 0; offset < Math.min(total, 1000); offset += 50) {
+    const res = await fetch(`${API}/sites/${SITE}/search?seller_id=${SELLER_ML_ID}&limit=50&offset=${offset}`, {
+      headers: { Authorization: `Bearer ${tk}` },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`${res.status}: ${body.message || ""}`);
+    total = body.paging?.total ?? 0;
+    for (const it of body.results || []) {
+      const m = mapItem(it);
+      if (m) items.push(m);
+    }
+    if (!body.results || body.results.length < 50) break;
+  }
+  return items;
+}
+
+// Descarga las publicaciones activas del vendedor y reemplaza el catálogo.
 export async function sincronizar() {
-  if (!haySyncML()) return { ok: false, motivo: "Sin credenciales ML (ML_CLIENT_ID / ML_CLIENT_SECRET)" };
+  if (!haySyncML()) {
+    _ultima = { ok: false, motivo: "Sin credenciales ML (ML_CLIENT_ID / ML_CLIENT_SECRET)", cuando: ahora(), cantidad: 0 };
+    return _ultima;
+  }
   try {
     const tk = await tokenApp();
-    const items = [];
-    const vistos = new Set();
-    let total = Infinity;
-    for (let offset = 0; offset < Math.min(total, 1000); offset += 50) {
-      const res = await fetch(`${API}/sites/${SITE}/search?seller_id=${SELLER_ML_ID}&limit=50&offset=${offset}`, {
-        headers: { Authorization: `Bearer ${tk}` },
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(`search ML: ${body.message || res.status}`);
-      total = body.paging?.total ?? 0;
-      for (const it of body.results || []) {
-        const m = mapItem(it);
-        if (!m) continue;
-        const clave = m.n.toLowerCase().trim();
-        if (vistos.has(clave)) continue;
-        vistos.add(clave);
-        items.push(m);
+    let items = [];
+    let via = "";
+    // 1) Método recomendado: items del propio vendedor + multiget de detalles.
+    try {
+      const ids = await idsActivos(tk);
+      items = dedup(await detallesDe(tk, ids));
+      via = "users/items";
+    } catch (e1) {
+      // 2) Respaldo: búsqueda pública por seller_id (por si vuelve a habilitarse).
+      try {
+        items = dedup(await viaSitesSearch(tk));
+        via = "sites/search";
+      } catch (e2) {
+        throw new Error(`items/search -> ${e1.message} || sites/search -> ${e2.message}`);
       }
-      if (!body.results || body.results.length < 50) break;
     }
     // Cinturón de seguridad: si la API devolvió poquísimo, NO pisamos el catálogo
     // (puede ser un fallo transitorio); mejor seguir con lo que hay.
-    if (items.length < 30) return { ok: false, motivo: `solo ${items.length} items; no piso el catálogo` };
+    if (items.length < 30) {
+      _ultima = { ok: false, motivo: `solo ${items.length} items (via ${via}); no piso el catálogo`, cuando: ahora(), cantidad: items.length };
+      return _ultima;
+    }
     actualizarCatalogo(items, "api-ml");
-    console.log(`🔄 Catálogo sincronizado con Mercado Libre: ${items.length} publicaciones activas.`);
-    return { ok: true, cantidad: items.length };
+    console.log(`🔄 Catálogo sincronizado con Mercado Libre: ${items.length} publicaciones activas (${via}).`);
+    _ultima = { ok: true, motivo: `ok (${via})`, cuando: ahora(), cantidad: items.length };
+    return _ultima;
   } catch (e) {
     console.error("⚠ Sync ML falló:", e.message);
-    return { ok: false, motivo: String(e.message || e) };
+    _ultima = { ok: false, motivo: String(e.message || e).slice(0, 400), cuando: ahora(), cantidad: 0 };
+    return _ultima;
   }
 }
 

@@ -10,7 +10,7 @@ import { procesarMensaje } from "./handler.js";
 import { saludoInicial } from "./cerebro.js";
 import { reiniciar, historial, agregar } from "./memoria.js";
 import { sleep, delayEscritura } from "./humano.js";
-import { programarSync, haySyncML } from "./sync_ml.js";
+import { programarSync, haySyncML, ultimaSync, sincronizar } from "./sync_ml.js";
 import { infoCatalogo } from "./catalogo_vivo.js";
 import { hayMercadoPago } from "./pagos.js";
 import { proveedorIA } from "./config.js";
@@ -73,7 +73,14 @@ app.post("/api/reset", (req, res) => {
 // Estado rápido del bot (catálogo, sync ML, Mercado Pago, cerebro IA) para chequear la config en vivo.
 app.get("/api/estado", (_req, res) => {
   const ia = proveedorIA();
-  res.json({ catalogo: infoCatalogo(), syncML: haySyncML(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model } });
+  res.json({ catalogo: infoCatalogo(), syncML: haySyncML(), ultimaSync: ultimaSync(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model } });
+});
+
+// Fuerza una sincronización con Mercado Libre AHORA y devuelve el resultado
+// (para verificar la config sin esperar al ciclo de 6 h ni revisar logs).
+app.get("/api/sync-ahora", async (_req, res) => {
+  const r = await sincronizar();
+  res.json({ resultado: r, catalogo: infoCatalogo() });
 });
 
 // Aviso de venta de la web (Vercel). Autenticado por token compartido.
