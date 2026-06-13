@@ -199,13 +199,13 @@ function datosPagoTexto() {
   detalle.push(`- EFECTIVO: en el local (${NEGOCIO.direccion}).`);
 
   return `FLUJO DE PAGO (seguilo así, sin abrumar):
-1. Cuando el cliente YA decidió comprar, PREGUNTALE PRIMERO cómo le gustaría abonar. Ej: "¿Cómo le gustaría abonar: transferencia, Mercado Pago, tarjeta o efectivo?". NO mandes todos los medios y todos los datos de una.
+1. Cuando el cliente YA decidió comprar, PREGUNTALE PRIMERO cómo le gustaría abonar, SIEMPRE nombrando el descuento por transferencia. Ej: "¿Cómo le gustaría abonar? Tenés transferencia (con ${NEGOCIO.descuentoTransferencia}% de descuento 😉), Mercado Pago, tarjeta o efectivo". NO mandes todos los medios y todos los datos de una.
 2. Según lo que elija, dale enseguida la información de ESE medio (no hace falta pedirle nombre/teléfono antes para pasarle los datos de pago; eso se lo pedís recién al tomar el pedido):
 ${detalle.join("\n")}
 3. EXCEPCIÓN: si el cliente PREGUNTA "¿qué medios de pago tienen?" (o similar), ahí SÍ enumerá todos los medios disponibles, cortito:
 ${medios}
    y recién cuando elija uno, le pasás los datos concretos de ese medio.
-4. Recordale el ${NEGOCIO.descuentoTransferencia}% de descuento si elige transferencia.
+4. ⚠️ REGLA DE ORO: CADA VEZ que nombres, preguntes o enumeres medios de pago, mencioná SÍ O SÍ que la transferencia tiene ${NEGOCIO.descuentoTransferencia}% de descuento (es un beneficio que el negocio quiere que TODOS conozcan). Si el cliente la elige, decile además el monto final YA descontado, redondeado.
 5. Después de pasar los datos de pago, preguntá cómo desea recibir el producto (envío o retiro; y en CUBREASIENTOS también colocación; ver sección de ENTREGA).
 6. Cuando diga que pagó, tomá el pedido (tomar_pedido) y avisá que el equipo confirma el pago a la brevedad. NUNCA inventes números de cuenta, alias ni links.`;
 }
