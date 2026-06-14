@@ -52,13 +52,21 @@ async function tokenApp() {
   return _token;
 }
 
-// Mapea un item de ML al formato del catálogo {n, p, l, img, usd?, u?, v?}.
-function mapItem(it) {
-  const precio = Math.round(Number(it.price) || 0);
-  if (!precio || !it.title) return null;
-  const lista = it.original_price ? Math.round(Number(it.original_price)) : null;
+// Mapea un item de ML al formato del catálogo {n, p, l, img, imgs?, usd?, u?, v?}.
+// precio = { venta, lista } resuelto desde /prices (incluye promociones activas).
+// Si no se pudo obtener, cae al price/original_price del item (puede NO traer la promo).
+function mapItem(it, precio) {
+  const venta = precio ? precio.venta : Math.round(Number(it.price) || 0);
+  const lista = precio ? precio.lista : (it.original_price ? Math.round(Number(it.original_price)) : null);
+  if (!venta || !it.title) return null;
   const img = String(it.thumbnail || "").replace(/^http:/, "https:");
-  const out = { n: it.title, p: precio, l: lista && lista > precio ? lista : null, img };
+  const out = { n: it.title, p: venta, l: lista && lista > venta ? lista : null, img };
+  // Todas las fotos de la publicación (la web arma una galería con estas).
+  if (Array.isArray(it.pictures) && it.pictures.length) {
+    out.imgs = it.pictures
+      .map((p) => String(p.secure_url || p.url || "").replace(/^http:/, "https:"))
+      .filter(Boolean);
+  }
   if (it.currency_id === "USD") out.usd = 1;
   if (it.permalink) out.u = String(it.permalink).replace(/^http:/, "https:"); // link a la publicación de ML
   // Variaciones (colores): la web muestra selector y el stock se baja por variación.
@@ -69,6 +77,49 @@ function mapItem(it) {
     });
   }
   return out;
+}
+
+// Precio REAL que ve el comprador en ML (incluye PROMOCIONES activas, que NO
+// siempre vienen en item.price). Se consulta /items/{id}/prices: la venta es la
+// "promotion" vigente si existe, sino el "standard"; el tachado es el de lista
+// cuando hay promo. Devuelve { venta, lista|null } o null si no se pudo.
+async function precioReal(tk, id) {
+  try {
+    const res = await fetch(`${API}/items/${id}/prices`, { headers: { Authorization: `Bearer ${tk}` } });
+    if (!res.ok) return null;
+    const body = await res.json().catch(() => ({}));
+    const std = (body.prices || []).find((p) => p.type === "standard");
+    const now = Date.now();
+    const promo = (body.prices || []).find(
+      (p) =>
+        p.type === "promotion" &&
+        (!p.conditions?.start_time || Date.parse(p.conditions.start_time) <= now) &&
+        (!p.conditions?.end_time || Date.parse(p.conditions.end_time) >= now)
+    );
+    const base = std ? Math.round(Number(std.amount) || 0) : 0;
+    if (promo) {
+      const venta = Math.round(Number(promo.amount) || 0);
+      const tachado = Math.round(Number(promo.regular_amount) || base || 0);
+      if (venta) return { venta, lista: tachado > venta ? tachado : null };
+    }
+    if (base) return { venta: base, lista: null };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Resuelve los precios reales de muchos items con concurrencia limitada
+// (rápido sin saturar la API de ML).
+async function preciosReales(tk, ids) {
+  const mapa = new Map();
+  const CONC = 8;
+  for (let i = 0; i < ids.length; i += CONC) {
+    const grupo = ids.slice(i, i + CONC);
+    const res = await Promise.all(grupo.map((id) => precioReal(tk, id)));
+    grupo.forEach((id, j) => { if (res[j]) mapa.set(id, res[j]); });
+  }
+  return mapa;
 }
 
 // Quita repetidos por título (algunas publicaciones se duplican).
@@ -101,10 +152,10 @@ async function idsActivos(tk) {
   return ids;
 }
 
-// ── Detalle (título, precio, foto, stock) de cada publicación, de a 20 (multiget) ──
+// ── Detalle (título, fotos, stock) de cada publicación, de a 20 (multiget) ──
 async function detallesDe(tk, ids) {
-  const out = [];
-  const ATTRS = "id,title,price,original_price,currency_id,thumbnail,available_quantity,status,permalink,variations";
+  const raws = [];
+  const ATTRS = "id,title,price,original_price,currency_id,thumbnail,pictures,available_quantity,status,permalink,variations";
   for (let i = 0; i < ids.length; i += 20) {
     const grupo = ids.slice(i, i + 20);
     const url = `${API}/items?ids=${grupo.join(",")}&attributes=${ATTRS}`;
@@ -116,9 +167,15 @@ async function detallesDe(tk, ids) {
       if (!it || (wrap.code && wrap.code !== 200)) continue;
       if (it.status && it.status !== "active") continue;
       if (typeof it.available_quantity === "number" && it.available_quantity <= 0) continue;
-      const m = mapItem(it);
-      if (m) out.push(m);
+      raws.push(it);
     }
+  }
+  // Precio REAL (con promociones activas) de cada publicación, vía /prices.
+  const precios = await preciosReales(tk, raws.map((r) => r.id));
+  const out = [];
+  for (const it of raws) {
+    const m = mapItem(it, precios.get(it.id));
+    if (m) out.push(m);
   }
   return out;
 }
