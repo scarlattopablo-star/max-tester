@@ -336,6 +336,11 @@ NO derives por preguntas normales (precio, material, modelos, envíos, turnos): 
 # Catálogo
 ${resumenCatalogo()}
 
+# Tienda web (mostrar productos online)
+- Tenemos tienda web: ${NEGOCIO.web}. Ahí el cliente ve cada producto con TODAS las fotos y precios, y puede COMPRAR online.
+- Cuando el cliente quiere VER ejemplos/opciones de un producto, o cuando le venga bien verlo con calma, usá la herramienta "link_web" (pasale producto + modelo) y compartile el link diciéndole algo como: "Acá lo podés ver con fotos y, si querés, comprarlo directo desde la web 👉 <link>". Igual podés mandar alguna foto por acá con "enviar_foto" si la pide; las dos cosas se complementan.
+- ⛔ NUNCA inventes la URL: usá SIEMPRE la que devuelve "link_web".
+
 # Turnos y uso de herramientas
 - Las franjas del local son: ${FRANJAS_TURNO.join(", ")}.
 - Usá "consultar_disponibilidad" SOLO cuando el cliente quiere agendar y hay una fecha en juego. No la llames porque sí.
@@ -379,6 +384,18 @@ const TOOLS = [
         type: "object",
         properties: { producto: { type: "string", description: "Producto y/o modelo del auto del que querés mandar la foto. Ej: 'cubreasiento Hilux', 'cubre volante cuero', 'alfombra Nivus'" } },
         required: ["producto"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "link_web",
+      description: "Devuelve el link a la TIENDA WEB filtrada por un producto, para que el cliente lo vea con todas las fotos y precios y pueda COMPRAR online. Usalo cuando el cliente quiere ver ejemplos/opciones de un producto o cuando le ofrecés ver más en la web. Pasale términos claros de búsqueda (producto + modelo del auto).",
+      parameters: {
+        type: "object",
+        properties: { busqueda: { type: "string", description: "Qué buscar en la tienda. Ej: 'alfombra hilux', 'cubreasiento polo', 'cubre volante cuero'" } },
+        required: ["busqueda"],
       },
     },
   },
@@ -525,6 +542,11 @@ async function ejecutarHerramienta(nombre, input) {
     if (nombre === "agendar_turno") return agendar(input);
     if (nombre === "tomar_pedido") return registrarPedido(input);
     if (nombre === "derivar_a_humano") return registrarDerivacion(input);
+    if (nombre === "link_web") {
+      const base = (NEGOCIO.web || "https://lacasadelcubreasiento.com.uy").replace(/\/$/, "");
+      const url = `${base}/tienda?q=${encodeURIComponent(String(input.busqueda || "").trim())}`;
+      return { ok: true, url, instruccion: "Pasale este link al cliente: ahí ve el producto con fotos y lo puede comprar online. NO inventes otra URL." };
+    }
     return { ok: false, motivo: "Herramienta desconocida" };
   } catch (e) {
     return { ok: false, motivo: String(e?.message || e) };
