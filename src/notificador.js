@@ -16,11 +16,26 @@ export function numeroAJid(numero) {
   return `${d}@s.whatsapp.net`;
 }
 
+// "091 629 784" -> "https://wa.me/59891629784" (link directo a la conversación del cliente).
+// Devuelve "" si el número no es válido, para no armar un link roto.
+export function linkWa(numero) {
+  let d = String(numero || "").replace(/\D/g, "");
+  if (!d) return "";
+  if (d.startsWith("0")) d = d.slice(1);
+  if (!d.startsWith("598")) d = "598" + d;
+  if (d.length < 10) return ""; // muy corto para ser un celular uruguayo
+  return `https://wa.me/${d}`;
+}
+
 export function formatearAviso(p) {
   const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
+  // Link a la conversación del cliente: SIEMPRE que tengamos un teléfono.
+  const tel = p.cliente?.telefono || p.telefono || "";
+  const link = linkWa(tel);
+  const lineaLink = link ? `\n💬 Entrá a la conversación: ${link}` : "";
   // Venta cerrada por Max con su propio link de pago (la dispara el watcher de pagos).
   if (p.origen === "max") {
-    return `💰 VENTA POR LINK DE PAGO DE MAX (Mercado Pago acreditado)\n${p.titulo || "Venta"}\nTotal: ${fmt(p.monto || 0)}\nRef: ${p.ref || "?"}`;
+    return `💰 VENTA POR LINK DE PAGO DE MAX (Mercado Pago acreditado)\n${p.titulo || "Venta"}\nTotal: ${fmt(p.monto || 0)}\nRef: ${p.ref || "?"}${lineaLink}`;
   }
   const titulo = p.medio === "transferencia"
     ? "🏦 PEDIDO POR TRANSFERENCIA (esperando comprobante)"
@@ -32,7 +47,7 @@ export function formatearAviso(p) {
     ? `📦 Envío DAC a: ${p.cliente?.direccion || "?"}, ${p.cliente?.ciudad || "?"}`
     : "🏪 Retiro en el local";
   const corto = String(p.orderId || "").slice(0, 8).toUpperCase();
-  let msg = `${titulo}\nPedido #${corto}\n\n${items}\n\nTotal: ${fmt(p.total || 0)}\n${entrega}\n👤 ${p.cliente?.nombre || "?"} · ${p.cliente?.telefono || "?"}`;
+  let msg = `${titulo}\nPedido #${corto}\n\n${items}\n\nTotal: ${fmt(p.total || 0)}\n${entrega}\n👤 ${p.cliente?.nombre || "?"} · ${p.cliente?.telefono || "?"}${lineaLink}`;
   // Pedidos por transferencia: botón (link) para confirmar cuando llega la plata.
   // Al tocarlo, el pedido pasa a PAGADO y se descuenta el stock en Mercado Libre.
   if (p.medio === "transferencia" && p.confirmarUrl) {
