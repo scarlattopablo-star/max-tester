@@ -14,8 +14,8 @@ import { agregar } from "./memoria.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import {
-  cargarEstado, esHumano, maxYaRespondio, humanoYaAvisado,
-  marcarMaxRespondio, marcarHumano, marcarHumanoAvisado,
+  cargarEstado, silenciadoPorHumano, maxYaRespondio, humanoYaAvisado,
+  marcarMaxRespondio, silenciar, marcarHumanoAvisado,
 } from "./previas.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -109,7 +109,8 @@ async function iniciar() {
   // Si alguien del equipo le responde a un cliente desde el teléfono del bot,
   // Max se calla SOLO en esa conversación y retoma cuando el humano deja de
   // responder por 10 minutos (con todo el contexto guardado en memoria).
-  const VENTANA_HUMANO_MS = 10 * 60 * 1000; // 10 min sin respuesta del humano => Max retoma
+  const VENTANA_HUMANO_MS = 10 * 60 * 1000; // 10 min sin respuesta del humano => Max retoma (charla NUEVA)
+  const VENTANA_VIEJA_MS = 60 * 60 * 1000;  // 1 h de inactividad => Max vuelve a quedar atento (charla VIEJA/pre-Max)
   const enviadosPorMax = new Set(); // IDs de mensajes que mandó Max (para distinguirlos del humano)
   const humanoHasta = new Map(); // jid -> timestamp (ms) del último mensaje del humano
   const pedidosAvisados = new Set(); // ids de pedido ya avisados al equipo (no duplicar)
@@ -283,9 +284,10 @@ async function iniciar() {
         // Lo escribió un HUMANO del equipo desde el teléfono del bot.
         if (!maxYaRespondio(jid)) {
           // Max NUNCA habló acá → es una conversación VIEJA (existía antes de Max):
-          // la maneja el equipo y Max no entra más (persistente).
-          marcarHumano(jid);
-          console.log(`🧑 humano contestó en charla vieja ${jid} (Max nunca habló): queda del equipo, Max afuera para siempre`);
+          // la maneja el equipo. Max se silencia, pero vuelve a quedar atento si
+          // la charla queda 1 h sin movimiento (por si el cliente vuelve otro día).
+          silenciar(jid, VENTANA_VIEJA_MS);
+          console.log(`🧑 humano contestó en charla vieja ${jid}: Max afuera (vuelve si pasa 1 h sin movimiento)`);
         } else {
           // Max venía atendiendo (conversación NUEVA) y un asesor entró:
           // handoff TEMPORAL, Max retoma a los 10 min sin respuesta del humano.
@@ -314,9 +316,11 @@ async function iniciar() {
         }));
       }
 
-      // CONVERSACIÓN DE UN HUMANO: la maneja el equipo (vieja o ya tomada por una
-      // persona). Max no se mete; avisamos UNA sola vez al equipo con el link.
-      if (esHumano(jid)) {
+      // CHARLA VIEJA que maneja el equipo y todavía está dentro de su hora de
+      // inactividad: Max no se mete. Renovamos la ventana (hubo movimiento) y
+      // avisamos UNA sola vez al equipo con el link.
+      if (silenciadoPorHumano(jid)) {
+        silenciar(jid, VENTANA_VIEJA_MS, false); // renueva en memoria (sin escribir en la base por cada mensaje)
         if (!humanoYaAvisado(jid)) {
           await marcarHumanoAvisado(jid);
           const link = linkWa(telCliente);
@@ -328,7 +332,7 @@ async function iniciar() {
             ].filter(Boolean).join("\n"));
           } catch (e) { console.log("⚠ no pude avisar la conversación humana:", e.message); }
         }
-        console.log(`📋 conversación de un humano ${jid}: Max en silencio`);
+        console.log(`📋 charla vieja ${jid}: Max en silencio (la maneja un humano)`);
         continue;
       }
 
