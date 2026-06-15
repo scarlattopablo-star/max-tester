@@ -13,6 +13,7 @@ import { registrarSock, enviarTexto, linkWa } from "./notificador.js";
 import { agregar } from "./memoria.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
+import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AUTH_DIR = join(__dirname, "..", "auth_baileys");
@@ -66,6 +67,7 @@ async function iniciar() {
 
   sock.ev.on("creds.update", saveCreds);
 
+  await cargarEstado(); // conversaciones que ya tomó un asesor (Max no participa)
   let arranqueTs = Math.floor(Date.now() / 1000); // para ignorar mensajes viejos
 
   sock.ev.on("connection.update", (update) => {
@@ -100,13 +102,10 @@ async function iniciar() {
   const procesando = new Set(); // jids que están generando respuesta ahora
 
   // ── Handoff humano por conversación ───────────────────────────────
-  // Si alguien del equipo le responde a un cliente desde el teléfono del bot,
-  // Max se calla SOLO en esa conversación y retoma cuando el humano deja de
-  // responder por 10 minutos (con todo el contexto guardado en memoria).
-  const VENTANA_HUMANO_MS = 10 * 60 * 1000; // 10 min sin que el equipo escriba => Max retoma
+  // Apenas un asesor escribe en una conversación desde el teléfono del bot, se
+  // hace cargo de ella y Max NO vuelve a participar (permanente, ver previas.js).
   const enviadosPorMax = new Set(); // IDs de mensajes que mandó Max (para distinguirlos del humano)
   const idsVistos = new Set(); // IDs de mensajes ya procesados (anti-duplicados al reconectar)
-  const humanoHasta = new Map(); // jid -> timestamp (ms) del último mensaje del humano
   const pedidosAvisados = new Set(); // ids de pedido ya avisados al equipo (no duplicar)
   const contactoCliente = new Map(); // jid -> { nombre, tel } para armar el link en los avisos
 
@@ -288,14 +287,11 @@ async function iniciar() {
           console.log(`(equipo, sin pausa en ${jid}: evento no-mensaje — ${Object.keys(m).join(",") || "vacío"})`);
           continue;
         }
-        // Lo escribió un HUMANO del equipo desde el teléfono del bot: Max se PAUSA
-        // SOLO en esta conversación (handoff temporal) y RETOMA a los 10 min sin
-        // respuesta del humano. Vale para cualquier conversación: así una charla
-        // NUEVA nunca queda sin responder (Max vuelve solo).
-        humanoHasta.set(jid, Date.now());
-        for (const [j, t] of humanoHasta) if (Date.now() - t > VENTANA_HUMANO_MS) humanoHasta.delete(j);
+        // Un ASESOR escribió desde el teléfono del bot → SE HIZO CARGO de esta
+        // conversación: Max NO vuelve a participar en ella (permanente, persistido).
+        marcarHumano(jid);
         if (textoHumano) agregar(jid, "assistant", textoHumano);
-        console.log(`🧑 el equipo escribió en ${jid}: Max en pausa ${VENTANA_HUMANO_MS / 60000} min (retoma solo)`);
+        console.log(`🧑 un asesor tomó la conversación ${jid}: Max no participa más acá`);
         continue;
       }
 
@@ -315,15 +311,13 @@ async function iniciar() {
         }));
       }
 
-      // ¿Hay un humano atendiendo esta conversación? Max no responde, pero guarda
-      // el mensaje en memoria para retomar con todo el contexto cuando pase la ventana.
-      const marcaHumano = humanoHasta.get(jid);
-      if (marcaHumano && Date.now() - marcaHumano < VENTANA_HUMANO_MS) {
+      // ¿Un asesor se hizo cargo de esta conversación? Max no participa más acá,
+      // pero guarda el mensaje en memoria por si el equipo quiere devolverla luego.
+      if (esHumano(jid)) {
         agregar(jid, "user", texto || (esAudio ? "[el cliente mandó un audio]" : "[el cliente mandó una foto]"));
-        console.log(`🤫 humano activo en ${jid}, Max en silencio`);
+        console.log(`🤫 conversación de un asesor en ${jid}: Max no participa`);
         continue;
       }
-      if (marcaHumano) humanoHasta.delete(jid); // pasaron los 10 min: Max retoma
 
       // MENSAJE SIN TEXTO NI FOTO. Si es AUDIO/nota de voz, no lo descartamos en
       // silencio: le pedimos al cliente que lo escriba (Max no procesa audios).
