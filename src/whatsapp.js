@@ -9,7 +9,7 @@ import { dirname, join } from "path";
 import { procesarMensaje } from "./handler.js";
 import { NEGOCIO } from "./config.js";
 import { sleep, delayEscritura } from "./humano.js";
-import { registrarSock, enviarTexto } from "./notificador.js";
+import { registrarSock, enviarTexto, linkWa } from "./notificador.js";
 import { agregar } from "./memoria.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
@@ -36,7 +36,15 @@ function textoDelMensaje(msg) {
 // direccionamiento de WhatsApp el remoteJid puede ser un "@lid" (que NO es el
 // número); el número real viene en senderPn/participant.
 function telDeMsg(msg, jid) {
-  for (const f of [msg?.key?.senderPn, msg?.key?.participant, jid]) {
+  // remoteJidAlt / participantPn: en chats "@lid" Baileys 7 deja acá el número REAL.
+  const fuentes = [
+    msg?.key?.senderPn,
+    msg?.key?.participantPn,
+    msg?.key?.remoteJidAlt,
+    msg?.key?.participant,
+    jid,
+  ];
+  for (const f of fuentes) {
     const s = String(f || "");
     if (!s || s.includes("@lid")) continue; // @lid no es teléfono
     const d = s.split(/[:@]/)[0].replace(/\D/g, "");
@@ -158,10 +166,13 @@ async function iniciar() {
       console.log(`📤 ${jid}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
       for (const a of acciones) console.log(`   ⚙ ${a.herramienta} → ${JSON.stringify(a.resultado)}`);
       // Link a la conversación del cliente para que el asesor entre directo.
+      // Mejor teléfono disponible: el capturado del mensaje, o el que pasó la herramienta.
       const contacto = contactoCliente.get(jid) || {};
-      const linkConversacion = contacto.tel
-        ? `👉 https://wa.me/${contacto.tel}`
-        : "Buscá la conversación del cliente en el WhatsApp del negocio.";
+      const linkBase = (telExtra) =>
+        linkWa(contacto.tel || telExtra)
+          ? `👉 ${linkWa(contacto.tel || telExtra)}`
+          : "Buscá la conversación del cliente en el WhatsApp del negocio.";
+      const linkConversacion = linkBase();
       const lineaCliente = contacto.nombre ? `👤 ${contacto.nombre}` : "";
 
       // DERIVACIÓN: aviso DIFERENCIADO según el motivo, con link a la conversación.
@@ -169,6 +180,7 @@ async function iniciar() {
         if (a.herramienta !== "derivar_a_humano") continue;
         try {
           const d = a.resultado?.derivacion || a.input || {}; // motivo, resumen, nombre, telefono
+          const linkConversacion = linkBase(d.telefono); // si la herramienta trajo teléfono, lo usamos
           let lineas;
           if (d.motivo === "pide_humano") {
             lineas = [
@@ -268,7 +280,16 @@ async function iniciar() {
       if (!texto && !tieneFoto) continue; // ignoramos audios/stickers/etc por ahora
 
       // Guardamos nombre y teléfono del cliente para los avisos al equipo (link a la conversación).
-      contactoCliente.set(jid, { nombre: msg.pushName || "", tel: telDeMsg(msg, jid) });
+      const telCliente = telDeMsg(msg, jid);
+      contactoCliente.set(jid, { nombre: msg.pushName || "", tel: telCliente });
+      // Diagnóstico: si NO pudimos sacar el teléfono, mostramos los campos de la key
+      // para saber de dónde tomarlo (chats @lid del nuevo direccionamiento de WhatsApp).
+      if (!telCliente) {
+        console.log("⚠ sin teléfono para el link. key:", JSON.stringify({
+          remoteJid: msg.key?.remoteJid, remoteJidAlt: msg.key?.remoteJidAlt,
+          senderPn: msg.key?.senderPn, participant: msg.key?.participant, participantPn: msg.key?.participantPn,
+        }));
+      }
 
       // ¿Hay un humano atendiendo esta conversación? Max no responde, pero guarda
       // el mensaje en memoria para retomar con todo el contexto cuando pase la ventana.
