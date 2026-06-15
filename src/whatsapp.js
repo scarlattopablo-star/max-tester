@@ -105,6 +105,7 @@ async function iniciar() {
   // responder por 10 minutos (con todo el contexto guardado en memoria).
   const VENTANA_HUMANO_MS = 10 * 60 * 1000; // 10 min sin que el equipo escriba => Max retoma
   const enviadosPorMax = new Set(); // IDs de mensajes que mandó Max (para distinguirlos del humano)
+  const idsVistos = new Set(); // IDs de mensajes ya procesados (anti-duplicados al reconectar)
   const humanoHasta = new Map(); // jid -> timestamp (ms) del último mensaje del humano
   const pedidosAvisados = new Set(); // ids de pedido ya avisados al equipo (no duplicar)
   const contactoCliente = new Map(); // jid -> { nombre, tel } para armar el link en los avisos
@@ -256,11 +257,20 @@ async function iniciar() {
       const jid = msg.key.remoteJid || "";
       if (jid === "status@broadcast" || jid.endsWith("@g.us")) continue; // ignorar estados y grupos
 
-      // FILTRO DE TIEMPO: ignoramos mensajes anteriores a cuando Max se conectó
-      // (backlog que WhatsApp re-entrega al reconectar). Así Max nunca responde
-      // algo viejo de la nada. 60 s de margen por desfasajes de reloj.
+      // ANTI-DUPLICADOS: no procesar dos veces el mismo mensaje (WhatsApp puede
+      // re-entregarlo al reconectar). Evita respuestas repetidas tras un deploy.
+      if (msg.key.id) {
+        if (idsVistos.has(msg.key.id)) continue;
+        idsVistos.add(msg.key.id);
+        if (idsVistos.size > 4000) idsVistos.clear(); // tope simple de memoria
+      }
+
+      // FILTRO DE TIEMPO: ignoramos solo lo REALMENTE viejo (backlog de horas que
+      // WhatsApp re-entrega al reconectar). Contestamos todo lo de los últimos 5
+      // min, así NO se pierden mensajes que llegaron durante un deploy/reinicio.
       const ts = Number(msg.messageTimestamp?.toNumber?.() ?? msg.messageTimestamp ?? 0);
-      if (ts && arranqueTs && ts < arranqueTs - 60) continue;
+      const ahoraS = Math.floor(Date.now() / 1000);
+      if (ts && ahoraS - ts > 5 * 60) continue;
 
       if (msg.key.fromMe) {
         if (enviadosPorMax.has(msg.key.id)) continue; // lo mandó Max: nada que hacer
@@ -271,8 +281,13 @@ async function iniciar() {
         // filtra arriba); este branch depende de eso + del Set enviadosPorMax.
         const textoHumano = textoDelMensaje(msg);
         const m = msg.message || {};
+        // SOLO un mensaje REAL del equipo pausa a Max. Abrir/leer el chat, reaccionar,
+        // marcar como leído, etc. NO son mensajes → NO pausan (no llegan acá como contenido).
         const esContenido = textoHumano || m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage || m.stickerMessage;
-        if (!esContenido) continue;
+        if (!esContenido) {
+          console.log(`(equipo, sin pausa en ${jid}: evento no-mensaje — ${Object.keys(m).join(",") || "vacío"})`);
+          continue;
+        }
         // Lo escribió un HUMANO del equipo desde el teléfono del bot: Max se PAUSA
         // SOLO en esta conversación (handoff temporal) y RETOMA a los 10 min sin
         // respuesta del humano. Vale para cualquier conversación: así una charla
@@ -286,8 +301,7 @@ async function iniciar() {
 
       const texto = textoDelMensaje(msg);
       const tieneFoto = !!msg.message?.imageMessage;
-
-      if (!texto && !tieneFoto) continue; // ignoramos audios/stickers/etc por ahora
+      const esAudio = !!(msg.message?.audioMessage || msg.message?.pttMessage);
 
       // Guardamos nombre y teléfono del cliente para los avisos al equipo (link a la conversación).
       const telCliente = telDeMsg(msg, jid);
@@ -305,11 +319,32 @@ async function iniciar() {
       // el mensaje en memoria para retomar con todo el contexto cuando pase la ventana.
       const marcaHumano = humanoHasta.get(jid);
       if (marcaHumano && Date.now() - marcaHumano < VENTANA_HUMANO_MS) {
-        agregar(jid, "user", texto || "[el cliente mandó una foto]");
+        agregar(jid, "user", texto || (esAudio ? "[el cliente mandó un audio]" : "[el cliente mandó una foto]"));
         console.log(`🤫 humano activo en ${jid}, Max en silencio`);
         continue;
       }
       if (marcaHumano) humanoHasta.delete(jid); // pasaron los 10 min: Max retoma
+
+      // MENSAJE SIN TEXTO NI FOTO. Si es AUDIO/nota de voz, no lo descartamos en
+      // silencio: le pedimos al cliente que lo escriba (Max no procesa audios).
+      // Otros (stickers, etc.) se ignoran.
+      if (!texto && !tieneFoto) {
+        if (esAudio) {
+          try {
+            const aviso = "¡Hola! Por ahora no puedo escuchar audios 🙏 ¿Me lo podés escribir en un mensajito? Así te ayudo enseguida.";
+            await sock.sendPresenceUpdate("composing", jid);
+            await sleep(900);
+            await sock.sendPresenceUpdate("paused", jid);
+            marcarEnviado(await sock.sendMessage(jid, { text: aviso }));
+            agregar(jid, "user", "[el cliente mandó un audio]");
+            agregar(jid, "assistant", aviso);
+            console.log(`🎤 ${jid}: audio → le pedí que lo escriba`);
+          } catch (e) { console.log("⚠ no pude responder al audio:", e.message); }
+        } else {
+          console.log(`(ignorado ${jid}: mensaje sin texto/foto/audio — ${Object.keys(msg.message || {}).join(",") || "vacío"})`);
+        }
+        continue;
+      }
 
       let imagenes = [];
       if (tieneFoto) {

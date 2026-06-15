@@ -75,9 +75,17 @@ function _matchCarroceria(nombre, carr) {
   return true;
 }
 
+// Modelos que son el MISMO vehículo (mismos productos a medida) → se buscan como
+// el nombre que sí está en el catálogo. La Freedom y la Volcano son versiones de
+// la Fiat Strada: comparten cubreasientos/alfombras/etc.
+const SINONIMOS_MODELO = { freedom: "strada", volcano: "strada" };
+
 // Busca productos del catálogo priorizando el MODELO/marca (no las palabras genéricas).
 export function buscarPrecio(consulta) {
-  const palabras = _normTxt(consulta).split(/\s+/).filter((w) => w.length > 1);
+  const palabras = _normTxt(consulta)
+    .split(/\s+/)
+    .filter((w) => w.length > 1)
+    .map((w) => SINONIMOS_MODELO[w] || w);
   if (!palabras.length) return [];
   const distintivas = palabras.filter((w) => !STOP_BUSQUEDA.has(w)); // modelo, marca, etc.
   // Filtro por TIPO de producto: si el cliente nombra un tipo, NO mezclamos categorías.
@@ -278,6 +286,7 @@ function systemPromptEstatico() {
 - "enviar_foto" ya incluye el precio de cada opción, así que para ofrecer/mostrar productos de un modelo NO necesitás llamar también a "consultar_precio".
 - ⛔ ENVIÁ SOLO LO QUE EL CLIENTE PIDE (REGLA DE ORO, NO LA ROMPAS): si el cliente pregunta por CUBREASIENTOS, mandá únicamente cubreasientos. Si pregunta por ALFOMBRAS, solo alfombras. Si pregunta por CUBRE VOLANTE, solo cubre volante. NUNCA agregues otros productos/accesorios que el cliente NO pidió (no sumes el cubre volante, ni alfombras, ni cubreauto "de yapa"). Llamá a "enviar_foto" UNA sola vez, con el TIPO de producto que pidió + el modelo. Nada de productos sorpresa.
 - VENTA ADICIONAL (solo si el cliente abre la puerta): recién DESPUÉS de resolver lo que pidió, y solo si el cliente muestra interés o pregunta "¿qué más tienen?", podés MENCIONAR en texto (sin mandar fotos sin que las pida) que también hay otros accesorios para su vehículo (ej: "Si le interesa, también tenemos cubre volante para su marca"). Nunca al inicio ni sin que lo pida.
+- ⚠️ MODELOS QUE SON EL MISMO AUTO (no digas que no hay): la **Fiat Strada, la Fiat Freedom y la Fiat Volcano son el MISMO vehículo** (Freedom y Volcano son versiones de la Strada). Usan EXACTAMENTE los mismos cubreasientos, alfombras y accesorios. Si el cliente pregunta por Freedom o Volcano, tratalas como Strada: SÍ tenemos productos, mostráselos con "enviar_foto"/"consultar_precio" (la herramienta ya las busca como Strada). NUNCA digas que no hay para Freedom/Volcano.
 - CUBRE VOLANTE — DATO ÚTIL: los cubre volantes están publicados por MARCA, no por modelo (ej: "Cubrevolante Hyundai"). Entonces, cuando el cliente pide un cubre volante, NO le pidas el modelo exacto: con la MARCA alcanza. Si ya sabés la marca (porque la dijo o por el modelo que mencionó antes), mostrale directamente el cubre volante de esa marca con "enviar_foto" (ej: "cubre volante Hyundai"). Solo preguntá la marca si no la sabés. Modelo → marca: HB20/Creta/Tucson = Hyundai; Hilux/Corolla = Toyota; Onix/Montana/S10 = Chevrolet; Polo/Nivus/Gol/Amarok/T-Cross = Volkswagen; Strada/Toro/Cronos = Fiat; Kwid/Oroch/Duster = Renault; 208/2008 = Peugeot; Seagull/Dolphin/Yuan = BYD.
 
 # CUBREASIENTOS — DOS LÍNEAS (MUY IMPORTANTE, conocelo bien)
