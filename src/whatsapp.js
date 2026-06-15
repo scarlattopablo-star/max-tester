@@ -32,6 +32,19 @@ function textoDelMensaje(msg) {
   ).trim();
 }
 
+// Teléfono REAL del cliente para armar el link wa.me. Con el nuevo
+// direccionamiento de WhatsApp el remoteJid puede ser un "@lid" (que NO es el
+// número); el número real viene en senderPn/participant.
+function telDeMsg(msg, jid) {
+  for (const f of [msg?.key?.senderPn, msg?.key?.participant, jid]) {
+    const s = String(f || "");
+    if (!s || s.includes("@lid")) continue; // @lid no es teléfono
+    const d = s.split(/[:@]/)[0].replace(/\D/g, "");
+    if (d.length >= 10 && d.length <= 15) return d;
+  }
+  return "";
+}
+
 async function iniciar() {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.log("⚠ Falta ANTHROPIC_API_KEY en .env — el bot no va a poder responder. Copiá .env.example a .env.");
@@ -83,6 +96,7 @@ async function iniciar() {
   const enviadosPorMax = new Set(); // IDs de mensajes que mandó Max (para distinguirlos del humano)
   const humanoHasta = new Map(); // jid -> timestamp (ms) del último mensaje del humano
   const pedidosAvisados = new Set(); // ids de pedido ya avisados al equipo (no duplicar)
+  const contactoCliente = new Map(); // jid -> { nombre, tel } para armar el link en los avisos
 
   // Registra el ID de un mensaje que envió Max (o el notificador), para que en
   // messages.upsert no lo confundamos con un humano escribiendo desde el teléfono.
@@ -143,26 +157,41 @@ async function iniciar() {
       }
       console.log(`📤 ${jid}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
       for (const a of acciones) console.log(`   ⚙ ${a.herramienta} → ${JSON.stringify(a.resultado)}`);
-      // Si Max derivó a un humano, le avisamos al negocio (best effort: si falla, solo log).
+      // Link a la conversación del cliente para que el asesor entre directo.
+      const contacto = contactoCliente.get(jid) || {};
+      const linkConversacion = contacto.tel
+        ? `👉 https://wa.me/${contacto.tel}`
+        : "Buscá la conversación del cliente en el WhatsApp del negocio.";
+      const lineaCliente = contacto.nombre ? `👤 ${contacto.nombre}` : "";
+
+      // DERIVACIÓN: aviso DIFERENCIADO según el motivo, con link a la conversación.
       for (const a of acciones) {
         if (a.herramienta !== "derivar_a_humano") continue;
         try {
           const d = a.resultado?.derivacion || a.input || {}; // motivo, resumen, nombre, telefono
-          const numero = jid.split("@")[0];
-          const quien = [d.nombre, d.telefono].filter(Boolean).join(" · ");
-          const lineas = [
-            "🙋 UN CLIENTE PIDE ATENCIÓN HUMANA",
-            `Motivo: ${d.motivo || "otro"}${d.resumen ? ` · ${d.resumen}` : ""}`,
-          ];
-          if (quien) lineas.push(`👤 ${quien}`);
-          lineas.push(`💬 Respondé acá 👉 https://wa.me/${numero}`);
-          await enviarTexto(lineas.join("\n"));
+          let lineas;
+          if (d.motivo === "pide_humano") {
+            lineas = [
+              "🙋 UN CLIENTE PIDE HABLAR CON UN ASESOR",
+              d.resumen ? `📝 ${d.resumen}` : "",
+              lineaCliente,
+              `💬 Entrá a la conversación: ${linkConversacion}`,
+            ];
+          } else {
+            lineas = [
+              "❓ MAX NO PUDO RESOLVER — necesita un asesor",
+              `Motivo: ${d.motivo || "otro"}${d.resumen ? ` · ${d.resumen}` : ""}`,
+              lineaCliente,
+              `💬 Entrá a la conversación: ${linkConversacion}`,
+            ];
+          }
+          await enviarTexto(lineas.filter(Boolean).join("\n"));
         } catch (e) {
           console.log(`⚠ No pude avisar la derivación al negocio: ${e.message}`);
         }
       }
       // VENTA: cuando Max toma un pedido (cliente que decidió comprar / dijo que
-      // pagó por transferencia), avisamos al equipo para que verifique y despache.
+      // pagó por transferencia), avisamos al equipo con link a la conversación.
       // (El pago por Mercado Pago se avisa aparte, desde el webhook, al acreditarse.)
       for (const a of acciones) {
         if (a.herramienta !== "tomar_pedido") continue;
@@ -171,12 +200,12 @@ async function iniciar() {
         pedidosAvisados.add(p.id);
         try {
           const lineas = [
-            "🛒 NUEVO PEDIDO (Max cerró una venta)",
+            "🛒 NUEVA VENTA — Max cerró un pedido",
             `Producto: ${p.producto || "?"}${p.modeloVehiculo ? ` · ${p.modeloVehiculo}` : ""}`,
             p.medioPago ? `💳 Pago: ${p.medioPago}` : "",
-            [p.nombre, p.telefono].filter(Boolean).length ? `👤 ${[p.nombre, p.telefono].filter(Boolean).join(" · ")}` : "",
+            lineaCliente || ([p.nombre, p.telefono].filter(Boolean).length ? `👤 ${[p.nombre, p.telefono].filter(Boolean).join(" · ")}` : ""),
             p.notas ? `📝 ${p.notas}` : "",
-            "💬 Entrá al WhatsApp para verificar el pago y coordinar la entrega.",
+            `💬 Verificá el pago y coordiná la entrega: ${linkConversacion}`,
           ].filter(Boolean);
           await enviarTexto(lineas.join("\n"));
         } catch (e) {
@@ -237,6 +266,9 @@ async function iniciar() {
       const tieneFoto = !!msg.message?.imageMessage;
 
       if (!texto && !tieneFoto) continue; // ignoramos audios/stickers/etc por ahora
+
+      // Guardamos nombre y teléfono del cliente para los avisos al equipo (link a la conversación).
+      contactoCliente.set(jid, { nombre: msg.pushName || "", tel: telDeMsg(msg, jid) });
 
       // ¿Hay un humano atendiendo esta conversación? Max no responde, pero guarda
       // el mensaje en memoria para retomar con todo el contexto cuando pase la ventana.
