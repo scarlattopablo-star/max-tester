@@ -15,7 +15,7 @@ import { infoCatalogo, productos } from "./catalogo_vivo.js";
 import { hayMercadoPago } from "./pagos.js";
 import { proveedorIA } from "./config.js";
 import { enviarAviso, hayWhatsApp } from "./notificador.js";
-import { urlAutorizacion, conectarConCode, hayUsuarioML } from "./ml_user.js";
+import { urlAutorizacion, conectarConCode, hayUsuarioML, infoUsuarioML } from "./ml_user.js";
 import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
 
@@ -116,6 +116,14 @@ app.post("/api/ml/venta", async (req, res) => {
     console.error("Descuento de stock falló:", e.message);
     res.status(503).json({ ok: false, motivo: String(e.message || e) });
   }
+});
+
+// Diagnóstico: qué cuenta de ML quedó conectada (para verificar que sea EVERBOX).
+app.get("/api/ml/quien", async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = process.env.NOTIFY_TOKEN;
+  if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "no autorizado" });
+  res.json(await infoUsuarioML());
 });
 
 // Ventas hechas DENTRO de Mercado Libre entre dos fechas ISO (para el reporte

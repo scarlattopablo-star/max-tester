@@ -119,3 +119,25 @@ export async function hayUsuarioML() {
     return false;
   }
 }
+
+/** Diagnóstico: qué cuenta de ML quedó conectada (id + nickname vía /users/me). */
+export async function infoUsuarioML() {
+  const t = await cargar();
+  if (!t) return { conectado: false };
+  let me = null;
+  try {
+    const tk = await tokenUsuario();
+    if (tk) {
+      const r = await fetch(`${API}/users/me`, { headers: { Authorization: `Bearer ${tk}` } });
+      if (r.ok) {
+        const b = await r.json();
+        me = { id: b.id, nickname: b.nickname, email: b.email };
+      } else {
+        me = { error: `users/me ${r.status}` };
+      }
+    }
+  } catch (e) {
+    me = { error: String(e.message || e) };
+  }
+  return { conectado: true, ml_user_id_guardado: t.ml_user_id, me };
+}
