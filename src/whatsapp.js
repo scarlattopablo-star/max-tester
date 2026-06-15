@@ -12,6 +12,7 @@ import { sleep, delayEscritura } from "./humano.js";
 import { registrarSock, enviarTexto } from "./notificador.js";
 import { agregar } from "./memoria.js";
 import { useDBAuthState } from "./auth_db.js";
+import { setQR, setConectado } from "./qr_estado.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AUTH_DIR = join(__dirname, "..", "auth_baileys");
@@ -50,14 +51,17 @@ async function iniciar() {
       console.log(`\n📲 Escaneá este QR con el WhatsApp del bot (${NEGOCIO.nombre}):\n`);
       qrcode.generate(qr, { small: true });
       console.log("\nWhatsApp del celular → Dispositivos vinculados → Vincular un dispositivo.\n");
+      setQR(qr); // disponible también en la página web /qr
     }
     if (connection === "open") {
       console.log("✅ Conectado a WhatsApp. El bot ya está atendiendo.");
+      setConectado(true);
       registrarSock(sock, marcarEnviado); // el notificador también registra sus IDs enviados
     }
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
       const cerroSesion = code === DisconnectReason.loggedOut;
+      if (cerroSesion) setConectado(false);
       console.log(`🔌 Conexión cerrada (code ${code}).` + (cerroSesion ? " Sesión cerrada: borrá auth_baileys/ y volvé a escanear." : " Reintentando…"));
       if (!cerroSesion) iniciar();
     }

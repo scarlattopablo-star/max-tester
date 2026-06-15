@@ -18,6 +18,7 @@ import { enviarAviso, hayWhatsApp } from "./notificador.js";
 import { urlAutorizacion, conectarConCode, hayUsuarioML, infoUsuarioML } from "./ml_user.js";
 import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
+import { estadoQR } from "./qr_estado.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "..", "public");
@@ -116,6 +117,64 @@ app.post("/api/ml/venta", async (req, res) => {
     console.error("Descuento de stock falló:", e.message);
     res.status(503).json({ ok: false, motivo: String(e.message || e) });
   }
+});
+
+// ── Vinculación de WhatsApp por la WEB (para escanear el QR sin la terminal) ──
+// Protegido con ?clave=<NOTIFY_TOKEN>. Requiere WHATSAPP_ON=1 en Render.
+function qrAutorizado(req) {
+  const token = process.env.NOTIFY_TOKEN;
+  return token && String(req.query.clave || "") === token;
+}
+
+app.get("/api/qr", (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  res.json({ ...estadoQR(), whatsappOn: process.env.WHATSAPP_ON === "1" });
+});
+
+app.get("/qr", (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).send("No autorizado.");
+  const clave = encodeURIComponent(String(req.query.clave || ""));
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>Conectar WhatsApp · Max</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#0d0d10;color:#fff;text-align:center;padding:28px 16px}
+  h1{font-size:20px;margin:0 0 4px} p{color:#bebec6;margin:6px auto;max-width:420px;line-height:1.5;font-size:14px}
+  #box{background:#fff;display:inline-block;padding:16px;border-radius:16px;margin-top:18px;min-width:260px;min-height:260px}
+  #estado{margin-top:18px;font-size:15px;font-weight:700}
+  .ok{color:#2ecc71} .wait{color:#f0b429}
+  ol{text-align:left;max-width:420px;margin:18px auto;color:#bebec6;font-size:14px;line-height:1.7}
+</style></head>
+<body>
+  <h1>🤖 Conectar a Max por WhatsApp</h1>
+  <p>Escaneá este código con el celular del <b>chip dedicado</b> del bot.</p>
+  <div id="box"><canvas id="cv"></canvas></div>
+  <div id="estado" class="wait">Generando código…</div>
+  <ol>
+    <li>En el celular del chip de Max: WhatsApp → <b>⚙️ Configuración</b>.</li>
+    <li><b>Dispositivos vinculados</b> → <b>Vincular un dispositivo</b>.</li>
+    <li>Apuntá la cámara a este código.</li>
+  </ol>
+  <script>
+    var clave="${clave}", ultimo=null;
+    async function tick(){
+      try{
+        var r=await fetch("/api/qr?clave="+clave,{cache:"no-store"});
+        var d=await r.json();
+        var est=document.getElementById("estado");
+        if(d.conectado){est.className="ok";est.textContent="✅ ¡Conectado! Ya podés cerrar esta página.";document.getElementById("box").style.display="none";return;}
+        if(!d.whatsappOn){est.className="wait";est.textContent="⏳ Activando el módulo de WhatsApp… esperá unos segundos y recargá.";}
+        else if(d.qr){
+          if(d.qr!==ultimo){ultimo=d.qr;QRCode.toCanvas(document.getElementById("cv"),d.qr,{width:240,margin:1},function(){});}
+          est.className="wait";est.textContent="📲 Escaneá el código (se renueva solo)";
+        } else {est.className="wait";est.textContent="⏳ Generando código…";}
+      }catch(e){}
+      setTimeout(tick,3000);
+    }
+    tick();
+  </script>
+</body></html>`);
 });
 
 // Diagnóstico: qué cuenta de ML quedó conectada (para verificar que sea EVERBOX).
