@@ -14,7 +14,8 @@ import { agregar } from "./memoria.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import {
-  cargarEstado, esHumano, humanoYaAvisado, marcarHumano, marcarHumanoAvisado,
+  cargarEstado, esHumano, maxYaRespondio, humanoYaAvisado,
+  marcarMaxRespondio, marcarHumano, marcarHumanoAvisado,
 } from "./previas.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -161,6 +162,7 @@ async function iniciar() {
       await sleep(delayEscritura(respuesta));
       await sock.sendPresenceUpdate("paused", jid);
       marcarEnviado(await sock.sendMessage(jid, { text: respuesta }));
+      marcarMaxRespondio(jid); // Max atendió esta conversación: es NUEVA (no vieja/pre-Max)
       // Si Max decidió mandar fotos, las enviamos de a UNA, con una pequeña espera
       // entre cada una (mostrando "escribiendo…") para que se sienta humano.
       for (const f of imagenesEnviar) {
@@ -278,11 +280,20 @@ async function iniciar() {
         const m = msg.message || {};
         const esContenido = textoHumano || m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage || m.stickerMessage;
         if (!esContenido) continue;
-        // Lo escribió un HUMANO del equipo desde el teléfono del bot: esa
-        // conversación pasa a ser del equipo y Max no entra más (persistente).
-        marcarHumano(jid);
+        // Lo escribió un HUMANO del equipo desde el teléfono del bot.
+        if (!maxYaRespondio(jid)) {
+          // Max NUNCA habló acá → es una conversación VIEJA (existía antes de Max):
+          // la maneja el equipo y Max no entra más (persistente).
+          marcarHumano(jid);
+          console.log(`🧑 humano contestó en charla vieja ${jid} (Max nunca habló): queda del equipo, Max afuera para siempre`);
+        } else {
+          // Max venía atendiendo (conversación NUEVA) y un asesor entró:
+          // handoff TEMPORAL, Max retoma a los 10 min sin respuesta del humano.
+          humanoHasta.set(jid, Date.now());
+          for (const [j, t] of humanoHasta) if (Date.now() - t > VENTANA_HUMANO_MS) humanoHasta.delete(j);
+          console.log(`🧑 asesor entró a una charla de Max en ${jid}: Max en silencio por ${VENTANA_HUMANO_MS / 60000} min`);
+        }
         if (textoHumano) agregar(jid, "assistant", textoHumano);
-        console.log(`🧑 humano del equipo contestó en ${jid}: queda como conversación del equipo (Max afuera)`);
         continue;
       }
 

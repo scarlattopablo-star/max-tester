@@ -1,11 +1,16 @@
 // Conversaciones que maneja un HUMANO del equipo: Max no entra ahí.
 //
-// Regla: apenas alguien del equipo CONTESTA en una conversación desde el
-// teléfono del bot, esa conversación pasa a ser del equipo (persistente) y Max
-// no responde más. Cubre las charlas viejas / que el equipo ya viene atendiendo.
-// Se libera con liberar(jid) si se quiere devolver a Max.
+// Regla (para apartarse SOLO de las charlas viejas / pre-Max, no de las nuevas):
+//  - Si un humano CONTESTA en una conversación donde Max NUNCA habló, es una
+//    charla vieja (existía antes de que Max atendiera) → pasa a ser del equipo
+//    y Max no entra más (persistente).
+//  - Si Max venía atendiendo (ya respondió ahí) y un asesor entra, eso es el
+//    handoff TEMPORAL de 10 min (lo maneja whatsapp.js con humanoHasta): NO la
+//    marca como humana, Max retoma después.
 //
-// Se persiste en Neon para sobrevivir a los deploys/reinicios de Render.
+// `conversaciones_max` recuerda dónde respondió Max (persiste deploys, así una
+// charla nueva no se confunde con una vieja tras un reinicio de Render).
+// Se persiste en Neon para sobrevivir a los deploys/reinicios.
 import "./env.js";
 import { neon } from "@neondatabase/serverless";
 
@@ -17,6 +22,7 @@ function sql(strings, ...vals) {
 
 const humanas = new Set();        // jids de conversaciones que son de un humano (Max no entra)
 const humanasAvisadas = new Set(); // jids ya avisados al equipo (una vez)
+const deMax = new Set();           // jids donde Max ya respondió alguna vez
 let cargado = false;
 
 async function prepararTablas() {
@@ -25,9 +31,13 @@ async function prepararTablas() {
     avisado boolean default false,
     agregado timestamptz default now()
   )`;
+  await sql`create table if not exists conversaciones_max (
+    jid text primary key,
+    agregado timestamptz default now()
+  )`;
 }
 
-/** Carga a memoria las conversaciones de humanos. Llamar al iniciar. */
+/** Carga a memoria el estado de las conversaciones. Llamar al iniciar. */
 export async function cargarEstado() {
   if (cargado) return;
   if (!process.env.DATABASE_URL) { cargado = true; return; } // simulador: no aplica
@@ -36,12 +46,24 @@ export async function cargarEstado() {
     humanas.add(f.jid);
     if (f.avisado) humanasAvisadas.add(f.jid);
   }
+  for (const f of await sql`select jid from conversaciones_max`) deMax.add(f.jid);
   cargado = true;
-  console.log(`📋 estado conversaciones: ${humanas.size} las maneja un humano (Max no entra)`);
+  console.log(`📋 estado conversaciones: ${humanas.size} de humanos (Max no entra) · ${deMax.size} atendidas por Max`);
 }
 
 export function esHumano(jid) { return humanas.has(jid); }
+export function maxYaRespondio(jid) { return deMax.has(jid); }
 export function humanoYaAvisado(jid) { return humanasAvisadas.has(jid); }
+
+/** Marca que Max respondió en esta conversación (así sabemos que es NUEVA, no vieja). */
+export async function marcarMaxRespondio(jid) {
+  if (!jid || deMax.has(jid)) return;
+  deMax.add(jid);
+  if (!process.env.DATABASE_URL) return;
+  try {
+    await sql`insert into conversaciones_max (jid) values (${jid}) on conflict (jid) do nothing`;
+  } catch (e) { console.log("⚠ no pude guardar conversación de Max:", e.message); }
+}
 
 /** Marca que esta conversación pasa a ser de un HUMANO: Max no entra más. */
 export async function marcarHumano(jid) {
