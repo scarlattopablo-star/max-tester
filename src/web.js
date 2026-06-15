@@ -19,6 +19,7 @@ import { urlAutorizacion, conectarConCode, hayUsuarioML, infoUsuarioML } from ".
 import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
 import { estadoQR } from "./qr_estado.js";
+import QRCode from "qrcode";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "..", "public");
@@ -128,7 +129,24 @@ function qrAutorizado(req) {
 
 app.get("/api/qr", (req, res) => {
   if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
-  res.json({ ...estadoQR(), whatsappOn: process.env.WHATSAPP_ON === "1" });
+  const e = estadoQR();
+  // No mandamos el string del QR al navegador: solo si HAY uno y el estado.
+  res.json({ conectado: e.conectado, hayQr: !!e.qr, ts: e.ts, whatsappOn: process.env.WHATSAPP_ON === "1" });
+});
+
+// El QR como IMAGEN PNG generada en el servidor (no depende de nada del navegador).
+app.get("/qr.png", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).end();
+  const { qr } = estadoQR();
+  if (!qr) return res.status(404).end();
+  try {
+    const buf = await QRCode.toBuffer(qr, { width: 320, margin: 1, errorCorrectionLevel: "M" });
+    res.set("Content-Type", "image/png");
+    res.set("Cache-Control", "no-store");
+    res.send(buf);
+  } catch {
+    res.status(500).end();
+  }
 });
 
 app.get("/qr", (req, res) => {
@@ -137,11 +155,11 @@ app.get("/qr", (req, res) => {
   res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <title>Conectar WhatsApp · Max</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
   body{margin:0;font-family:system-ui,sans-serif;background:#0d0d10;color:#fff;text-align:center;padding:28px 16px}
   h1{font-size:20px;margin:0 0 4px} p{color:#bebec6;margin:6px auto;max-width:420px;line-height:1.5;font-size:14px}
-  #box{background:#fff;display:inline-block;padding:16px;border-radius:16px;margin-top:18px;min-width:260px;min-height:260px}
+  #box{background:#fff;display:inline-block;padding:14px;border-radius:16px;margin-top:18px;min-width:300px;min-height:300px}
+  #box img{display:block;width:300px;height:300px}
   #estado{margin-top:18px;font-size:15px;font-weight:700}
   .ok{color:#2ecc71} .wait{color:#f0b429}
   ol{text-align:left;max-width:420px;margin:18px auto;color:#bebec6;font-size:14px;line-height:1.7}
@@ -149,7 +167,7 @@ app.get("/qr", (req, res) => {
 <body>
   <h1>🤖 Conectar a Max por WhatsApp</h1>
   <p>Escaneá este código con el celular del <b>chip dedicado</b> del bot.</p>
-  <div id="box"><canvas id="cv"></canvas></div>
+  <div id="box"><img id="qr" alt="QR" src="/qr.png?clave=${clave}"></div>
   <div id="estado" class="wait">Generando código…</div>
   <ol>
     <li>En el celular del chip de Max: WhatsApp → <b>⚙️ Configuración</b>.</li>
@@ -157,20 +175,21 @@ app.get("/qr", (req, res) => {
     <li>Apuntá la cámara a este código.</li>
   </ol>
   <script>
-    var clave="${clave}", ultimo=null;
+    var clave="${clave}";
     async function tick(){
       try{
         var r=await fetch("/api/qr?clave="+clave,{cache:"no-store"});
         var d=await r.json();
-        var est=document.getElementById("estado");
-        if(d.conectado){est.className="ok";est.textContent="✅ ¡Conectado! Ya podés cerrar esta página.";document.getElementById("box").style.display="none";return;}
-        if(!d.whatsappOn){est.className="wait";est.textContent="⏳ Activando el módulo de WhatsApp… esperá unos segundos y recargá.";}
-        else if(d.qr){
-          if(d.qr!==ultimo){ultimo=d.qr;QRCode.toCanvas(document.getElementById("cv"),d.qr,{width:240,margin:1},function(){});}
+        var est=document.getElementById("estado"), box=document.getElementById("box");
+        if(d.conectado){est.className="ok";est.textContent="✅ ¡Conectado! Ya podés cerrar esta página.";box.style.display="none";return;}
+        if(!d.whatsappOn){est.className="wait";est.textContent="⏳ Activando WhatsApp… esperá unos segundos.";}
+        else if(d.hayQr){
+          // refresca la imagen (el QR se renueva solo cada ~20s)
+          document.getElementById("qr").src="/qr.png?clave="+clave+"&t="+Date.now();
           est.className="wait";est.textContent="📲 Escaneá el código (se renueva solo)";
         } else {est.className="wait";est.textContent="⏳ Generando código…";}
       }catch(e){}
-      setTimeout(tick,3000);
+      setTimeout(tick,4000);
     }
     tick();
   </script>
