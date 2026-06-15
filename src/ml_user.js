@@ -79,11 +79,14 @@ function aRegistro(body) {
   };
 }
 
-/** URL a la que tiene que entrar Pablo (logueado como EVERBOX) para autorizar. */
+/** URL a la que tiene que entrar Pablo (logueado como EVERBOX) para autorizar.
+ *  Pide offline_access (token renovable, sino se vence a las 6 h) + read + write
+ *  (read habilita la API de órdenes para el reporte de ventas de ML). */
 export function urlAutorizacion() {
   return (
     `https://auth.mercadolibre.com.uy/authorization?response_type=code` +
-    `&client_id=${process.env.ML_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT)}`
+    `&client_id=${process.env.ML_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT)}` +
+    `&scope=${encodeURIComponent("offline_access read write")}`
   );
 }
 
