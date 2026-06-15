@@ -82,6 +82,8 @@ async function iniciar() {
   const VENTANA_HUMANO_MS = 10 * 60 * 1000; // 10 min sin respuesta del humano => Max retoma
   const enviadosPorMax = new Set(); // IDs de mensajes que mandó Max (para distinguirlos del humano)
   const humanoHasta = new Map(); // jid -> timestamp (ms) del último mensaje del humano
+  const VENTANA_LEAD_MS = 6 * 60 * 60 * 1000; // no re-avisar el mismo lead caliente antes de 6 h
+  const leadAvisado = new Map(); // jid -> timestamp (ms) del último aviso de lead caliente
 
   // Registra el ID de un mensaje que envió Max (o el notificador), para que en
   // messages.upsert no lo confundamos con un humano escribiendo desde el teléfono.
@@ -160,6 +162,26 @@ async function iniciar() {
           console.log(`⚠ No pude avisar la derivación al negocio: ${e.message}`);
         }
       }
+      // Lead caliente: avisar al equipo UNA vez por conversación (ventana 6 h).
+      for (const a of acciones) {
+        if (a.herramienta !== "avisar_lead") continue;
+        const ultimo = leadAvisado.get(jid) || 0;
+        if (Date.now() - ultimo < VENTANA_LEAD_MS) break; // ya se avisó hace poco
+        leadAvisado.set(jid, Date.now());
+        try {
+          const l = a.resultado?.lead || a.input || {};
+          const lineas = [
+            "🔥 LEAD CALIENTE — un cliente quiere comprar",
+            l.resumen ? `🛒 ${l.resumen}` : "",
+            l.nombre ? `👤 ${l.nombre}` : "",
+            "💬 Entrá al WhatsApp y seguí la conversación con este cliente si querés tomarla.",
+          ].filter(Boolean);
+          await enviarTexto(lineas.join("\n"));
+        } catch (e) {
+          console.log(`⚠ No pude avisar el lead al negocio: ${e.message}`);
+        }
+        break; // un solo aviso por respuesta
+      }
     } catch (e) {
       console.log(`⚠ Error respondiendo a ${jid}: ${e.message}`);
       try { marcarEnviado(await sock.sendMessage(jid, { text: "Disculpá, tuve un problemita técnico. ¿Me lo repetís o preferís que te pase con un asesor? 🙏" })); } catch {}
@@ -184,8 +206,6 @@ async function iniciar() {
   }
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    // DIAGNÓSTICO: ver TODO lo que llega (tipo, cantidad, de quién, fromMe).
-    console.log(`[upsert] type=${type} n=${messages?.length || 0} de=${messages?.[0]?.key?.remoteJid || "?"} fromMe=${messages?.[0]?.key?.fromMe} tieneMsg=${!!messages?.[0]?.message}`);
     if (type !== "notify") return;
     for (const msg of messages) {
       const jid = msg.key.remoteJid || "";

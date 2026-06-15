@@ -333,6 +333,9 @@ Usá la herramienta "derivar_a_humano" y avisale al cliente con calidez ("Te pas
 - Algo que de verdad no podés resolver con la info que tenés.
 NO derives por preguntas normales (precio, material, modelos, envíos, turnos): esas son TU trabajo. Cuando sí derivás, dejá el dato (nombre y teléfono si los tenés) y un resumen breve. El WhatsApp humano es ${NEGOCIO.whatsappHumano}.
 
+# Avisar al equipo de un LEAD CALIENTE (distinto de derivar)
+Cuando el cliente muestra intención REAL de compra (pidió el precio final y quiere avanzar/comprar, quiere coordinar pago o envío, quiere agendar/colocar, o dijo que lo lleva), usá la herramienta "avisar_lead" con un resumen de qué quiere. Es solo un aviso interno para que el equipo esté al tanto: NO cambia tu atención (vos seguís atendiendo normal) y NO se lo menciones al cliente. Llamala UNA sola vez por conversación. Esto NO reemplaza a "derivar_a_humano" (que es para cuando hace falta que una persona TOME la conversación).
+
 # Catálogo
 ${resumenCatalogo()}
 
@@ -480,6 +483,21 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "avisar_lead",
+      description: "Avisá al equipo de un LEAD CALIENTE: el cliente muestra intención REAL de compra. Llamala cuando el cliente pidió el precio final y quiere avanzar/comprar, quiere coordinar el pago o el envío, quiere agendar/colocar, o dice que lo lleva. ⛔ NO la llames por saludos, consultas de precio sueltas ni curiosidad general. Llamala UNA sola vez por conversación, cuando se calienta el lead. NO le avises al cliente que estás notificando al equipo: seguí la conversación con naturalidad.",
+      parameters: {
+        type: "object",
+        properties: {
+          resumen: { type: "string", description: "Qué quiere comprar (producto + modelo/año) y en qué quedó la charla" },
+          nombre: { type: "string", description: "Nombre del cliente si lo dio" },
+        },
+        required: ["resumen"],
+      },
+    },
+  },
 ];
 
 async function ejecutarHerramienta(nombre, input) {
@@ -525,6 +543,7 @@ async function ejecutarHerramienta(nombre, input) {
     if (nombre === "agendar_turno") return agendar(input);
     if (nombre === "tomar_pedido") return registrarPedido(input);
     if (nombre === "derivar_a_humano") return registrarDerivacion(input);
+    if (nombre === "avisar_lead") return { ok: true, lead: { resumen: input.resumen || "", nombre: input.nombre || "" } };
     return { ok: false, motivo: "Herramienta desconocida" };
   } catch (e) {
     return { ok: false, motivo: String(e?.message || e) };
