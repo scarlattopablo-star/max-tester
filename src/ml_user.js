@@ -120,24 +120,31 @@ export async function hayUsuarioML() {
   }
 }
 
-/** Diagnóstico: qué cuenta de ML quedó conectada (id + nickname vía /users/me). */
+/** Diagnóstico: qué cuenta quedó conectada y qué permisos tiene el token. */
 export async function infoUsuarioML() {
   const t = await cargar();
   if (!t) return { conectado: false };
-  let me = null;
-  try {
-    const tk = await tokenUsuario();
-    if (tk) {
-      const r = await fetch(`${API}/users/me`, { headers: { Authorization: `Bearer ${tk}` } });
-      if (r.ok) {
-        const b = await r.json();
-        me = { id: b.id, nickname: b.nickname, email: b.email };
-      } else {
-        me = { error: `users/me ${r.status}` };
-      }
+  const out = { conectado: true, ml_user_id: t.ml_user_id, conRefresh: !!t.refresh_token, pruebas: {} };
+  const tk = await tokenUsuario();
+  if (!tk) { out.error = "no se pudo obtener token"; return out; }
+
+  async function probar(nombre, url) {
+    try {
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${tk}` } });
+      const b = await r.json().catch(() => ({}));
+      out.pruebas[nombre] = r.ok ? "OK" : `${r.status}: ${b.message || b.error || "?"}`;
+      return r.ok ? b : null;
+    } catch (e) {
+      out.pruebas[nombre] = String(e.message || e);
+      return null;
     }
-  } catch (e) {
-    me = { error: String(e.message || e) };
   }
-  return { conectado: true, ml_user_id_guardado: t.ml_user_id, me };
+
+  const me = await probar("users_me", `${API}/users/me`);
+  if (me) out.cuenta = { id: me.id, nickname: me.nickname, email: me.email };
+  // Lectura del propio inventario (la misma autorización que usa el descuento de stock).
+  await probar("mis_items", `${API}/users/${t.ml_user_id}/items/search?limit=1`);
+  // Lectura de órdenes (lo que necesita el reporte de ventas de ML).
+  await probar("orders_search", `${API}/orders/search?seller=${t.ml_user_id}&limit=1`);
+  return out;
 }
