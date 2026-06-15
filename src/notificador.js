@@ -62,4 +62,5 @@ export async function enviarTexto(texto) {
   const jid = numeroAJid(process.env.NUMERO_AVISOS || "091629784");
   const sent = await sockActivo.sendMessage(jid, { text: texto });
   alEnviar?.(sent);
+  console.log(`📢 aviso al equipo enviado a ${jid} (id ${sent?.key?.id || "?"})`);
 }
