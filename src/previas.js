@@ -1,8 +1,9 @@
-// Conversaciones que YA existían en el WhatsApp antes de que Max empezara a
-// atender. Esas las sigue un HUMANO: Max no se mete (solo avisa una vez al
-// equipo). Trazamos una "línea": al primer arranque tomamos una foto de todos
-// los chats que hay en el teléfono y los marcamos como previos; de ahí en
-// adelante, las conversaciones NUEVAS las atiende Max normalmente.
+// Conversaciones que maneja un HUMANO del equipo: Max no entra ahí.
+//
+// Regla: apenas alguien del equipo CONTESTA en una conversación desde el
+// teléfono del bot, esa conversación pasa a ser del equipo (persistente) y Max
+// no responde más. Cubre las charlas viejas / que el equipo ya viene atendiendo.
+// Se libera con liberar(jid) si se quiere devolver a Max.
 //
 // Se persiste en Neon para sobrevivir a los deploys/reinicios de Render.
 import "./env.js";
@@ -14,76 +15,58 @@ function sql(strings, ...vals) {
   return _sql(strings, ...vals);
 }
 
-const previas = new Set();   // jids de conversaciones previas (humano las atiende)
-const avisados = new Set();  // jids previos que YA se avisaron al equipo
-let snapshotListo = false;   // ¿ya tomamos la foto inicial de chats?
+const humanas = new Set();        // jids de conversaciones que son de un humano (Max no entra)
+const humanasAvisadas = new Set(); // jids ya avisados al equipo (una vez)
 let cargado = false;
 
 async function prepararTablas() {
-  await sql`create table if not exists conversaciones_previas (
+  await sql`create table if not exists conversaciones_humano (
     jid text primary key,
     avisado boolean default false,
     agregado timestamptz default now()
   )`;
-  await sql`create table if not exists wa_flags (clave text primary key, valor text)`;
 }
 
-/** Carga el set de previas + el flag de snapshot a memoria. Llamar al iniciar. */
-export async function cargarPrevias() {
+/** Carga a memoria las conversaciones de humanos. Llamar al iniciar. */
+export async function cargarEstado() {
   if (cargado) return;
-  if (!process.env.DATABASE_URL) { cargado = true; return; } // sin base (simulador): no aplica
+  if (!process.env.DATABASE_URL) { cargado = true; return; } // simulador: no aplica
   await prepararTablas();
-  const filas = await sql`select jid, avisado from conversaciones_previas`;
-  for (const f of filas) {
-    previas.add(f.jid);
-    if (f.avisado) avisados.add(f.jid);
+  for (const f of await sql`select jid, avisado from conversaciones_humano`) {
+    humanas.add(f.jid);
+    if (f.avisado) humanasAvisadas.add(f.jid);
   }
-  const flag = await sql`select valor from wa_flags where clave = 'snapshot_previas'`;
-  snapshotListo = flag.length > 0;
   cargado = true;
-  console.log(`📋 previas cargadas: ${previas.size} conversaciones${snapshotListo ? " (foto ya tomada)" : " (falta tomar la foto inicial)"}`);
+  console.log(`📋 estado conversaciones: ${humanas.size} las maneja un humano (Max no entra)`);
 }
 
-export function snapshotTomado() { return snapshotListo; }
-export function esPrevia(jid) { return previas.has(jid); }
-export function yaAvisado(jid) { return avisados.has(jid); }
+export function esHumano(jid) { return humanas.has(jid); }
+export function humanoYaAvisado(jid) { return humanasAvisadas.has(jid); }
 
-/** Agrega jids al set de previas (idempotente). Lo usa la foto inicial de chats. */
-export async function agregarPrevias(jids) {
-  const nuevos = [...new Set(jids)].filter((j) => j && !previas.has(j));
-  if (!nuevos.length) return 0;
-  for (const jid of nuevos) {
-    previas.add(jid);
-    try {
-      await sql`insert into conversaciones_previas (jid) values (${jid})
-                on conflict (jid) do nothing`;
-    } catch (e) { console.log("⚠ no pude guardar previa:", e.message); }
-  }
-  return nuevos.length;
-}
-
-/** Marca que ya tomamos la foto inicial: no volver a tomarla en próximos arranques. */
-export async function marcarSnapshotTomado() {
-  if (snapshotListo) return;
-  snapshotListo = true;
+/** Marca que esta conversación pasa a ser de un HUMANO: Max no entra más. */
+export async function marcarHumano(jid) {
+  if (!jid || humanas.has(jid)) return;
+  humanas.add(jid);
+  if (!process.env.DATABASE_URL) return;
   try {
-    await sql`insert into wa_flags (clave, valor) values ('snapshot_previas', ${String(Date.now())})
-              on conflict (clave) do nothing`;
-  } catch (e) { console.log("⚠ no pude marcar el snapshot:", e.message); }
+    await sql`insert into conversaciones_humano (jid) values (${jid}) on conflict (jid) do nothing`;
+  } catch (e) { console.log("⚠ no pude guardar conversación humana:", e.message); }
 }
 
-/** Marca que al equipo ya se le avisó de esta conversación previa (una sola vez). */
-export async function marcarAvisado(jid) {
-  if (avisados.has(jid)) return;
-  avisados.add(jid);
+/** Marca que ya se le avisó al equipo de esta conversación humana (una sola vez). */
+export async function marcarHumanoAvisado(jid) {
+  if (humanasAvisadas.has(jid)) return;
+  humanasAvisadas.add(jid);
+  if (!process.env.DATABASE_URL) return;
   try {
-    await sql`update conversaciones_previas set avisado = true where jid = ${jid}`;
-  } catch (e) { console.log("⚠ no pude marcar avisado:", e.message); }
+    await sql`update conversaciones_humano set avisado = true where jid = ${jid}`;
+  } catch (e) { console.log("⚠ no pude marcar humano avisado:", e.message); }
 }
 
-/** Libera una conversación previa: a partir de ahí Max la vuelve a atender. */
-export async function liberarPrevia(jid) {
-  previas.delete(jid);
-  avisados.delete(jid);
-  try { await sql`delete from conversaciones_previas where jid = ${jid}`; } catch {}
+/** Libera una conversación humana: a partir de ahí Max la vuelve a atender. */
+export async function liberar(jid) {
+  humanas.delete(jid);
+  humanasAvisadas.delete(jid);
+  if (!process.env.DATABASE_URL) return;
+  try { await sql`delete from conversaciones_humano where jid = ${jid}`; } catch {}
 }

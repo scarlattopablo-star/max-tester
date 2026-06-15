@@ -14,8 +14,7 @@ import { agregar } from "./memoria.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import {
-  cargarPrevias, snapshotTomado, esPrevia, yaAvisado,
-  agregarPrevias, marcarSnapshotTomado, marcarAvisado,
+  cargarEstado, esHumano, humanoYaAvisado, marcarHumano, marcarHumanoAvisado,
 } from "./previas.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -66,33 +65,13 @@ async function iniciar() {
   const { state, saveCreds } = process.env.DATABASE_URL
     ? await useDBAuthState()
     : await useMultiFileAuthState(AUTH_DIR);
-  // syncFullHistory: pedimos el historial al conectar para poder tomar la "foto"
-  // de las conversaciones previas (una sola vez). Después no molesta: Baileys no
-  // reenvía lo que ya entregó.
-  const sock = makeWASocket({ auth: state, logger: noopLogger, markOnlineOnConnect: false, syncFullHistory: true });
+  const sock = makeWASocket({ auth: state, logger: noopLogger, markOnlineOnConnect: false });
 
   sock.ev.on("creds.update", saveCreds);
 
-  // Conversaciones previas (las atiende un humano, Max no se mete). Cargamos el
-  // set persistido y, si todavía no tomamos la foto inicial, la armamos con el
-  // historial que manda WhatsApp al conectar.
-  await cargarPrevias();
+  // Estado de cada conversación (de Max o de un humano), persistido en Neon.
+  await cargarEstado();
   let arranqueTs = Math.floor(Date.now() / 1000); // para ignorar mensajes viejos
-  sock.ev.on("messaging-history.set", async ({ chats = [], messages = [], isLatest }) => {
-    if (snapshotTomado()) return; // la línea ya está trazada; los nuevos son de Max
-    const esChatNormal = (j) =>
-      j && !j.endsWith("@g.us") && !j.endsWith("@broadcast") && !j.endsWith("@newsletter") && j !== "status@broadcast";
-    const jids = [
-      ...chats.map((c) => c.id),
-      ...messages.map((m) => m.key?.remoteJid),
-    ].filter(esChatNormal);
-    const agregadas = await agregarPrevias(jids);
-    if (agregadas) console.log(`📋 foto inicial: +${agregadas} conversaciones previas (humano las atiende)`);
-    if (isLatest) {
-      await marcarSnapshotTomado();
-      console.log("📋 foto de conversaciones previas COMPLETA. Max atiende solo las nuevas de acá en adelante.");
-    }
-  });
 
   sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -299,13 +278,11 @@ async function iniciar() {
         const m = msg.message || {};
         const esContenido = textoHumano || m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage || m.stickerMessage;
         if (!esContenido) continue;
-        // Lo escribió un HUMANO del equipo desde el teléfono del bot: Max se calla
-        // en ESTA conversación y guardamos lo que dijo para tener contexto al retomar.
-        humanoHasta.set(jid, Date.now());
-        // Poda: ventanas vencidas de otras conversaciones no se acumulan para siempre.
-        for (const [j, t] of humanoHasta) if (Date.now() - t > VENTANA_HUMANO_MS) humanoHasta.delete(j);
+        // Lo escribió un HUMANO del equipo desde el teléfono del bot: esa
+        // conversación pasa a ser del equipo y Max no entra más (persistente).
+        marcarHumano(jid);
         if (textoHumano) agregar(jid, "assistant", textoHumano);
-        console.log(`🧑 humano del equipo respondió en ${jid}: Max en silencio por ${VENTANA_HUMANO_MS / 60000} min`);
+        console.log(`🧑 humano del equipo contestó en ${jid}: queda como conversación del equipo (Max afuera)`);
         continue;
       }
 
@@ -326,21 +303,21 @@ async function iniciar() {
         }));
       }
 
-      // CONVERSACIÓN PREVIA (ya existía antes de que Max empezara a atender):
-      // la sigue un HUMANO. Max no se mete; avisamos UNA sola vez al equipo.
-      if (esPrevia(jid)) {
-        if (!yaAvisado(jid)) {
-          await marcarAvisado(jid);
+      // CONVERSACIÓN DE UN HUMANO: la maneja el equipo (vieja o ya tomada por una
+      // persona). Max no se mete; avisamos UNA sola vez al equipo con el link.
+      if (esHumano(jid)) {
+        if (!humanoYaAvisado(jid)) {
+          await marcarHumanoAvisado(jid);
           const link = linkWa(telCliente);
           try {
             await enviarTexto([
-              "📋 Cliente con conversación PREVIA te escribió — atendelo vos (Max no responde acá)",
+              "📋 Un cliente que atendés VOS te escribió — Max no responde en esta conversación",
               msg.pushName ? `👤 ${msg.pushName}` : "",
               link ? `💬 Entrá a la conversación: 👉 ${link}` : "",
             ].filter(Boolean).join("\n"));
-          } catch (e) { console.log("⚠ no pude avisar la conversación previa:", e.message); }
+          } catch (e) { console.log("⚠ no pude avisar la conversación humana:", e.message); }
         }
-        console.log(`📋 conversación previa ${jid}: Max en silencio (la atiende un humano)`);
+        console.log(`📋 conversación de un humano ${jid}: Max en silencio`);
         continue;
       }
 
