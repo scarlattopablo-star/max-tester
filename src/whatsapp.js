@@ -82,8 +82,7 @@ async function iniciar() {
   const VENTANA_HUMANO_MS = 10 * 60 * 1000; // 10 min sin respuesta del humano => Max retoma
   const enviadosPorMax = new Set(); // IDs de mensajes que mandó Max (para distinguirlos del humano)
   const humanoHasta = new Map(); // jid -> timestamp (ms) del último mensaje del humano
-  const VENTANA_LEAD_MS = 6 * 60 * 60 * 1000; // no re-avisar el mismo lead caliente antes de 6 h
-  const leadAvisado = new Map(); // jid -> timestamp (ms) del último aviso de lead caliente
+  const pedidosAvisados = new Set(); // ids de pedido ya avisados al equipo (no duplicar)
 
   // Registra el ID de un mensaje que envió Max (o el notificador), para que en
   // messages.upsert no lo confundamos con un humano escribiendo desde el teléfono.
@@ -162,25 +161,27 @@ async function iniciar() {
           console.log(`⚠ No pude avisar la derivación al negocio: ${e.message}`);
         }
       }
-      // Lead caliente: avisar al equipo UNA vez por conversación (ventana 6 h).
+      // VENTA: cuando Max toma un pedido (cliente que decidió comprar / dijo que
+      // pagó por transferencia), avisamos al equipo para que verifique y despache.
+      // (El pago por Mercado Pago se avisa aparte, desde el webhook, al acreditarse.)
       for (const a of acciones) {
-        if (a.herramienta !== "avisar_lead") continue;
-        const ultimo = leadAvisado.get(jid) || 0;
-        if (Date.now() - ultimo < VENTANA_LEAD_MS) break; // ya se avisó hace poco
-        leadAvisado.set(jid, Date.now());
+        if (a.herramienta !== "tomar_pedido") continue;
+        const p = a.resultado?.pedido;
+        if (!p || pedidosAvisados.has(p.id)) continue;
+        pedidosAvisados.add(p.id);
         try {
-          const l = a.resultado?.lead || a.input || {};
           const lineas = [
-            "🔥 LEAD CALIENTE — un cliente quiere comprar",
-            l.resumen ? `🛒 ${l.resumen}` : "",
-            l.nombre ? `👤 ${l.nombre}` : "",
-            "💬 Entrá al WhatsApp y seguí la conversación con este cliente si querés tomarla.",
+            "🛒 NUEVO PEDIDO (Max cerró una venta)",
+            `Producto: ${p.producto || "?"}${p.modeloVehiculo ? ` · ${p.modeloVehiculo}` : ""}`,
+            p.medioPago ? `💳 Pago: ${p.medioPago}` : "",
+            [p.nombre, p.telefono].filter(Boolean).length ? `👤 ${[p.nombre, p.telefono].filter(Boolean).join(" · ")}` : "",
+            p.notas ? `📝 ${p.notas}` : "",
+            "💬 Entrá al WhatsApp para verificar el pago y coordinar la entrega.",
           ].filter(Boolean);
           await enviarTexto(lineas.join("\n"));
         } catch (e) {
-          console.log(`⚠ No pude avisar el lead al negocio: ${e.message}`);
+          console.log(`⚠ No pude avisar el pedido al negocio: ${e.message}`);
         }
-        break; // un solo aviso por respuesta
       }
     } catch (e) {
       console.log(`⚠ Error respondiendo a ${jid}: ${e.message}`);
