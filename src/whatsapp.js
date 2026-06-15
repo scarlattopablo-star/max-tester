@@ -184,6 +184,8 @@ async function iniciar() {
   }
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    // DIAGNÓSTICO: ver TODO lo que llega (tipo, cantidad, de quién, fromMe).
+    console.log(`[upsert] type=${type} n=${messages?.length || 0} de=${messages?.[0]?.key?.remoteJid || "?"} fromMe=${messages?.[0]?.key?.fromMe} tieneMsg=${!!messages?.[0]?.message}`);
     if (type !== "notify") return;
     for (const msg of messages) {
       const jid = msg.key.remoteJid || "";
