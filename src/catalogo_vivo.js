@@ -36,6 +36,14 @@ const EXTRA_PRODUCTOS = [
     u: "https://lacasadelcubreasiento.vercel.app/producto/web-lona-montana-dc",
   },
   {
+    n: "Lona Marítima Enrollable Fiat Strada",
+    p: 11600,
+    l: null,
+    img: "https://lacasadelcubreasiento.vercel.app/img/lonas/lona_fiat_strada.png",
+    usd: 0,
+    u: "https://lacasadelcubreasiento.vercel.app/producto/web-lona-fiat-strada",
+  },
+  {
     n: "Kit Barras de Techo BYD Yuan Pro - Transversales + Longitudinales",
     p: 18450,
     l: null,
