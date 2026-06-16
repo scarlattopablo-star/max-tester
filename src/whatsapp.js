@@ -107,6 +107,7 @@ async function iniciar() {
   const enviadosPorMax = new Set(); // IDs de mensajes que mandó Max (para distinguirlos del humano)
   const idsVistos = new Set(); // IDs de mensajes ya procesados (anti-duplicados al reconectar)
   const pedidosAvisados = new Set(); // ids de pedido ya avisados al equipo (no duplicar)
+  const turnosAvisados = new Set(); // ids de solicitud de turno ya avisados al equipo
   const contactoCliente = new Map(); // jid -> { nombre, tel } para armar el link en los avisos
 
   // Registra el ID de un mensaje que envió Max (o el notificador), para que en
@@ -225,6 +226,28 @@ async function iniciar() {
           await enviarTexto(lineas.join("\n"));
         } catch (e) {
           console.log(`⚠ No pude avisar el pedido al negocio: ${e.message}`);
+        }
+      }
+      // TURNO: el cliente quiere ir al local. Max NO confirma: avisa al equipo
+      // con los datos para que el EQUIPO confirme el día y la hora.
+      for (const a of acciones) {
+        if (a.herramienta !== "solicitar_turno") continue;
+        const tr = a.resultado?.turno;
+        if (!tr || turnosAvisados.has(tr.id)) continue;
+        turnosAvisados.add(tr.id);
+        try {
+          const cuando = [tr.fecha, tr.hora].filter(Boolean).join(" ");
+          const lineas = [
+            "🗓️ SOLICITUD DE TURNO — confirmá el día y la hora con el cliente",
+            `👤 ${[tr.nombre, tr.telefono].filter(Boolean).join(" · ") || "(sin datos)"}`,
+            tr.servicio ? `🔧 ${tr.servicio}` : "",
+            tr.vehiculo ? `🚗 ${tr.vehiculo}` : "",
+            cuando ? `📅 Prefiere: ${cuando}` : "📅 Sin preferencia de horario",
+            `💬 Entrá a la conversación: ${linkConversacion}`,
+          ].filter(Boolean);
+          await enviarTexto(lineas.join("\n"));
+        } catch (e) {
+          console.log(`⚠ No pude avisar la solicitud de turno: ${e.message}`);
         }
       }
     } catch (e) {

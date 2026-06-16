@@ -1,42 +1,64 @@
-// Agenda de turnos en el local (Paysandú 944).
-import { leer, guardar } from "./store.js";
-import { FRANJAS_TURNO } from "./config.js";
+// Agenda de turnos del local (Paysandú 944), guardada en Neon (sobrevive a los
+// deploys/reinicios de Render). Max NO confirma turnos por su cuenta: registra
+// la SOLICITUD (estado "pendiente") y el equipo la confirma. Ver whatsapp.js
+// (aviso al equipo) y cerebro.js (herramienta solicitar_turno).
+import "./env.js";
+import { neon } from "@neondatabase/serverless";
 
-const ARCHIVO = "agenda.json";
-
-export function listarTurnos() {
-  return leer(ARCHIVO, []);
+let _sql = null;
+function sql(strings, ...vals) {
+  if (!_sql) _sql = neon(process.env.DATABASE_URL);
+  return _sql(strings, ...vals);
 }
 
-// Devuelve las franjas todavía libres para una fecha (YYYY-MM-DD).
-export function disponibilidad(fecha) {
-  const turnos = listarTurnos();
-  const ocupadas = turnos.filter((t) => t.fecha === fecha && t.estado !== "cancelado").map((t) => t.hora);
-  return FRANJAS_TURNO.filter((h) => !ocupadas.includes(h));
+async function prepararTabla() {
+  await sql`create table if not exists turnos (
+    id text primary key,
+    nombre text,
+    telefono text,
+    servicio text,
+    vehiculo text,
+    fecha text,
+    hora text,
+    estado text default 'pendiente',
+    creado timestamptz default now()
+  )`;
 }
 
-// Reserva un turno. Devuelve {ok, turno} o {ok:false, motivo}.
-export function agendar({ nombre, telefono, servicio, fecha, hora, vehiculo }) {
-  if (!nombre || !telefono || !fecha || !hora) {
-    return { ok: false, motivo: "Faltan datos (nombre, teléfono, fecha u hora)." };
+/** Lista de turnos (para un futuro panel del equipo). Más nuevos primero. */
+export async function listarTurnos() {
+  try {
+    await prepararTabla();
+    return await sql`select * from turnos order by creado desc limit 200`;
+  } catch {
+    return [];
   }
-  const libres = disponibilidad(fecha);
-  if (!libres.includes(hora)) {
-    return { ok: false, motivo: `La hora ${hora} del ${fecha} no está disponible. Libres: ${libres.join(", ") || "ninguna"}.` };
+}
+
+/** Registra una SOLICITUD de turno (estado "pendiente"). NO confirma la hora:
+ *  el equipo la confirma. Persiste en Neon. Devuelve {ok, turno} o {ok:false}. */
+export async function solicitarTurno({ nombre, telefono, servicio, vehiculo, fecha, hora }) {
+  if (!nombre || !telefono) {
+    return { ok: false, motivo: "Faltan datos (nombre y teléfono del cliente)." };
   }
-  const turnos = listarTurnos();
   const turno = {
-    id: "T" + (turnos.length + 1).toString().padStart(4, "0"),
+    id: "T" + Date.now().toString(36).toUpperCase(),
     nombre,
     telefono,
-    servicio: servicio || "Consulta",
+    servicio: servicio || "Colocación / consulta",
     vehiculo: vehiculo || "",
-    fecha,
-    hora,
-    estado: "confirmado",
-    creado: new Date().toISOString(),
+    fecha: fecha || "",
+    hora: hora || "",
+    estado: "pendiente",
   };
-  turnos.push(turno);
-  guardar(ARCHIVO, turnos);
+  try {
+    await prepararTabla();
+    await sql`insert into turnos (id, nombre, telefono, servicio, vehiculo, fecha, hora, estado)
+      values (${turno.id}, ${turno.nombre}, ${turno.telefono}, ${turno.servicio},
+              ${turno.vehiculo}, ${turno.fecha}, ${turno.hora}, ${turno.estado})`;
+  } catch (e) {
+    console.log("⚠ no pude guardar la solicitud de turno:", e.message);
+    // Igual devolvemos ok: el aviso al equipo (whatsapp.js) sigue saliendo.
+  }
   return { ok: true, turno };
 }

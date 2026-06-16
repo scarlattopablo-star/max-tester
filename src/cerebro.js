@@ -5,8 +5,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, FRANJAS_TURNO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, tiendaMLPorModelo } from "./config.js";
-import { disponibilidad, agendar } from "./agenda.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, tiendaMLPorModelo } from "./config.js";
+import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
 import { productos as productosML } from "./catalogo_vivo.js";
@@ -355,11 +355,10 @@ ${resumenCatalogo()}
 - Cuando el cliente quiere VER ejemplos/opciones de un producto, o cuando le venga bien verlo con calma, usá la herramienta "link_web" (pasale producto + modelo) y compartile el link diciéndole algo como: "Acá lo podés ver con fotos y, si querés, comprarlo directo desde la web 👉 <link>". Igual podés mandar alguna foto por acá con "enviar_foto" si la pide; las dos cosas se complementan.
 - ⛔ NUNCA inventes la URL: usá SIEMPRE la que devuelve "link_web".
 
-# Turnos y uso de herramientas
-- Las franjas del local son: ${FRANJAS_TURNO.join(", ")}.
-- Usá "consultar_disponibilidad" SOLO cuando el cliente quiere agendar y hay una fecha en juego. No la llames porque sí.
-- No ofrezcas agendar un turno hasta que el cliente muestre interés real en comprar/ir. Primero conversá y asesorá.
-- Para agendar necesitás: nombre, teléfono, qué servicio/producto, fecha y hora. Confirmá al final.
+# Turnos (IMPORTANTE: Max NO agenda, agenda el EQUIPO)
+- ⛔ NUNCA confirmes vos un turno ni una hora. Vos NO tenés la agenda: la maneja el equipo. NO le digas al cliente "su turno está confirmado a las X" ni le asegures un horario.
+- Cuando el cliente quiere ir al local (colocar, medir, retirar), juntá con naturalidad: nombre, teléfono, qué servicio/producto, vehículo, y qué DÍA/HORARIO le vendría bien (su preferencia). No insistas si no muestra interés real; primero conversá y asesorá.
+- Con esos datos, llamá a "solicitar_turno" y decile al cliente algo como: "Le paso el pedido al equipo y enseguida le confirman el día y la hora 🙌". El equipo le confirma; vos no.
 - No uses ninguna herramienta solo para charlar: respondé con texto normal.`;
 }
 
@@ -416,20 +415,8 @@ const TOOLS = [
   {
     type: "function",
     function: {
-      name: "consultar_disponibilidad",
-      description: "Devuelve las franjas horarias libres para una fecha dada en el local. Usar antes de ofrecer/confirmar un turno.",
-      parameters: {
-        type: "object",
-        properties: { fecha: { type: "string", description: "Fecha en formato YYYY-MM-DD" } },
-        required: ["fecha"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "agendar_turno",
-      description: "Reserva un turno en el local. Solo llamar cuando ya tenés nombre, teléfono, servicio, fecha y hora confirmados con el cliente.",
+      name: "solicitar_turno",
+      description: "Registra una SOLICITUD de turno para el local y avisa al equipo, que es quien CONFIRMA el día y la hora. Max NO confirma turnos por su cuenta. Llamala cuando el cliente quiere ir al local (colocar, medir, retirar) y ya tenés su nombre y teléfono; pasale también el servicio, el vehículo y el día/horario que PREFIERE (si lo dijo). NO le confirmes una hora al cliente: decile que el equipo se la confirma.",
       parameters: {
         type: "object",
         properties: {
@@ -437,10 +424,10 @@ const TOOLS = [
           telefono: { type: "string" },
           servicio: { type: "string", description: "Qué viene a hacer (colocar cubreasientos, medir, retirar, etc.)" },
           vehiculo: { type: "string", description: "Marca y modelo del auto" },
-          fecha: { type: "string", description: "YYYY-MM-DD" },
-          hora: { type: "string", description: "HH:MM" },
+          fecha: { type: "string", description: "Día que PREFIERE el cliente (YYYY-MM-DD si lo sabés), opcional" },
+          hora: { type: "string", description: "Horario que PREFIERE el cliente (HH:MM o franja), opcional" },
         },
-        required: ["nombre", "telefono", "fecha", "hora"],
+        required: ["nombre", "telefono"],
       },
     },
   },
@@ -549,11 +536,7 @@ async function ejecutarHerramienta(nombre, input) {
       const elegidas = encontrados.slice(0, 4); // hasta 4 fotos (opciones del modelo)
       return { ok: true, enviadas: elegidas.length, fotos: elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio, moneda: x.moneda })) };
     }
-    if (nombre === "consultar_disponibilidad") {
-      const libres = disponibilidad(input.fecha);
-      return { fecha: input.fecha, franjas_libres: libres, hay_disponibilidad: libres.length > 0 };
-    }
-    if (nombre === "agendar_turno") return agendar(input);
+    if (nombre === "solicitar_turno") return await solicitarTurno(input);
     if (nombre === "tomar_pedido") return registrarPedido(input);
     if (nombre === "derivar_a_humano") return registrarDerivacion(input);
     if (nombre === "link_web") {
