@@ -10,6 +10,7 @@ import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
 import { productos as productosML } from "./catalogo_vivo.js";
+import { leccionesActuales } from "./aprendizaje.js";
 import { crearLinkPago, hayMercadoPago } from "./pagos.js";
 import { resolverPorNombre } from "./ml_stock.js";
 
@@ -370,12 +371,18 @@ ${resumenCatalogo()}
 - No uses ninguna herramienta solo para charlar: respondé con texto normal.`;
 }
 
-// Parte DINÁMICA del prompt (NO se cachea): fecha, hora y saludo del momento.
+// Parte DINÁMICA del prompt (NO se cachea): fecha, hora, saludo del momento y las
+// LECCIONES aprendidas del análisis de conversaciones (aprendizaje.js).
 function systemPromptDinamico() {
   const m = momentoUruguay();
   const op = m.saludos[Math.floor(Math.random() * m.saludos.length)];
-  return `# Momento actual (Uruguay)
+  let base = `# Momento actual (Uruguay)
 - Ahora en Uruguay es ${m.dia}, de ${m.parte} (hora ${m.hora}). Saludá acorde al momento: ahora corresponde "${op}" (de mañana "buenos días/buen día", de tarde "buenas tardes", de noche "buenas noches"). Hoy es ${m.fecha} (formato para agendar: YYYY-MM-DD; usalo para entender "mañana", "el viernes", etc.).`;
+  const lecciones = (leccionesActuales() || "").trim();
+  if (lecciones) {
+    base += `\n\n# Lecciones aprendidas de conversaciones reales (APLICALAS, sin dejar de ser formal y correcto)\n${lecciones}`;
+  }
+  return base;
 }
 
 // Prompt completo (camino compatible-OpenAI: Gemini/Groq/OpenAI, sin caché).

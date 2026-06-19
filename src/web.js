@@ -8,7 +8,8 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { procesarMensaje } from "./handler.js";
 import { saludoInicial } from "./cerebro.js";
-import { reiniciar, historial, agregar } from "./memoria.js";
+import { reiniciar, historial, agregar, cargarConversaciones } from "./memoria.js";
+import { cargarLecciones, programarAprendizaje, analizarAhora, estadoAprendizaje } from "./aprendizaje.js";
 import { sleep, delayEscritura } from "./humano.js";
 import { programarSync, haySyncML, ultimaSync, sincronizar } from "./sync_ml.js";
 import { infoCatalogo, productos } from "./catalogo_vivo.js";
@@ -237,6 +238,18 @@ app.get("/api/catalogo", (_req, res) => {
   res.json({ moneda: "UYU", actualizado: info.actualizado, fuente: info.fuente, cantidad: info.cantidad, productos: productos() });
 });
 
+// ── Aprendizaje de Max: ver qué aprendió y forzar un análisis ──────────────
+// Protegido con el token compartido (NOTIFY_TOKEN) por querystring ?clave=.
+app.get("/api/aprendizaje", (req, res) => {
+  if (String(req.query.clave || "") !== process.env.NOTIFY_TOKEN) return res.status(401).json({ error: "no autorizado" });
+  res.json(estadoAprendizaje());
+});
+
+app.get("/api/aprender-ahora", async (req, res) => {
+  if (String(req.query.clave || "") !== process.env.NOTIFY_TOKEN) return res.status(401).json({ error: "no autorizado" });
+  res.json(await analizarAhora());
+});
+
 // Aviso de venta de la web (Vercel). Autenticado por token compartido.
 app.post("/api/notificar-venta", async (req, res) => {
   const auth = req.headers.authorization || "";
@@ -259,4 +272,8 @@ app.listen(PORT, () => {
   // Sincronización automática del catálogo con la API de Mercado Libre cada 30 min
   // (y además se fuerza una sync inmediata después de cada venta que baja stock).
   programarSync(0.5);
+  // Memoria de conversaciones (Neon) + aprendizaje: cargar lo guardado y programar
+  // el análisis diario con Gemini (gratis).
+  cargarConversaciones();
+  cargarLecciones().then(programarAprendizaje);
 });

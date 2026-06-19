@@ -10,7 +10,7 @@ import { procesarMensaje } from "./handler.js";
 import { NEGOCIO } from "./config.js";
 import { sleep, delayEscritura } from "./humano.js";
 import { registrarSock, enviarTexto, linkWa } from "./notificador.js";
-import { agregar } from "./memoria.js";
+import { agregar, cargarConversaciones } from "./memoria.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
@@ -68,6 +68,7 @@ async function iniciar() {
   sock.ev.on("creds.update", saveCreds);
 
   await cargarEstado(); // conversaciones que ya tomó un asesor (Max no participa)
+  await cargarConversaciones(); // memoria de chats (Neon): contexto que sobrevive a deploys
   let arranqueTs = Math.floor(Date.now() / 1000); // para ignorar mensajes viejos
 
   sock.ev.on("connection.update", (update) => {
