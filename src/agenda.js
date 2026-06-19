@@ -37,14 +37,14 @@ export async function listarTurnos() {
 
 /** Registra una SOLICITUD de turno (estado "pendiente"). NO confirma la hora:
  *  el equipo la confirma. Persiste en Neon. Devuelve {ok, turno} o {ok:false}. */
-export async function solicitarTurno({ nombre, telefono, servicio, vehiculo, fecha, hora }) {
-  if (!nombre || !telefono) {
-    return { ok: false, motivo: "Faltan datos (nombre y teléfono del cliente)." };
-  }
+export async function solicitarTurno({ nombre, telefono, servicio, vehiculo, fecha, hora } = {}) {
+  // Max NO le pide datos al cliente para agendar: pasa el pedido directo al
+  // equipo, que coordina por la misma conversación (el aviso lleva el link).
+  // Por eso nombre/teléfono son opcionales (el equipo los ve en el chat).
   const turno = {
     id: "T" + Date.now().toString(36).toUpperCase(),
-    nombre,
-    telefono,
+    nombre: nombre || "",
+    telefono: telefono || "",
     servicio: servicio || "Colocación / consulta",
     vehiculo: vehiculo || "",
     fecha: fecha || "",

@@ -359,8 +359,7 @@ ${resumenCatalogo()}
 
 # Turnos y citas (REGLA ABSOLUTA: Max NO agenda — la cita la coordina y confirma el EQUIPO)
 - ⛔⛔ VOS NO AGENDÁS NI CONFIRMÁS NADA. No tenés la agenda ni el poder de dar/confirmar una hora. PROHIBIDO decirle al cliente cosas como "su turno quedó confirmado", "lo esperamos a las X", "agendado para el día Y" o asegurarle CUALQUIER día u hora. Si el cliente te pregunta "¿a qué hora voy?" o "¿me confirmás el turno?", la respuesta es que el EQUIPO se lo confirma, NO vos.
-- Para coordinar una cita SIEMPRE DERIVÁS AL EQUIPO. El flujo es: cuando el cliente quiere ir al local (colocar, medir, retirar), juntá con naturalidad nombre, teléfono, qué servicio/producto, vehículo y qué DÍA/HORARIO le vendría bien (su PREFERENCIA, no una confirmación). No insistas si no muestra interés real; primero conversá y asesorá.
-- Con esos datos llamá a "solicitar_turno" (eso le avisa al equipo para que ELLOS coordinen y confirmen) y decile al cliente, en texto y sin emojis, algo como: "Le paso el pedido al equipo y a la brevedad le confirman el día y la hora." NUNCA des por confirmada la cita vos mismo.
+- Para coordinar una cita SIEMPRE DERIVÁS AL EQUIPO. ⛔ NO le pidas NINGÚN dato al cliente para agendar (ni nombre, ni teléfono, ni día/horario): el equipo se encarga de coordinarlo directamente con él. Apenas el cliente muestre que quiere ir al local (colocar, medir, retirar), llamá a "solicitar_turno" en ese mismo turno —pasando solo lo que YA surgió de la charla (servicio/vehículo si los mencionó)— y respondé corto, algo como: "¡Perfecto! Le paso el pedido al equipo y a la brevedad lo coordinan con usted." NUNCA des por confirmada la cita vos mismo ni le hagas más preguntas para esto.
 - ⛔ NO le menciones al cliente el ID interno del turno (ej: "TMQ...", "su turno es el T0001"): ese código es SOLO para el equipo/sistema, al cliente no le sirve y queda poco profesional. Confirmale que tomaste su pedido, sin leerle ningún código.
 - No uses ninguna herramienta solo para charlar: respondé con texto normal.`;
 }
@@ -419,7 +418,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "solicitar_turno",
-      description: "Registra una SOLICITUD de turno para el local y avisa al equipo, que es quien CONFIRMA el día y la hora. Max NO confirma turnos por su cuenta. Llamala cuando el cliente quiere ir al local (colocar, medir, retirar) y ya tenés su nombre y teléfono; pasale también el servicio, el vehículo y el día/horario que PREFIERE (si lo dijo). NO le confirmes una hora al cliente: decile que el equipo se la confirma.",
+      description: "Avisa al EQUIPO que un cliente quiere agendar una visita al local (colocar, medir, retirar). El equipo coordina y confirma día y hora por la misma conversación. ⛔ NO le pidas NINGÚN dato al cliente para esto (ni nombre, ni teléfono, ni día) — llamala apenas el cliente muestre que quiere venir. Pasá solo lo que YA surgió de la charla (servicio/vehículo si los mencionó); todo es opcional. NO confirmes una hora vos: decile que el equipo lo coordina.",
       parameters: {
         type: "object",
         properties: {
@@ -430,7 +429,6 @@ const TOOLS = [
           fecha: { type: "string", description: "Día que PREFIERE el cliente (YYYY-MM-DD si lo sabés), opcional" },
           hora: { type: "string", description: "Horario que PREFIERE el cliente (HH:MM o franja), opcional" },
         },
-        required: ["nombre", "telefono"],
       },
     },
   },
