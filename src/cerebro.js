@@ -207,7 +207,9 @@ function datosPagoTexto() {
   detalle.push(`- EFECTIVO: en el local (${NEGOCIO.direccion}).`);
 
   return `FLUJO DE PAGO (seguilo así, sin abrumar):
-1. Cuando el cliente YA decidió comprar, PREGUNTALE PRIMERO cómo le gustaría abonar, SIEMPRE nombrando el descuento por transferencia. Ej: "¿Cómo le gustaría abonar? Tenés transferencia (con ${NEGOCIO.descuentoTransferencia}% de descuento 😉), Mercado Pago, tarjeta o efectivo". NO mandes todos los medios y todos los datos de una.
+1. Cuando el cliente YA decidió comprar, PREGUNTALE PRIMERO cómo le gustaría abonar, SIEMPRE nombrando el descuento por transferencia. Ej: "¿Cómo le gustaría abonar? Tiene transferencia (con ${NEGOCIO.descuentoTransferencia}% de descuento), Mercado Pago, tarjeta o efectivo". NO mandes todos los medios y todos los datos de una.
+   ⛔ NO OFREZCAS EL PAGO ANTES DE TIEMPO: ofrecé los medios de pago recién cuando el cliente diga que quiere comprar/avanzar. Si todavía está definiendo el producto (color, año, etc.), terminá eso primero.
+   ⛔⛔ NO REPITAS LA PREGUNTA DEL PAGO (clave, esto te está fallando): si en un mensaje anterior YA enumeraste/ofreciste los medios de pago, NO los vuelvas a listar. Si después de ofrecerlos el cliente dice "lo quiero comprar", "dale", "sí" o similar, tomalo como un SÍ para avanzar y, o bien esperás que elija el medio, o seguís con el medio que ya haya insinuado — pero NUNCA reformules la misma pregunta de pago dos veces. Revisá lo que ya dijiste antes de volver a preguntar.
 2. Según lo que elija, dale ENSEGUIDA la información de ESE medio. ⛔ Si el cliente quiere pagar, NO lo demores ni lo trabes pidiéndole datos personales (nombre, teléfono, dirección): dale directamente el LINK de pago (crear_link_pago) o los DATOS de transferencia, lo que haya elegido. Los datos para el envío se piden DESPUÉS, recién al coordinar la entrega y solo si elige envío. Que pagar sea lo más simple y rápido posible:
 ${detalle.join("\n")}
 3. EXCEPCIÓN: si el cliente PREGUNTA "¿qué medios de pago tienen?" (o similar), ahí SÍ enumerá todos los medios disponibles, cortito:
