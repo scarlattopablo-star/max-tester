@@ -49,11 +49,29 @@ export async function cargarLecciones() {
 }
 
 // Llama a Gemini (capa gratuita) y devuelve el texto de la respuesta.
+// Pide el análisis a una IA GRATIS. Prefiere Groq (free tier global, sin
+// restricción de región); si no hay, usa Gemini. Ambos opcionales.
+async function pedirAnalisis(prompt) {
+  if (process.env.GROQ_API_KEY) return pedirAGroq(prompt);
+  if (process.env.GEMINI_API_KEY) return pedirAGemini(prompt);
+  throw new Error("falta una API key gratuita (GROQ_API_KEY o GEMINI_API_KEY) en el entorno; cargala en Render");
+}
+
+async function pedirAGroq(prompt) {
+  const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: JSON.stringify({ model, temperature: 0.4, messages: [{ role: "user", content: prompt }] }),
+  });
+  if (!res.ok) throw new Error(`Groq ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  return (data?.choices?.[0]?.message?.content || "").trim();
+}
+
 async function pedirAGemini(prompt) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("falta GEMINI_API_KEY en el entorno (cargala en Render)");
   const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -98,7 +116,7 @@ export async function analizarAhora() {
   }
 
   try {
-    const lecciones = await pedirAGemini(construirPrompt(convs));
+    const lecciones = await pedirAnalisis(construirPrompt(convs));
     if (!lecciones) throw new Error("Gemini no devolvió lecciones");
     _lecciones = lecciones;
     _ultimoAnalisisMs = hasta.getTime();
