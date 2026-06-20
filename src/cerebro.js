@@ -139,7 +139,11 @@ function client() {
       e.detalle = `Falta la clave ${_proveedor.envKey} en .env (proveedor: ${_proveedor.nombre}).`;
       throw e;
     }
-    _client = new OpenAI({ apiKey: _proveedor.apiKey, baseURL: _proveedor.baseURL });
+    // timeout/maxRetries explícitos: sin esto el SDK espera 10 min por llamada y
+    // reintenta hasta 2 veces (≈30 min). Para un chat eso es "Max no responde":
+    // el cliente queda mudo. Cortamos a ~60s con 1 reintento → si la IA se cuelga,
+    // la excepción sube y cada canal manda su aviso de error en vez de quedar callado.
+    _client = new OpenAI({ apiKey: _proveedor.apiKey, baseURL: _proveedor.baseURL, timeout: 60_000, maxRetries: 1 });
   }
   return _client;
 }
@@ -155,7 +159,9 @@ function anthropicClient() {
       e.detalle = `Falta la clave ${_proveedor.envKey} en .env (proveedor: ${_proveedor.nombre}).`;
       throw e;
     }
-    _anthropic = new Anthropic({ apiKey: _proveedor.apiKey });
+    // Mismo motivo que en client(): cortamos el timeout de 10 min del default.
+    // El SDK de Anthropic usa milisegundos para timeout.
+    _anthropic = new Anthropic({ apiKey: _proveedor.apiKey, timeout: 60_000, maxRetries: 1 });
   }
   return _anthropic;
 }
@@ -587,7 +593,13 @@ function armarRespuesta(texto, acciones) {
     url: f.img,
     caption: f.precio ? `${i + 1}) ${f.nombre} - ${_fmtPrecio(f.precio, f.moneda)}` : `${i + 1}) ${f.nombre}`,
   }));
-  return { texto: (texto || "").trim(), acciones, imagenesEnviar };
+  // Si el modelo no devolvió texto (a veces pasa: termina con solo tool-calls o
+  // una respuesta vacía) y tampoco hay fotos para mandar, no dejamos a Max mudo:
+  // damos el fallback. Sin esto, web.js hace `if(data.texto)` y no muestra nada,
+  // y WhatsApp intentaría enviar un mensaje vacío.
+  const limpio = (texto || "").trim();
+  const textoFinal = limpio || (imagenesEnviar.length ? "" : RESPUESTA_FALLBACK);
+  return { texto: textoFinal, acciones, imagenesEnviar };
 }
 
 // ─────────────────────────────────────────────────────────────────────
