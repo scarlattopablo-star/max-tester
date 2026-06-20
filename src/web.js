@@ -276,4 +276,22 @@ app.listen(PORT, () => {
   // el análisis diario con Gemini (gratis).
   cargarConversaciones();
   cargarLecciones().then(programarAprendizaje);
+  // KEEP-ALIVE: Render plan Free duerme el servicio tras 15 min sin tráfico, y al
+  // dormirse se DESCONECTA WhatsApp (Max deja de contestar). Nos auto-pingueamos
+  // cada 10 min para mantenerlo despierto 24/7. Solo si hay URL pública (APP_URL):
+  // en local no hace falta. Tolerante a fallos (no debe tirar el server).
+  const urlPublica = (process.env.APP_URL || "").trim().replace(/\/$/, "");
+  if (urlPublica) {
+    const pingear = async () => {
+      try {
+        const r = await fetch(`${urlPublica}/api/estado`, { signal: AbortSignal.timeout(20_000) });
+        console.log(`💓 keep-alive ${urlPublica} → ${r.status}`);
+      } catch (e) {
+        console.log(`💓 keep-alive falló: ${e.message}`);
+      }
+    };
+    setInterval(pingear, 10 * 60 * 1000); // cada 10 min (< 15 min de Render Free)
+    setTimeout(pingear, 30_000); // primer ping a los 30s de arrancar
+    console.log(`💓 keep-alive activo contra ${urlPublica} (evita que Render duerma el bot)`);
+  }
 });
