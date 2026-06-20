@@ -103,8 +103,9 @@ async function iniciar() {
   const procesando = new Set(); // jids que están generando respuesta ahora
 
   // ── Handoff humano por conversación ───────────────────────────────
-  // Apenas un asesor escribe en una conversación desde el teléfono del bot, se
-  // hace cargo de ella y Max NO vuelve a participar (permanente, ver previas.js).
+  // Apenas un asesor escribe en una conversación desde el teléfono del bot, Max se
+  // PAUSA en ese chat. La pausa NO es permanente: vence a las 3 h del último mensaje
+  // del asesor y Max retoma solo si el cliente vuelve a escribir (ver previas.js).
   const enviadosPorMax = new Set(); // IDs de mensajes que mandó Max (para distinguirlos del humano)
   const idsVistos = new Set(); // IDs de mensajes ya procesados (anti-duplicados al reconectar)
   const pedidosAvisados = new Set(); // ids de pedido ya avisados al equipo (no duplicar)
