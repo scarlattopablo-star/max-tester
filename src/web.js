@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { procesarMensaje } from "./handler.js";
 import { saludoInicial } from "./cerebro.js";
-import { reiniciar, historial, agregar, cargarConversaciones } from "./memoria.js";
+import { reiniciar, historial, agregar, cargarConversaciones, ultimasConversaciones } from "./memoria.js";
 import { cargarLecciones, programarAprendizaje, analizarAhora, estadoAprendizaje } from "./aprendizaje.js";
 import { sleep, delayEscritura } from "./humano.js";
 import { programarSync, haySyncML, ultimaSync, sincronizar } from "./sync_ml.js";
@@ -127,6 +127,58 @@ function qrAutorizado(req) {
   const token = process.env.NOTIFY_TOKEN;
   return token && String(req.query.clave || "") === token;
 }
+
+// ── Ver las últimas conversaciones de Max (para analizar cómo conversó) ──
+// Protegido con ?clave=<NOTIFY_TOKEN>, igual que el QR. Limpia el contexto interno
+// (lo que va después del separador invisible ⁣) que el cliente nunca ve.
+function limpiarMensajes(mensajes) {
+  return (mensajes || []).map((m) => ({
+    role: m.role,
+    content: String(m.content || "").split("⁣")[0].trim(),
+  })).filter((m) => m.content);
+}
+
+app.get("/api/conversaciones", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const n = Math.min(Math.max(parseInt(req.query.n) || 20, 1), 100);
+  const convs = await ultimasConversaciones(n);
+  res.json({ cantidad: convs.length, conversaciones: convs.map((c) => ({ chatId: c.chatId, actualizado: c.actualizado, mensajes: limpiarMensajes(c.mensajes) })) });
+});
+
+// Página legible (móvil) para LEER las últimas charlas desde el celular.
+app.get("/conversaciones", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).send("No autorizado. Agregá ?clave=TU_NOTIFY_TOKEN al final del link.");
+  const n = Math.min(Math.max(parseInt(req.query.n) || 20, 1), 100);
+  const convs = await ultimasConversaciones(n);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const fmtFecha = (f) => f ? new Date(f).toLocaleString("es-UY", { timeZone: "America/Montevideo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+  const idCorto = (id) => esc(String(id).split(/[:@]/)[0]);
+  const bloques = convs.map((c) => {
+    const msgs = limpiarMensajes(c.mensajes).map((m) => {
+      const esMax = m.role === "assistant";
+      return `<div class="msg ${esMax ? "bot" : "cli"}"><b>${esMax ? "Max" : "Cliente"}:</b> ${esc(m.content)}</div>`;
+    }).join("");
+    return `<div class="conv"><div class="head">📱 ${idCorto(c.chatId)} <span class="fecha">${esc(fmtFecha(c.actualizado))}</span></div>${msgs || '<div class="msg">(sin mensajes)</div>'}</div>`;
+  }).join("");
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversaciones de Max</title>
+<style>
+  body{font-family:system-ui,Segoe UI,sans-serif;background:#0d0d10;color:#e8e8ea;margin:0;padding:12px;}
+  h1{font-size:18px;margin:6px 4px 14px;}
+  .conv{background:#16161b;border:1px solid #26262e;border-radius:12px;padding:10px;margin-bottom:14px;}
+  .head{font-size:13px;color:#9aa;border-bottom:1px solid #26262e;padding-bottom:6px;margin-bottom:8px;display:flex;justify-content:space-between;}
+  .fecha{color:#667;}
+  .msg{padding:6px 10px;border-radius:10px;margin:5px 0;font-size:15px;line-height:1.35;max-width:90%;}
+  .cli{background:#222630;align-self:flex-start;}
+  .bot{background:#143a2a;margin-left:auto;}
+  .msg b{color:#8fb;font-weight:600;}
+  .cli b{color:#9bd;}
+</style></head><body>
+<h1>Últimas ${convs.length} conversaciones de Max</h1>
+${bloques || "<p>No hay conversaciones todavía.</p>"}
+</body></html>`);
+});
 
 app.get("/api/qr", (req, res) => {
   if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
