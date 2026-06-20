@@ -80,6 +80,23 @@ function persistir(chatId, mensajes) {
   }
 }
 
+/** Las últimas N conversaciones (más recientes primero), para revisar cómo conversó Max.
+ *  Devuelve [{chatId, mensajes, actualizado}]. Con DATABASE_URL ordena por fecha;
+ *  sin base (simulador) devuelve lo que haya en memoria. */
+export async function ultimasConversaciones(n = 20) {
+  if (!usaDB) {
+    return [...cache.entries()].slice(-n).reverse().map(([chatId, mensajes]) => ({ chatId, mensajes, actualizado: null }));
+  }
+  try {
+    const rows = await sql`select chat_id, mensajes, actualizado from conversaciones
+      order by actualizado desc limit ${n}`;
+    return rows.map((r) => ({ chatId: r.chat_id, mensajes: Array.isArray(r.mensajes) ? r.mensajes : [], actualizado: r.actualizado }));
+  } catch (e) {
+    console.log("⚠ no pude leer las últimas conversaciones:", e.message);
+    return [];
+  }
+}
+
 /** Conversaciones cuya última actividad cae en un rango (para el análisis nocturno).
  *  Devuelve [{chatId, mensajes, actualizado}]. Solo con DATABASE_URL. */
 export async function conversacionesEntre(desdeISO, hastaISO) {
