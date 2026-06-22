@@ -54,7 +54,11 @@ export const CUBREASIENTOS = {
     precioHasta: 6800,
     soloVenta: true,
     colocacion: false,
-    descripcion: "", // el económico NO necesita descripción extra
+    // El eco cuero económico NO tiene variación de color de material: es SIEMPRE
+    // cuero ecológico NEGRO. Lo único que varía es el color del PESPUNTE (costura).
+    colorUnico: "Cuero ecológico negro",
+    pespuntes: ["Rojo", "Azul", "Gris"],
+    descripcion: "", // el económico NO necesita descripción extra del material
   },
   // Línea PREMIUM: capitoneado. SÍ se coloca (costo a consultar con vendedor).
   capitoneado: {
