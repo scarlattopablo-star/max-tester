@@ -20,6 +20,7 @@ import { urlAutorizacion, conectarConCode, hayUsuarioML, infoUsuarioML } from ".
 import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
 import { estadoQR } from "./qr_estado.js";
+import { resumenMensajes } from "./metricas.js";
 import QRCode from "qrcode";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -85,6 +86,17 @@ app.post("/api/reset", (req, res) => {
 app.get("/api/estado", async (_req, res) => {
   const ia = proveedorIA();
   res.json({ catalogo: infoCatalogo(), syncML: haySyncML(), ultimaSync: ultimaSync(), mlUsuario: await hayUsuarioML(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model } });
+});
+
+// Cuántos mensajes respondió Max y a cuántas conversaciones atendió (hoy/7/30 días).
+// Privado: token compartido por header Bearer o ?clave= (mismo NOTIFY_TOKEN).
+app.get("/api/metricas", async (req, res) => {
+  const token = process.env.NOTIFY_TOKEN;
+  const auth = req.headers.authorization || "";
+  const clave = String(req.query.clave || "");
+  if (!token || (auth !== `Bearer ${token}` && clave !== token))
+    return res.status(401).json({ error: "no autorizado" });
+  res.json(await resumenMensajes());
 });
 
 // ── Autorización de la cuenta de ML (un clic de Pablo, logueado como EVERBOX) ──

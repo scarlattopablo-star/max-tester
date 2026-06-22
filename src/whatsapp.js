@@ -11,6 +11,7 @@ import { NEGOCIO } from "./config.js";
 import { sleep, delayEscritura } from "./humano.js";
 import { registrarSock, enviarTexto, linkWa } from "./notificador.js";
 import { agregar, cargarConversaciones } from "./memoria.js";
+import { registrarMensajeMax } from "./metricas.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
@@ -159,6 +160,7 @@ async function iniciar() {
       await sleep(delayEscritura(respuesta));
       await sock.sendPresenceUpdate("paused", jid);
       marcarEnviado(await sock.sendMessage(jid, { text: respuesta }));
+      registrarMensajeMax(jid); // métrica: Max respondió a este cliente
       // Si Max decidió mandar fotos, las enviamos de a UNA, con una pequeña espera
       // entre cada una (mostrando "escribiendo…") para que se sienta humano.
       for (const f of imagenesEnviar) {
@@ -355,6 +357,7 @@ async function iniciar() {
             await sleep(900);
             await sock.sendPresenceUpdate("paused", jid);
             marcarEnviado(await sock.sendMessage(jid, { text: aviso }));
+            registrarMensajeMax(jid); // métrica: Max respondió (al audio)
             agregar(jid, "user", "[el cliente mandó un audio]");
             agregar(jid, "assistant", aviso);
             console.log(`🎤 ${jid}: audio → le pedí que lo escriba`);
