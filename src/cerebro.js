@@ -522,7 +522,9 @@ const TOOLS = [
   },
 ];
 
-async function ejecutarHerramienta(nombre, input) {
+// ctx: { chatId, contacto } de la conversación actual. Lo usa crear_link_pago para
+// recordar de qué charla/cliente vino la venta (y avisar al equipo con ese dato).
+async function ejecutarHerramienta(nombre, input, ctx = {}) {
   try {
     if (nombre === "mostrar_capitoneado") {
       const m = CUBREASIENTOS.capitoneado.muestras || {};
@@ -543,7 +545,7 @@ async function ejecutarHerramienta(nombre, input) {
       let items;
       const idML = resolverPorNombre(input.producto_catalogo);
       if (idML) items = [{ id: idML, qty: Math.max(1, Math.round(Number(input.cantidad) || 1)) }];
-      const r = await crearLinkPago({ titulo: input.titulo, monto: input.monto, items });
+      const r = await crearLinkPago({ titulo: input.titulo, monto: input.monto, items, chatId: ctx.chatId, contacto: ctx.contacto });
       if (!r.ok) return { ok: false, mensaje: `No pude generar el link (${r.motivo}). Decile al cliente que enseguida un compañero le envía el link de pago y derivá con derivar_a_humano.` };
       return { ok: true, link: r.link, monto: r.monto, instruccion: "Pasale este link al cliente para que pague directo. Es por el monto exacto de su compra." };
     }
@@ -614,7 +616,7 @@ function _imagenAnthropic(url) {
   return { type: "image", source: { type: "url", url } };
 }
 
-async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes = []) {
+async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes = [], ctx = {}) {
   const cli = anthropicClient();
   const system = [
     { type: "text", text: systemPromptEstatico(), cache_control: { type: "ephemeral" } },
@@ -660,7 +662,7 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
       const resultados = [];
       for (const tu of toolUses) {
         const input = tu.input || {};
-        const resultado = await ejecutarHerramienta(tu.name, input);
+        const resultado = await ejecutarHerramienta(tu.name, input, ctx);
         acciones.push({ herramienta: tu.name, input, resultado });
         resultados.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(resultado) });
       }
@@ -677,10 +679,10 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
 // historialPrevio: array de {role:'user'|'assistant', content:string}
 // Devuelve { texto, acciones:[{herramienta, input, resultado}], imagenesEnviar }
 // imagenes: array de URLs o data-URIs (base64) que el cliente mandó. El modelo las "ve".
-export async function responder(textoUsuario, historialPrevio = [], imagenes = []) {
+export async function responder(textoUsuario, historialPrevio = [], imagenes = [], ctx = {}) {
   // Proveedor "claude" -> SDK nativo con caché de prompt (mucho más barato que el modo compat).
   if ((process.env.IA_PROVIDER || "gemini").toLowerCase() === "claude") {
-    return responderAnthropic(textoUsuario, historialPrevio, imagenes);
+    return responderAnthropic(textoUsuario, historialPrevio, imagenes, ctx);
   }
 
   let userContent = textoUsuario;
@@ -714,7 +716,7 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
       for (const tc of msg.tool_calls) {
         let args = {};
         try { args = JSON.parse(tc.function.arguments || "{}"); } catch {}
-        const resultado = await ejecutarHerramienta(tc.function.name, args);
+        const resultado = await ejecutarHerramienta(tc.function.name, args, ctx);
         acciones.push({ herramienta: tc.function.name, input: args, resultado });
         messages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(resultado) });
       }

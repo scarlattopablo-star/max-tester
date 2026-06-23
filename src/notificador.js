@@ -35,7 +35,10 @@ export function formatearAviso(p) {
   const lineaLink = link ? `\n💬 Entrá a la conversación: ${link}` : "";
   // Venta cerrada por Max con su propio link de pago (la dispara el watcher de pagos).
   if (p.origen === "max") {
-    return `💰 VENTA POR LINK DE PAGO DE MAX (Mercado Pago acreditado)\n${p.titulo || "Venta"}\nTotal: ${fmt(p.monto || 0)}\nRef: ${p.ref || "?"}${lineaLink}`;
+    const nombre = p.cliente?.nombre || p.nombre || "";
+    const datosCliente = [nombre, tel].filter(Boolean).join(" · ");
+    const lineaCliente = datosCliente ? `\n👤 ${datosCliente}` : "";
+    return `💰 VENTA POR LINK DE PAGO DE MAX (Mercado Pago acreditado)\n${p.titulo || "Venta"}\nTotal: ${fmt(p.monto || 0)}\nRef: ${p.ref || "?"}${lineaCliente}${lineaLink}`;
   }
   const titulo = p.medio === "transferencia"
     ? "🏦 PEDIDO POR TRANSFERENCIA (esperando comprobante)"
@@ -56,14 +59,44 @@ export function formatearAviso(p) {
   return msg;
 }
 
+// "59891629784@s.whatsapp.net" -> "59891629784". Solo para JIDs de teléfono reales:
+// los @lid (nuevo direccionamiento de WhatsApp) NO son un número, así que se ignoran.
+function telDeJid(jid) {
+  const s = String(jid || "");
+  if (!s.includes("@s.whatsapp.net")) return "";
+  return s.split("@")[0];
+}
+
+// Ventas cerradas por un LINK DE PAGO de Max: al crear el link guardamos de qué
+// CONVERSACIÓN y CLIENTE vino. Acá lo recuperamos (por la ref) para que el aviso
+// lleve el link a la charla y el nombre/teléfono. Sin esto, el asesor recibe el
+// aviso pero NO puede entrar al chat ni ver quién compró.
+async function enriquecerVentaMax(pedido) {
+  if (!pedido || pedido.origen !== "max" || !pedido.ref) return pedido;
+  if (pedido.cliente?.telefono) return pedido; // ya viene con los datos del cliente
+  try {
+    const { datosLinkMax } = await import("./ml_stock.js");
+    const datos = await datosLinkMax(pedido.ref);
+    if (!datos) return pedido;
+    const tel = datos.contacto?.tel || telDeJid(datos.chatId);
+    const nombre = datos.contacto?.nombre || "";
+    if (!tel && !nombre) return pedido;
+    return { ...pedido, cliente: { ...(pedido.cliente || {}), nombre: pedido.cliente?.nombre || nombre, telefono: pedido.cliente?.telefono || tel } };
+  } catch (e) {
+    console.error("⚠ No pude recuperar la conversación de la venta de Max:", e.message);
+    return pedido;
+  }
+}
+
 export async function enviarAviso(pedido) {
   if (!sockActivo) {
     const e = new Error("whatsapp_desconectado");
     e.whatsapp = false;
     throw e;
   }
+  const p = await enriquecerVentaMax(pedido);
   const jid = numeroAJid(process.env.NUMERO_AVISOS || "091629784");
-  const sent = await sockActivo.sendMessage(jid, { text: formatearAviso(pedido) });
+  const sent = await sockActivo.sendMessage(jid, { text: formatearAviso(p) });
   alEnviar?.(sent);
 }
 

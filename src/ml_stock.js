@@ -28,16 +28,47 @@ async function prepararTablas() {
   await sql`create table if not exists max_links (
     ref text primary key,
     items jsonb,
+    chat_id text,
+    contacto jsonb,
     created_at timestamptz default now()
   )`;
+  // Columnas agregadas después (para tablas viejas que no las tenían). No rompe si ya existen.
+  await sql`alter table max_links add column if not exists chat_id text`;
+  await sql`alter table max_links add column if not exists contacto jsonb`;
 }
 
-/** Guarda qué producto(s) vende un link de pago de Max (ref = external_reference). */
-export async function guardarLinkMax(ref, items) {
-  if (!ref || !Array.isArray(items) || !items.length) return;
+/**
+ * Guarda a qué CONVERSACIÓN y producto(s) corresponde un link de pago de Max
+ * (ref = external_reference). Se guarda SIEMPRE que haya ref, aunque no se haya
+ * identificado el producto del catálogo: así, cuando el pago se acredite, el aviso
+ * al equipo puede incluir el LINK A LA CONVERSACIÓN y los DATOS del cliente, y los
+ * asesores pueden entrar al chat y ver quién compró.
+ * datos: { items?: [{id, qty}], chatId?: string, contacto?: {nombre, tel} }
+ */
+export async function guardarLinkMax(ref, datos = {}) {
+  if (!ref) return;
+  // Compatibilidad: si llega un array directo, son los items (firma vieja).
+  const { items, chatId, contacto } = Array.isArray(datos) ? { items: datos } : datos;
   await prepararTablas();
-  await sql`insert into max_links (ref, items) values (${ref}, ${JSON.stringify(items)}::jsonb)
+  const itemsJson = Array.isArray(items) && items.length ? JSON.stringify(items) : null;
+  const contactoJson = contacto && (contacto.nombre || contacto.tel) ? JSON.stringify(contacto) : null;
+  await sql`insert into max_links (ref, items, chat_id, contacto)
+    values (${ref}, ${itemsJson}::jsonb, ${chatId || null}, ${contactoJson}::jsonb)
     on conflict (ref) do nothing`;
+}
+
+/** Recupera la conversación y el cliente asociados a un link de pago de Max. */
+export async function datosLinkMax(ref) {
+  if (!ref) return null;
+  try {
+    await prepararTablas();
+    const rows = await sql`select items, chat_id, contacto from max_links where ref = ${ref}`;
+    if (!rows.length) return null;
+    return { items: rows[0].items || [], chatId: rows[0].chat_id || "", contacto: rows[0].contacto || {} };
+  } catch (e) {
+    console.error("⚠ No pude leer el link de Max:", e.message);
+    return null;
+  }
 }
 
 /** Busca en el catálogo vivo un producto por su NOMBRE EXACTO y devuelve el id de ML (del permalink). */

@@ -147,9 +147,12 @@ async function iniciar() {
     b.textos = [];
     b.imagenes = [];
     procesando.add(jid);
+    // Nombre y teléfono del cliente capturados del mensaje: se usan para los avisos
+    // al equipo (link a la conversación) y para recordar de quién es un link de pago.
+    const contacto = contactoCliente.get(jid) || {};
     try {
       await sock.sendPresenceUpdate("composing", jid);
-      const { texto: respuesta, acciones, imagenesEnviar = [] } = await procesarMensaje({ chatId: jid, texto, canal: "whatsapp", imagenes });
+      const { texto: respuesta, acciones, imagenesEnviar = [] } = await procesarMensaje({ chatId: jid, texto, canal: "whatsapp", imagenes, contacto });
       // Si el cliente escribió MÁS mientras Max pensaba, no mandamos esta respuesta:
       // reprocesamos para considerar también esos mensajes nuevos.
       if (b.textos.length || b.imagenes.length) {
@@ -174,8 +177,7 @@ async function iniciar() {
       console.log(`📤 ${jid}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
       for (const a of acciones) console.log(`   ⚙ ${a.herramienta} → ${JSON.stringify(a.resultado)}`);
       // Link a la conversación del cliente para que el asesor entre directo.
-      // Mejor teléfono disponible: el capturado del mensaje, o el que pasó la herramienta.
-      const contacto = contactoCliente.get(jid) || {};
+      // Mejor teléfono disponible: el capturado del mensaje (contacto), o el que pasó la herramienta.
       const linkBase = (telExtra) =>
         linkWa(contacto.tel || telExtra)
           ? `👉 ${linkWa(contacto.tel || telExtra)}`

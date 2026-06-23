@@ -7,7 +7,7 @@ import { respuestaInstagram } from "./instagram.js";
 // canal: 'whatsapp' | 'simulador' | 'instagram' | 'web'
 // imagenes: array de URLs/data-URIs que mandó el cliente (opcional)
 // Devuelve { texto, acciones }
-export async function procesarMensaje({ chatId, texto, canal = "whatsapp", imagenes = [] }) {
+export async function procesarMensaje({ chatId, texto, canal = "whatsapp", imagenes = [], contacto = {} }) {
   if (canal === "instagram") {
     const previos = historial(chatId).filter((m) => m.role === "user").length;
     agregar(chatId, "user", texto || "(foto)");
@@ -18,7 +18,10 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
 
   // WhatsApp / simulador / web: agente completo con IA.
   const previo = historial(chatId);
-  const { texto: respuesta, acciones, imagenesEnviar = [] } = await responder(texto, previo, imagenes);
+  // Contexto de la conversación para las herramientas (ej: crear_link_pago guarda
+  // de qué charla/cliente vino la venta para avisar al equipo con ese dato).
+  const ctx = { chatId, contacto };
+  const { texto: respuesta, acciones, imagenesEnviar = [] } = await responder(texto, previo, imagenes, ctx);
   // En la memoria guardamos solo texto (no el base64 de la imagen, que es pesado).
   const marca = imagenes && imagenes.length ? (texto ? texto + " [+foto]" : "[el cliente mandó una foto]") : texto;
   agregar(chatId, "user", marca);
