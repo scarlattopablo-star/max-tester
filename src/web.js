@@ -8,14 +8,14 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { procesarMensaje } from "./handler.js";
 import { saludoInicial } from "./cerebro.js";
-import { reiniciar, historial, agregar, cargarConversaciones, ultimasConversaciones } from "./memoria.js";
+import { reiniciar, historial, agregar, cargarConversaciones, ultimasConversaciones, conversacionesEntre } from "./memoria.js";
 import { cargarLecciones, programarAprendizaje, analizarAhora, estadoAprendizaje } from "./aprendizaje.js";
 import { sleep, delayEscritura } from "./humano.js";
 import { programarSync, haySyncML, ultimaSync, sincronizar } from "./sync_ml.js";
 import { infoCatalogo, productos } from "./catalogo_vivo.js";
 import { hayMercadoPago } from "./pagos.js";
 import { proveedorIA } from "./config.js";
-import { enviarAviso, hayWhatsApp } from "./notificador.js";
+import { enviarAviso, enviarTexto, hayWhatsApp, linkWa } from "./notificador.js";
 import { urlAutorizacion, conectarConCode, hayUsuarioML, infoUsuarioML } from "./ml_user.js";
 import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
@@ -190,6 +190,97 @@ app.get("/conversaciones", async (req, res) => {
 <h1>Últimas ${convs.length} conversaciones de Max</h1>
 ${bloques || "<p>No hay conversaciones todavía.</p>"}
 </body></html>`);
+});
+
+// ── RECUPERAR VENTAS POR LINK DE PAGO (de un día que quedó sin avisar bien) ──
+// Busca las conversaciones recientes donde MAX MANDÓ UN LINK DE PAGO y le reenvía
+// al equipo, por cada una, el LINK A LA CONVERSACIÓN del cliente (wa.me) + un
+// resumen de la charla, para que los asesores puedan entrar al chat y seguir la
+// venta. Pensado para arreglar a mano las ventas que quedaron sin el dato del
+// cliente (antes de guardar la conversación junto al link).
+//
+//   Previsualizar (NO manda nada):  /api/recuperar-ventas?clave=NOTIFY_TOKEN
+//   Reenviar de verdad al equipo:   /api/recuperar-ventas?clave=NOTIFY_TOKEN&enviar=1
+//   Cambiar la ventana de tiempo:   ...&horas=24   (por defecto, las últimas 24 h)
+//
+// Detecta el link de Mercado Pago en lo que escribió Max. El teléfono sale del
+// chat_id (en WhatsApp es el número); para chats @lid (sin número) se indica que
+// busquen la conversación en el WhatsApp del negocio.
+const RE_LINK_PAGO = /(https?:\/\/[^\s]*(?:mercadopago|mpago|mp\.la)[^\s]*)/i;
+
+function telDeChatId(chatId) {
+  const s = String(chatId || "");
+  if (!s.includes("@s.whatsapp.net")) return ""; // @lid u otros: no es un teléfono real
+  return s.split("@")[0];
+}
+
+app.get("/api/recuperar-ventas", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const enviar = String(req.query.enviar || "") === "1";
+  const horas = Math.min(Math.max(parseInt(req.query.horas) || 24, 1), 240);
+  const hasta = new Date();
+  const desde = new Date(hasta.getTime() - horas * 3600 * 1000);
+  const fmtFecha = (f) => f ? new Date(f).toLocaleString("es-UY", { timeZone: "America/Montevideo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+
+  const convs = await conversacionesEntre(desde.toISOString(), hasta.toISOString());
+  // Solo las charlas donde MAX (assistant) mandó un link de pago.
+  const ventas = [];
+  for (const c of convs) {
+    const msgs = limpiarMensajes(c.mensajes);
+    const conLink = msgs.find((m) => m.role === "assistant" && RE_LINK_PAGO.test(m.content));
+    if (!conLink) continue;
+    const link = (conLink.content.match(RE_LINK_PAGO) || [])[1] || "";
+    const tel = telDeChatId(c.chatId);
+    ventas.push({
+      chatId: c.chatId,
+      telefono: tel,
+      conversacion: linkWa(tel) || null,
+      linkPago: link,
+      actualizado: c.actualizado,
+      ultimos: msgs.slice(-8),
+    });
+  }
+
+  if (!enviar) {
+    return res.json({
+      modo: "previsualizacion",
+      aviso: "Agregá &enviar=1 para reenviarle estos datos al equipo por WhatsApp.",
+      ventana: { desde: desde.toISOString(), hasta: hasta.toISOString() },
+      encontradas: ventas.length,
+      ventas,
+    });
+  }
+
+  if (!hayWhatsApp()) return res.status(503).json({ ok: false, motivo: "WhatsApp no está conectado en el servidor." });
+  if (!ventas.length) return res.json({ ok: true, enviadas: 0, mensaje: "No encontré ventas con link de pago en la ventana indicada." });
+
+  let enviadas = 0;
+  try {
+    await enviarTexto(`🔁 RECUPERACIÓN DE VENTAS — encontré ${ventas.length} charla(s) de las últimas ${horas} h donde Max mandó un link de pago. Te paso, de cada una, el cliente y el chat para que verifiquen el pago y la sigan:`);
+    for (const v of ventas) {
+      const linkConv = v.conversacion ? `👉 ${v.conversacion}` : "Buscá la conversación en el WhatsApp del negocio (no quedó el número).";
+      const charla = v.ultimos
+        .map((m) => `${m.role === "assistant" ? "Max" : "Cliente"}: ${m.content}`)
+        .join("\n")
+        .slice(0, 1200);
+      const texto = [
+        "🛒 VENTA POR LINK DE PAGO (recuperada)",
+        `👤 Cliente: ${v.telefono || "(sin número)"}`,
+        `💬 Entrá a la conversación: ${linkConv}`,
+        v.linkPago ? `🔗 Link de pago que se le envió: ${v.linkPago}` : "",
+        v.actualizado ? `🕗 Última actividad: ${fmtFecha(v.actualizado)}` : "",
+        "———",
+        charla,
+      ].filter(Boolean).join("\n");
+      await enviarTexto(texto);
+      enviadas++;
+      await sleep(800); // pequeño respiro entre avisos
+    }
+  } catch (e) {
+    console.error("Recuperar ventas falló:", e.message);
+    return res.status(503).json({ ok: false, enviadas, motivo: String(e.message || e) });
+  }
+  res.json({ ok: true, enviadas, deTotal: ventas.length });
 });
 
 app.get("/api/qr", (req, res) => {
