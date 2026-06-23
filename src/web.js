@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { procesarMensaje } from "./handler.js";
 import { saludoInicial } from "./cerebro.js";
-import { reiniciar, historial, agregar, cargarConversaciones, ultimasConversaciones, conversacionesEntre } from "./memoria.js";
+import { reiniciar, historial, agregar, cargarConversaciones, ultimasConversaciones, conversacionesEntre, reclamarTareaUnica } from "./memoria.js";
 import { cargarLecciones, programarAprendizaje, analizarAhora, estadoAprendizaje } from "./aprendizaje.js";
 import { sleep, delayEscritura } from "./humano.js";
 import { programarSync, haySyncML, ultimaSync, sincronizar } from "./sync_ml.js";
@@ -207,6 +207,7 @@ ${bloques || "<p>No hay conversaciones todavía.</p>"}
 // chat_id (en WhatsApp es el número); para chats @lid (sin número) se indica que
 // busquen la conversación en el WhatsApp del negocio.
 const RE_LINK_PAGO = /(https?:\/\/[^\s]*(?:mercadopago|mpago|mp\.la)[^\s]*)/i;
+const MAX_RECUPERAR = 50; // tope sano de avisos a reenviar de una
 
 function telDeChatId(chatId) {
   const s = String(chatId || "");
@@ -214,16 +215,14 @@ function telDeChatId(chatId) {
   return s.split("@")[0];
 }
 
-app.get("/api/recuperar-ventas", async (req, res) => {
-  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
-  const enviar = String(req.query.enviar || "") === "1";
-  const horas = Math.min(Math.max(parseInt(req.query.horas) || 24, 1), 240);
+const fmtFechaUY = (f) => f ? new Date(f).toLocaleString("es-UY", { timeZone: "America/Montevideo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+
+// Busca en las últimas `horas` las charlas donde MAX mandó un link de pago de
+// Mercado Pago. Devuelve los datos que el equipo necesita para seguir la venta.
+async function buscarVentasConLink(horas) {
   const hasta = new Date();
   const desde = new Date(hasta.getTime() - horas * 3600 * 1000);
-  const fmtFecha = (f) => f ? new Date(f).toLocaleString("es-UY", { timeZone: "America/Montevideo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-
   const convs = await conversacionesEntre(desde.toISOString(), hasta.toISOString());
-  // Solo las charlas donde MAX (assistant) mandó un link de pago.
   const ventas = [];
   for (const c of convs) {
     const msgs = limpiarMensajes(c.mensajes);
@@ -240,6 +239,52 @@ app.get("/api/recuperar-ventas", async (req, res) => {
       ultimos: msgs.slice(-8),
     });
   }
+  return { ventas: ventas.slice(0, MAX_RECUPERAR), desde, hasta };
+}
+
+// Reenvía al WhatsApp del negocio (NUMERO_AVISOS, donde Max siempre avisa) una
+// notificación por cada venta, con el cliente, el link a la conversación y un
+// resumen de la charla. Devuelve cuántas mandó.
+async function reenviarVentas(ventas, horas) {
+  if (!ventas.length) return 0;
+  let enviadas = 0;
+  await enviarTexto(`🔁 RECUPERACIÓN DE VENTAS — encontré ${ventas.length} charla(s) de las últimas ${horas} h donde Max mandó un link de pago. Te paso, de cada una, el cliente y el chat para que verifiquen el pago y la sigan:`);
+  for (const v of ventas) {
+    const linkConv = v.conversacion ? `👉 ${v.conversacion}` : "Buscá la conversación en el WhatsApp del negocio (no quedó el número).";
+    const charla = v.ultimos
+      .map((m) => `${m.role === "assistant" ? "Max" : "Cliente"}: ${m.content}`)
+      .join("\n")
+      .slice(0, 1200);
+    const texto = [
+      "🛒 VENTA POR LINK DE PAGO (recuperada)",
+      `👤 Cliente: ${v.telefono || "(sin número)"}`,
+      `💬 Entrá a la conversación: ${linkConv}`,
+      v.linkPago ? `🔗 Link de pago que se le envió: ${v.linkPago}` : "",
+      v.actualizado ? `🕗 Última actividad: ${fmtFechaUY(v.actualizado)}` : "",
+      "———",
+      charla,
+    ].filter(Boolean).join("\n");
+    await enviarTexto(texto);
+    enviadas++;
+    await sleep(800); // pequeño respiro entre avisos
+  }
+  return enviadas;
+}
+
+// ── RECUPERAR VENTAS POR LINK DE PAGO (de un día que quedó sin avisar bien) ──
+// Le reenvía al WhatsApp del negocio, por cada charla donde Max mandó un link de
+// pago, el LINK A LA CONVERSACIÓN del cliente (wa.me) + un resumen, para que los
+// asesores entren al chat y sigan la venta. Sirve para arreglar a mano las ventas
+// que quedaron sin el dato del cliente.
+//
+//   Previsualizar (NO manda nada):  /api/recuperar-ventas?clave=NOTIFY_TOKEN
+//   Reenviar de verdad al equipo:   /api/recuperar-ventas?clave=NOTIFY_TOKEN&enviar=1
+//   Cambiar la ventana de tiempo:   ...&horas=24   (por defecto, las últimas 24 h)
+app.get("/api/recuperar-ventas", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const enviar = String(req.query.enviar || "") === "1";
+  const horas = Math.min(Math.max(parseInt(req.query.horas) || 24, 1), 240);
+  const { ventas, desde, hasta } = await buscarVentasConLink(horas);
 
   if (!enviar) {
     return res.json({
@@ -254,34 +299,48 @@ app.get("/api/recuperar-ventas", async (req, res) => {
   if (!hayWhatsApp()) return res.status(503).json({ ok: false, motivo: "WhatsApp no está conectado en el servidor." });
   if (!ventas.length) return res.json({ ok: true, enviadas: 0, mensaje: "No encontré ventas con link de pago en la ventana indicada." });
 
-  let enviadas = 0;
   try {
-    await enviarTexto(`🔁 RECUPERACIÓN DE VENTAS — encontré ${ventas.length} charla(s) de las últimas ${horas} h donde Max mandó un link de pago. Te paso, de cada una, el cliente y el chat para que verifiquen el pago y la sigan:`);
-    for (const v of ventas) {
-      const linkConv = v.conversacion ? `👉 ${v.conversacion}` : "Buscá la conversación en el WhatsApp del negocio (no quedó el número).";
-      const charla = v.ultimos
-        .map((m) => `${m.role === "assistant" ? "Max" : "Cliente"}: ${m.content}`)
-        .join("\n")
-        .slice(0, 1200);
-      const texto = [
-        "🛒 VENTA POR LINK DE PAGO (recuperada)",
-        `👤 Cliente: ${v.telefono || "(sin número)"}`,
-        `💬 Entrá a la conversación: ${linkConv}`,
-        v.linkPago ? `🔗 Link de pago que se le envió: ${v.linkPago}` : "",
-        v.actualizado ? `🕗 Última actividad: ${fmtFecha(v.actualizado)}` : "",
-        "———",
-        charla,
-      ].filter(Boolean).join("\n");
-      await enviarTexto(texto);
-      enviadas++;
-      await sleep(800); // pequeño respiro entre avisos
-    }
+    const enviadas = await reenviarVentas(ventas, horas);
+    res.json({ ok: true, enviadas, deTotal: ventas.length });
   } catch (e) {
     console.error("Recuperar ventas falló:", e.message);
-    return res.status(503).json({ ok: false, enviadas, motivo: String(e.message || e) });
+    res.status(503).json({ ok: false, motivo: String(e.message || e) });
   }
-  res.json({ ok: true, enviadas, deTotal: ventas.length });
 });
+
+// Reenvío AUTOMÁTICO al arrancar: una sola vez por día, en cuanto WhatsApp esté
+// conectado, reenvía al negocio las ventas por link de pago de las últimas 24 h.
+// Idempotente entre reinicios de Render (candado en la base). Así las ventas de
+// hoy se renotifican con los datos del cliente sin tener que tocar ninguna URL.
+async function reenvioAutomaticoVentas() {
+  try {
+    // Esperar a que WhatsApp conecte (hasta ~90 s). Sin conexión, no enviamos:
+    // el candado NO se reclama, así reintenta en el próximo arranque.
+    for (let i = 0; i < 30 && !hayWhatsApp(); i++) await sleep(3000);
+    if (!hayWhatsApp()) {
+      console.log("↩ reenvío automático: WhatsApp no conectó; reintenta en el próximo arranque.");
+      return;
+    }
+    const horas = 24;
+    const { ventas } = await buscarVentasConLink(horas);
+    if (!ventas.length) {
+      console.log("↩ reenvío automático: no hay ventas con link de pago en las últimas 24 h.");
+      return;
+    }
+    // Candado: una vez por día. Se reclama recién acá (con ventas y WhatsApp listo)
+    // para no "quemar" el día si no había nada para mandar.
+    const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Montevideo" }); // YYYY-MM-DD
+    const reclamada = await reclamarTareaUnica(`reenvio-ventas-${hoy}`);
+    if (!reclamada) {
+      console.log(`↩ reenvío automático (${hoy}): ya se hizo antes; no repito.`);
+      return;
+    }
+    const enviadas = await reenviarVentas(ventas, horas);
+    console.log(`✅ reenvío automático: renotifiqué ${enviadas} venta(s) de hoy al WhatsApp del negocio.`);
+  } catch (e) {
+    console.log("⚠ reenvío automático de ventas falló:", e.message);
+  }
+}
 
 app.get("/api/qr", (req, res) => {
   if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
@@ -431,6 +490,10 @@ app.listen(PORT, () => {
   // el análisis diario con Gemini (gratis).
   cargarConversaciones();
   cargarLecciones().then(programarAprendizaje);
+  // RENOTIFICAR las ventas por link de pago de hoy (una sola vez, cuando WhatsApp
+  // esté conectado): así los avisos que salieron sin datos del cliente vuelven a
+  // llegar al negocio con el cliente y el link a la conversación.
+  reenvioAutomaticoVentas();
   // KEEP-ALIVE: Render plan Free duerme el servicio tras 15 min sin tráfico, y al
   // dormirse se DESCONECTA WhatsApp (Max deja de contestar). Nos auto-pingueamos
   // cada 10 min para mantenerlo despierto 24/7. Solo si hay URL pública (APP_URL):

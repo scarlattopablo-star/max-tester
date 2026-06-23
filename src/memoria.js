@@ -111,3 +111,23 @@ export async function conversacionesEntre(desdeISO, hastaISO) {
     return [];
   }
 }
+
+/** Reclama una tarea ÚNICA (idempotencia entre reinicios de Render). Devuelve true
+ *  si la reclamó por PRIMERA vez (hay que ejecutarla), false si ya estaba hecha o no
+ *  hay base para deduplicar. Se usa para que el reenvío automático de ventas corra
+ *  una sola vez y no se repita en cada arranque. */
+export async function reclamarTareaUnica(clave) {
+  if (!usaDB) return false;
+  try {
+    await sql`create table if not exists tareas_unicas (
+      clave text primary key,
+      created_at timestamptz default now()
+    )`;
+    const rows = await sql`insert into tareas_unicas (clave) values (${clave})
+      on conflict (clave) do nothing returning clave`;
+    return rows.length > 0;
+  } catch (e) {
+    console.log("⚠ no pude reclamar la tarea única:", e.message);
+    return false;
+  }
+}
