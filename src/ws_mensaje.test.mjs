@@ -1,6 +1,6 @@
 // Test de los helpers de mensajes entrantes. Correr: node src/ws_mensaje.test.mjs
 import assert from "node:assert/strict";
-import { contenidoReal, textoDelMensaje, anuncioDelMensaje } from "./ws_mensaje.js";
+import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder } from "./ws_mensaje.js";
 
 let ok = 0;
 function test(nombre, fn) { fn(); ok++; console.log(`  ✓ ${nombre}`); }
@@ -65,6 +65,29 @@ test("foto envuelta en viewOnce — contenidoReal expone imageMessage", () => {
   const msg = { message: { viewOnceMessageV2: { message: { imageMessage: { caption: "mi auto", mimetype: "image/jpeg" } } } } };
   assert.ok(contenidoReal(msg.message).imageMessage);
   assert.equal(textoDelMensaje(msg), "mi auto");
+});
+
+// 6) EL FIX CLAVE: un mensaje de anuncio llega como "@lid". Hay que responder al
+//    NÚMERO REAL (senderPn), no al @lid — si no, Baileys no entrega la respuesta.
+test("@lid de anuncio → responde al número real (senderPn)", () => {
+  const msg = {
+    key: { remoteJid: "215643897234567@lid", senderPn: "59898299523@s.whatsapp.net" },
+    message: { extendedTextMessage: { text: "info", contextInfo: { externalAdReply: { title: "x" } } } },
+  };
+  assert.equal(telDeMsg(msg, msg.key.remoteJid), "59898299523");
+  assert.equal(jidParaResponder(msg, msg.key.remoteJid), "59898299523@s.whatsapp.net");
+});
+
+// 7) Un chat normal (@s.whatsapp.net) NO se toca: se responde al mismo jid.
+test("jid normal → se responde al mismo jid", () => {
+  const jid = "59891629784@s.whatsapp.net";
+  assert.equal(jidParaResponder({ key: { remoteJid: jid } }, jid), jid);
+});
+
+// 8) @lid sin número conocido: no hay alternativa, queda el @lid (no rompe).
+test("@lid sin número → cae al @lid", () => {
+  const jid = "215643897234567@lid";
+  assert.equal(jidParaResponder({ key: { remoteJid: jid } }, jid), jid);
 });
 
 console.log(`\n✅ ${ok} tests OK`);
