@@ -15,24 +15,13 @@ import { registrarMensajeMax } from "./metricas.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
+import { contenidoReal, textoDelMensaje, anuncioDelMensaje } from "./ws_mensaje.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AUTH_DIR = join(__dirname, "..", "auth_baileys");
 
 // Silenciamos el logger interno de Baileys (necesita uno tipo pino).
 const noopLogger = { level: "silent", child: () => noopLogger, trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {} };
-
-function textoDelMensaje(msg) {
-  const m = msg.message;
-  if (!m) return "";
-  return (
-    m.conversation ||
-    m.extendedTextMessage?.text ||
-    m.imageMessage?.caption ||
-    m.videoMessage?.caption ||
-    ""
-  ).trim();
-}
 
 // Teléfono REAL del cliente para armar el link wa.me. Con el nuevo
 // direccionamiento de WhatsApp el remoteJid puede ser un "@lid" (que NO es el
@@ -271,7 +260,7 @@ async function iniciar() {
   async function imagenComoDataUri(msg) {
     try {
       const buffer = await downloadMediaMessage(msg, "buffer", {}, { logger: noopLogger, reuploadRequest: sock.updateMediaMessage });
-      const mime = msg.message?.imageMessage?.mimetype || "image/jpeg";
+      const mime = contenidoReal(msg.message)?.imageMessage?.mimetype || "image/jpeg";
       return `data:${mime};base64,${buffer.toString("base64")}`;
     } catch (e) {
       console.log("⚠ No pude descargar la imagen:", e.message);
@@ -293,12 +282,22 @@ async function iniciar() {
         if (idsVistos.size > 4000) idsVistos.clear(); // tope simple de memoria
       }
 
+      // ¿Vino desde un anuncio de Instagram/Facebook (Click-to-WhatsApp)? Lo
+      // detectamos temprano: son PRIMEROS CONTACTOS valiosísimos y no los queremos
+      // perder aunque lleguen con demora (reconexión/deploy de Render).
+      const anuncio = anuncioDelMensaje(msg);
+
       // FILTRO DE TIEMPO: ignoramos solo lo REALMENTE viejo (backlog de horas que
       // WhatsApp re-entrega al reconectar). Contestamos todo lo de los últimos 5
       // min, así NO se pierden mensajes que llegaron durante un deploy/reinicio.
+      // EXCEPCIÓN: los mensajes de anuncios NO se descartan por antigüedad (el
+      // anti-duplicados de arriba ya evita responder dos veces el mismo mensaje).
       const ts = Number(msg.messageTimestamp?.toNumber?.() ?? msg.messageTimestamp ?? 0);
       const ahoraS = Math.floor(Date.now() / 1000);
-      if (ts && ahoraS - ts > 5 * 60) continue;
+      if (ts && ahoraS - ts > 5 * 60 && !anuncio) continue;
+      if (anuncio && ts && ahoraS - ts > 5 * 60) {
+        console.log(`📣 anuncio con demora (${Math.round((ahoraS - ts) / 60)} min) — lo atiendo igual: ${jid}`);
+      }
 
       if (msg.key.fromMe) {
         if (enviadosPorMax.has(msg.key.id)) continue; // lo mandó Max: nada que hacer
@@ -308,7 +307,7 @@ async function iniciar() {
         // Nota: el eco de los envíos propios de Max llega como type "append" (se
         // filtra arriba); este branch depende de eso + del Set enviadosPorMax.
         const textoHumano = textoDelMensaje(msg);
-        const m = msg.message || {};
+        const m = contenidoReal(msg.message);
         // SOLO un mensaje REAL del equipo pausa a Max. Abrir/leer el chat, reaccionar,
         // marcar como leído, etc. NO son mensajes → NO pausan (no llegan acá como contenido).
         const esContenido = textoHumano || m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage || m.stickerMessage;
@@ -324,9 +323,18 @@ async function iniciar() {
         continue;
       }
 
-      const texto = textoDelMensaje(msg);
-      const tieneFoto = !!msg.message?.imageMessage;
-      const esAudio = !!(msg.message?.audioMessage || msg.message?.pttMessage);
+      const inner = contenidoReal(msg.message);
+      let texto = textoDelMensaje(msg);
+      const tieneFoto = !!inner.imageMessage;
+      const esAudio = !!(inner.audioMessage || inner.pttMessage);
+
+      // Mensaje desde un anuncio: lo registramos y, si no trajo texto ni foto
+      // (algunos clicks llegan sin cuerpo), lo tratamos igual como una consulta
+      // inicial para que Max salude y arranque la conversación en vez de ignorarlo.
+      if (anuncio) {
+        console.log(`📣 ${jid}: desde ANUNCIO${anuncio.titulo ? ` ("${anuncio.titulo}")` : ""}${anuncio.fuente ? ` — ${anuncio.fuente}` : ""}`);
+        if (!texto && !tieneFoto) texto = "Hola, vengo del anuncio y quiero más información";
+      }
 
       // Guardamos nombre y teléfono del cliente para los avisos al equipo (link a la conversación).
       const telCliente = telDeMsg(msg, jid);
