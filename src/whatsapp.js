@@ -9,7 +9,7 @@ import { dirname, join } from "path";
 import { procesarMensaje } from "./handler.js";
 import { NEGOCIO } from "./config.js";
 import { sleep, delayEscritura } from "./humano.js";
-import { registrarSock, enviarTexto, linkWa } from "./notificador.js";
+import { registrarSock, desregistrarSock, enviarTexto, linkWa } from "./notificador.js";
 import { agregar, cargarConversaciones } from "./memoria.js";
 import { registrarMensajeMax } from "./metricas.js";
 import { useDBAuthState } from "./auth_db.js";
@@ -78,7 +78,8 @@ async function iniciar() {
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
       const cerroSesion = code === DisconnectReason.loggedOut;
-      if (cerroSesion) setConectado(false);
+      desregistrarSock(); // el socket dejó de servir: que hayWhatsApp() diga la verdad
+      setConectado(false);
       console.log(`🔌 Conexión cerrada (code ${code}).` + (cerroSesion ? " Sesión cerrada: borrá auth_baileys/ y volvé a escanear." : " Reintentando…"));
       if (!cerroSesion) iniciar();
     }
@@ -287,16 +288,19 @@ async function iniciar() {
       // perder aunque lleguen con demora (reconexión/deploy de Render).
       const anuncio = anuncioDelMensaje(msg);
 
-      // FILTRO DE TIEMPO: ignoramos solo lo REALMENTE viejo (backlog de horas que
-      // WhatsApp re-entrega al reconectar). Contestamos todo lo de los últimos 5
-      // min, así NO se pierden mensajes que llegaron durante un deploy/reinicio.
-      // EXCEPCIÓN: los mensajes de anuncios NO se descartan por antigüedad (el
-      // anti-duplicados de arriba ya evita responder dos veces el mismo mensaje).
+      // FILTRO DE TIEMPO: solo descartamos lo REALMENTE viejo (backlog de un
+      // pareo nuevo del QR). Render Free apaga el servicio y al reconectar WhatsApp
+      // re-entrega los mensajes que llegaron mientras estaba dormido: ESOS los
+      // queremos contestar aunque tengan un rato (antes el corte de 5 min los comía,
+      // por eso Max no respondía a clics de anuncios fuera de horario). El
+      // anti-duplicados de arriba evita responder dos veces el mismo mensaje.
+      const EDAD_MAX_MIN = Number(process.env.MAX_MSG_EDAD_MIN || 720); // 12 h
       const ts = Number(msg.messageTimestamp?.toNumber?.() ?? msg.messageTimestamp ?? 0);
       const ahoraS = Math.floor(Date.now() / 1000);
-      if (ts && ahoraS - ts > 5 * 60 && !anuncio) continue;
-      if (anuncio && ts && ahoraS - ts > 5 * 60) {
-        console.log(`📣 anuncio con demora (${Math.round((ahoraS - ts) / 60)} min) — lo atiendo igual: ${jid}`);
+      const demoraMin = ts ? Math.round((ahoraS - ts) / 60) : 0;
+      if (ts && demoraMin > EDAD_MAX_MIN && !anuncio) continue;
+      if (demoraMin > 5) {
+        console.log(`⏱ mensaje con ${demoraMin} min de demora — lo atiendo igual${anuncio ? " (anuncio)" : ""}: ${jid}`);
       }
 
       if (msg.key.fromMe) {

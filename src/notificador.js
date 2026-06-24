@@ -6,6 +6,10 @@ let sockActivo = null;
 let alEnviar = null; // callback de whatsapp.js: registra los IDs de los mensajes que manda el bot
 
 export function registrarSock(sock, marcarEnviado) { sockActivo = sock; alEnviar = marcarEnviado || null; }
+// Al cerrarse la conexión limpiamos el sock: así hayWhatsApp() refleja el estado
+// REAL (antes quedaba en true para siempre tras la primera conexión, aunque el
+// socket se hubiera caído — daba un diagnóstico engañoso).
+export function desregistrarSock() { sockActivo = null; }
 export function hayWhatsApp() { return !!sockActivo; }
 
 // "091 629 784" -> "59891629784@s.whatsapp.net"
