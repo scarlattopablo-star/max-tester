@@ -85,7 +85,21 @@ app.post("/api/reset", (req, res) => {
 // Estado rápido del bot (catálogo, sync ML, Mercado Pago, cerebro IA) para chequear la config en vivo.
 app.get("/api/estado", async (_req, res) => {
   const ia = proveedorIA();
-  res.json({ catalogo: infoCatalogo(), syncML: haySyncML(), ultimaSync: ultimaSync(), mlUsuario: await hayUsuarioML(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model } });
+  const qr = estadoQR();
+  res.json({
+    // Estado de WhatsApp: lo más importante para saber por qué Max no contesta.
+    //  on        → WHATSAPP_ON=1 (el bot arranca el módulo de WhatsApp)
+    //  conectado → el socket de Baileys está vivo AHORA
+    //  hayQr     → hay un QR pendiente de escanear (sesión caída: hay que reescanear)
+    //  keepAlive → APP_URL configurada (sin esto Render Free duerme y desconecta)
+    whatsapp: {
+      on: process.env.WHATSAPP_ON === "1",
+      conectado: hayWhatsApp(),
+      hayQr: !!qr.qr,
+      keepAlive: !!(process.env.APP_URL || "").trim(),
+    },
+    catalogo: infoCatalogo(), syncML: haySyncML(), ultimaSync: ultimaSync(), mlUsuario: await hayUsuarioML(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model },
+  });
 });
 
 // Cuántos mensajes respondió Max y a cuántas conversaciones atendió (hoy/7/30 días).
