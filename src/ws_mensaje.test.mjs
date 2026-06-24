@@ -68,14 +68,17 @@ test("foto envuelta en viewOnce — contenidoReal expone imageMessage", () => {
 });
 
 // 6) EL FIX CLAVE: un mensaje de anuncio llega como "@lid". Hay que responder al
-//    NÚMERO REAL (senderPn), no al @lid — si no, Baileys no entrega la respuesta.
-test("@lid de anuncio → responde al número real (senderPn)", () => {
+//    JID ORIGINAL (el @lid TAL CUAL): Baileys lo rutea internamente y la respuesta SÍ
+//    se entrega. Reescribirlo a @s.whatsapp.net NO se entregaba (identidades distintas).
+//    El número real (senderPn) se sigue extrayendo aparte para el link wa.me del aviso.
+//    Referencia probada: el bot Sofi de BUDA responde al jid original y anda perfecto.
+test("@lid de anuncio → responde al @lid original (Baileys lo rutea)", () => {
   const msg = {
     key: { remoteJid: "215643897234567@lid", senderPn: "59898299523@s.whatsapp.net" },
     message: { extendedTextMessage: { text: "info", contextInfo: { externalAdReply: { title: "x" } } } },
   };
-  assert.equal(telDeMsg(msg, msg.key.remoteJid), "59898299523");
-  assert.equal(jidParaResponder(msg, msg.key.remoteJid), "59898299523@s.whatsapp.net");
+  assert.equal(telDeMsg(msg, msg.key.remoteJid), "59898299523"); // número para el link wa.me
+  assert.equal(jidParaResponder(msg, msg.key.remoteJid), "215643897234567@lid"); // responder al @lid
 });
 
 // 7) Un chat normal (@s.whatsapp.net) NO se toca: se responde al mismo jid.

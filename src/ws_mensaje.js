@@ -58,14 +58,18 @@ export function telDeMsg(msg, jid) {
 
 // JID al que hay que RESPONDER. Los que hacen clic en un anuncio de Instagram/Facebook
 // (y, en general, los desconocidos con el nuevo direccionamiento de WhatsApp) llegan con
-// un remoteJid "@lid", que NO sirve para enviar: Baileys no entrega la respuesta y el
-// cliente no recibe NADA (por eso Max contestaba a todos MENOS a los de los anuncios).
-// El número real viene en senderPn → respondemos a "<numero>@s.whatsapp.net".
-// Ver issues Baileys #1718 / #1832 (mismatch @lid ↔ @s.whatsapp.net).
-export function jidParaResponder(msg, jid) {
-  if (!String(jid).includes("@lid")) return jid; // jid normal: respondemos ahí mismo
-  const tel = telDeMsg(msg, jid); // número real del cliente sacado del mensaje
-  return tel ? `${tel}@s.whatsapp.net` : jid; // sin número no hay alternativa al @lid
+// un remoteJid "@lid".
+//
+// IMPORTANTE: hay que responder AL JID ORIGINAL TAL CUAL (incluido el "@lid"). Baileys
+// rutea el @lid internamente y la respuesta SÍ se entrega. Reescribir el @lid a
+// "<numero>@s.whatsapp.net" era un ERROR: con el nuevo direccionamiento el @lid y el
+// número son identidades DISTINTAS, y enviar al @s.whatsapp.net de alguien que escribió
+// por @lid NO se entrega → el cliente del anuncio no recibía nada.
+// Referencia probada en producción: el bot "Sofi" de BUDA responde al jid original
+// (msg.key.remoteJid) sin reescribirlo y contesta perfecto a los mensajes de anuncios.
+// El número real (senderPn) se sigue usando aparte para el link wa.me de los avisos.
+export function jidParaResponder(_msg, jid) {
+  return jid; // responder donde llegó: Baileys maneja el @lid internamente
 }
 
 // Detecta los mensajes que llegan desde un anuncio de Instagram/Facebook
