@@ -21,6 +21,7 @@ import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
 import { estadoQR } from "./qr_estado.js";
 import { resumenMensajes } from "./metricas.js";
+import { ultimosEventos } from "./diag.js";
 import QRCode from "qrcode";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -153,6 +154,42 @@ function qrAutorizado(req) {
   const token = process.env.NOTIFY_TOKEN;
   return token && String(req.query.clave || "") === token;
 }
+
+// ── Diagnóstico en vivo: qué pasó con los últimos mensajes entrantes ──────────
+// Abrí en el navegador: https://max-tester.onrender.com/api/diag?clave=TU_NOTIFY_TOKEN
+// Sirve para ver, sin pelear con los logs de Render, si los mensajes de los anuncios
+// LLEGAN al bot y qué hizo Max con ellos (respondió / error / pausado / ignorado).
+app.get("/api/diag", (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).send("No autorizado. Agregá ?clave=TU_NOTIFY_TOKEN al final del link.");
+  const eventos = ultimosEventos();
+  const hora = (ts) => new Date(ts).toLocaleString("es-UY", { timeZone: "America/Montevideo", hour12: false });
+  const esc = (s) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+  const icono = { recibido: "📩", respondido: "✅", error: "⛔", error_envio: "⛔", pausado_humano: "🤫", ignorado_sin_texto: "🚫", conexion: "🔌" };
+  const wa = hayWhatsApp();
+  const anuncios = eventos.filter((e) => e.tipo === "recibido" && e.anuncio);
+  // Resumen humano: ¿llegó algún mensaje de anuncio y qué pasó?
+  let resumen;
+  if (!anuncios.length) {
+    resumen = "Todavía NO registré ningún mensaje entrante de un anuncio. Si ya probaste mandando uno y no aparece acá abajo, es la limitación de WhatsApp (#1723): retiene los mensajes de anuncios hasta una primera respuesta MANUAL.";
+  } else {
+    const ult = anuncios[0];
+    const idLid = ult.esLid ? " (llegó como @lid)" : "";
+    resumen = `Sí llegan mensajes de anuncios${idLid}. Mirá en la tabla qué evento les sigue: 'respondido' = Max contestó; 'error' = falló el envío (pasame el detalle); 'pausado' = un asesor tenía la charla; 'ignorado' = llegó sin texto.`;
+  }
+  const filas = eventos.map((e) => {
+    const det = Object.entries(e).filter(([k]) => !["ts", "tipo"].includes(k)).map(([k, v]) => `${k}=${esc(v)}`).join(" · ");
+    return `<tr><td>${hora(e.ts)}</td><td>${icono[e.tipo] || ""} ${esc(e.tipo)}</td><td>${det}</td></tr>`;
+  }).join("");
+  res.set("content-type", "text/html; charset=utf-8").send(`<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
+<style>body{font-family:system-ui,Arial;margin:16px;background:#0d0d10;color:#eee}h1{font-size:18px}
+.r{background:#1a1a22;border-left:4px solid #C81E1E;padding:10px 12px;border-radius:8px;margin:10px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}td{padding:6px 8px;border-bottom:1px solid #333;vertical-align:top}
+td:first-child{white-space:nowrap;color:#aaa}small{color:#888}</style>
+<h1>Diagnóstico de Max — WhatsApp ${wa ? "🟢 conectado" : "🔴 desconectado"}</h1>
+<div class=r>${esc(resumen)}</div>
+<p><small>Mandá un mensaje desde el anuncio y recargá esta página. Lo más nuevo va arriba.</small></p>
+<table><tr><td><b>Hora</b></td><td><b>Evento</b></td><td><b>Detalle</b></td></tr>${filas || "<tr><td colspan=3>Sin eventos todavía.</td></tr>"}</table>`);
+});
 
 // ── Ver las últimas conversaciones de Max (para analizar cómo conversó) ──
 // Protegido con ?clave=<NOTIFY_TOKEN>, igual que el QR. Limpia el contexto interno

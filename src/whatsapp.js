@@ -16,6 +16,7 @@ import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
 import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder } from "./ws_mensaje.js";
+import { diag } from "./diag.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AUTH_DIR = join(__dirname, "..", "auth_baileys");
@@ -50,6 +51,7 @@ async function iniciar() {
     }
     if (connection === "open") {
       console.log("✅ Conectado a WhatsApp. El bot ya está atendiendo.");
+      diag("conexion", { estado: "conectado" });
       arranqueTs = Math.floor(Date.now() / 1000); // mensajes anteriores a esto se ignoran
       setConectado(true);
       registrarSock(sock, marcarEnviado); // el notificador también registra sus IDs enviados
@@ -59,6 +61,7 @@ async function iniciar() {
       const cerroSesion = code === DisconnectReason.loggedOut;
       desregistrarSock(); // el socket dejó de servir: que hayWhatsApp() diga la verdad
       setConectado(false);
+      diag("conexion", { estado: "cerrada", code });
       console.log(`🔌 Conexión cerrada (code ${code}).` + (cerroSesion ? " Sesión cerrada: borrá auth_baileys/ y volvé a escanear." : " Reintentando…"));
       if (!cerroSesion) iniciar();
     }
@@ -147,6 +150,7 @@ async function iniciar() {
           marcarEnviado(await sock.sendMessage(jidEnvio, { image: { url: f.url }, caption: f.caption || "" }));
         } catch (e) { console.log("⚠ no pude enviar foto:", e.message); }
       }
+      diag("respondido", { jid, jidEnvio, resumen: String(respuesta).slice(0, 80) });
       console.log(`📤 ${jid}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
       for (const a of acciones) console.log(`   ⚙ ${a.herramienta} → ${JSON.stringify(a.resultado)}`);
       // Link a la conversación del cliente para que el asesor entre directo.
@@ -230,8 +234,10 @@ async function iniciar() {
         }
       }
     } catch (e) {
+      diag("error", { jid, jidEnvio, detalle: e.message });
       console.log(`⚠ Error respondiendo a ${jid}: ${e.message}`);
-      try { marcarEnviado(await sock.sendMessage(jidEnvio, { text: "Disculpá, tuve un problemita técnico. ¿Me lo repetís o preferís que te pase con un asesor? 🙏" })); } catch {}
+      try { marcarEnviado(await sock.sendMessage(jidEnvio, { text: "Disculpá, tuve un problemita técnico. ¿Me lo repetís o preferís que te pase con un asesor? 🙏" })); }
+      catch (e2) { diag("error_envio", { jid, jidEnvio, detalle: e2.message }); }
     } finally {
       procesando.delete(jid);
       // Si llegaron mensajes mientras respondíamos, los atendemos ahora.
@@ -330,6 +336,13 @@ async function iniciar() {
       const jidEnvio = jidParaResponder(msg, jid);
       jidEnvioDe.set(jid, jidEnvio);
       if (jidEnvio !== jid) console.log(`↪ respondo al número real ${jidEnvio} (entró como ${jid})`);
+      // Diagnóstico (lo lee /api/diag): registramos TODO mensaje entrante con su forma.
+      diag("recibido", {
+        jid, jidEnvio, anuncio: anuncio ? (anuncio.fuente || anuncio.titulo || "sí") : null,
+        tieneTexto: !!texto, tieneFoto, esAudio,
+        esLid: String(jid).includes("@lid"), tel: telCliente || "",
+        formato: Object.keys(contenidoReal(msg.message)).join(",") || "vacío",
+      });
       // Diagnóstico: si NO pudimos sacar el teléfono, mostramos los campos de la key
       // para saber de dónde tomarlo (chats @lid del nuevo direccionamiento de WhatsApp).
       if (!telCliente) {
@@ -342,6 +355,7 @@ async function iniciar() {
       // ¿Un asesor se hizo cargo de esta conversación? Max no participa más acá,
       // pero guarda el mensaje en memoria por si el equipo quiere devolverla luego.
       if (esHumano(jid)) {
+        diag("pausado_humano", { jid, anuncio: !!anuncio });
         agregar(jid, "user", texto || (esAudio ? "[el cliente mandó un audio]" : "[el cliente mandó una foto]"));
         console.log(`🤫 conversación de un asesor en ${jid}: Max no participa`);
         continue;
@@ -364,6 +378,7 @@ async function iniciar() {
             console.log(`🎤 ${jid}: audio → le pedí que lo escriba`);
           } catch (e) { console.log("⚠ no pude responder al audio:", e.message); }
         } else {
+          diag("ignorado_sin_texto", { jid, anuncio: !!anuncio, formato: Object.keys(contenidoReal(msg.message)).join(",") || "vacío" });
           console.log(`(ignorado ${jid}: mensaje sin texto/foto/audio — ${Object.keys(msg.message || {}).join(",") || "vacío"})`);
         }
         continue;
