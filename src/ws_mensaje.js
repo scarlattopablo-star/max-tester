@@ -36,6 +36,38 @@ export function textoDelMensaje(msg) {
   ).trim();
 }
 
+// Teléfono REAL del cliente para armar el link wa.me y para responder a los chats
+// "@lid". Con el nuevo direccionamiento de WhatsApp el remoteJid puede ser un "@lid"
+// (que NO es el número); el número real viene en senderPn/participantPn/participant.
+export function telDeMsg(msg, jid) {
+  const fuentes = [
+    msg?.key?.senderPn,
+    msg?.key?.participantPn,
+    msg?.key?.remoteJidAlt,
+    msg?.key?.participant,
+    jid,
+  ];
+  for (const f of fuentes) {
+    const s = String(f || "");
+    if (!s || s.includes("@lid")) continue; // @lid no es teléfono
+    const d = s.split(/[:@]/)[0].replace(/\D/g, "");
+    if (d.length >= 10 && d.length <= 15) return d;
+  }
+  return "";
+}
+
+// JID al que hay que RESPONDER. Los que hacen clic en un anuncio de Instagram/Facebook
+// (y, en general, los desconocidos con el nuevo direccionamiento de WhatsApp) llegan con
+// un remoteJid "@lid", que NO sirve para enviar: Baileys no entrega la respuesta y el
+// cliente no recibe NADA (por eso Max contestaba a todos MENOS a los de los anuncios).
+// El número real viene en senderPn → respondemos a "<numero>@s.whatsapp.net".
+// Ver issues Baileys #1718 / #1832 (mismatch @lid ↔ @s.whatsapp.net).
+export function jidParaResponder(msg, jid) {
+  if (!String(jid).includes("@lid")) return jid; // jid normal: respondemos ahí mismo
+  const tel = telDeMsg(msg, jid); // número real del cliente sacado del mensaje
+  return tel ? `${tel}@s.whatsapp.net` : jid; // sin número no hay alternativa al @lid
+}
+
 // Detecta los mensajes que llegan desde un anuncio de Instagram/Facebook
 // (Click-to-WhatsApp): traen un externalAdReply dentro del contextInfo. Devuelve los
 // datos del anuncio (título/cuerpo/fuente) o null si no es un mensaje de anuncio.

@@ -15,34 +15,13 @@ import { registrarMensajeMax } from "./metricas.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
-import { contenidoReal, textoDelMensaje, anuncioDelMensaje } from "./ws_mensaje.js";
+import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder } from "./ws_mensaje.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AUTH_DIR = join(__dirname, "..", "auth_baileys");
 
 // Silenciamos el logger interno de Baileys (necesita uno tipo pino).
 const noopLogger = { level: "silent", child: () => noopLogger, trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {} };
-
-// Teléfono REAL del cliente para armar el link wa.me. Con el nuevo
-// direccionamiento de WhatsApp el remoteJid puede ser un "@lid" (que NO es el
-// número); el número real viene en senderPn/participant.
-function telDeMsg(msg, jid) {
-  // remoteJidAlt / participantPn: en chats "@lid" Baileys 7 deja acá el número REAL.
-  const fuentes = [
-    msg?.key?.senderPn,
-    msg?.key?.participantPn,
-    msg?.key?.remoteJidAlt,
-    msg?.key?.participant,
-    jid,
-  ];
-  for (const f of fuentes) {
-    const s = String(f || "");
-    if (!s || s.includes("@lid")) continue; // @lid no es teléfono
-    const d = s.split(/[:@]/)[0].replace(/\D/g, "");
-    if (d.length >= 10 && d.length <= 15) return d;
-  }
-  return "";
-}
 
 async function iniciar() {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -102,6 +81,7 @@ async function iniciar() {
   const pedidosAvisados = new Set(); // ids de pedido ya avisados al equipo (no duplicar)
   const turnosAvisados = new Set(); // ids de solicitud de turno ya avisados al equipo
   const contactoCliente = new Map(); // jid -> { nombre, tel } para armar el link en los avisos
+  const jidEnvioDe = new Map(); // jid entrante -> jid al que responder (mapea @lid -> número real)
 
   // Registra el ID de un mensaje que envió Max (o el notificador), para que en
   // messages.upsert no lo confundamos con un humano escribiendo desde el teléfono.
@@ -140,8 +120,11 @@ async function iniciar() {
     // Nombre y teléfono del cliente capturados del mensaje: se usan para los avisos
     // al equipo (link a la conversación) y para recordar de quién es un link de pago.
     const contacto = contactoCliente.get(jid) || {};
+    // A dónde RESPONDER: si el cliente llegó como "@lid" (típico de los anuncios),
+    // usamos su número real; si no, el mismo jid. La memoria/métricas siguen con el jid.
+    const jidEnvio = jidEnvioDe.get(jid) || jid;
     try {
-      await sock.sendPresenceUpdate("composing", jid);
+      await sock.sendPresenceUpdate("composing", jidEnvio);
       const { texto: respuesta, acciones, imagenesEnviar = [] } = await procesarMensaje({ chatId: jid, texto, canal: "whatsapp", imagenes, contacto });
       // Si el cliente escribió MÁS mientras Max pensaba, no mandamos esta respuesta:
       // reprocesamos para considerar también esos mensajes nuevos.
@@ -149,19 +132,19 @@ async function iniciar() {
         procesando.delete(jid);
         return procesar(jid);
       }
-      await sock.sendPresenceUpdate("composing", jid);
+      await sock.sendPresenceUpdate("composing", jidEnvio);
       await sleep(delayEscritura(respuesta));
-      await sock.sendPresenceUpdate("paused", jid);
-      marcarEnviado(await sock.sendMessage(jid, { text: respuesta }));
+      await sock.sendPresenceUpdate("paused", jidEnvio);
+      marcarEnviado(await sock.sendMessage(jidEnvio, { text: respuesta }));
       registrarMensajeMax(jid); // métrica: Max respondió a este cliente
       // Si Max decidió mandar fotos, las enviamos de a UNA, con una pequeña espera
       // entre cada una (mostrando "escribiendo…") para que se sienta humano.
       for (const f of imagenesEnviar) {
         try {
-          await sock.sendPresenceUpdate("composing", jid);
+          await sock.sendPresenceUpdate("composing", jidEnvio);
           await sleep(1000 + Math.floor(Math.random() * 1000)); // 1 a 2 s entre fotos
-          await sock.sendPresenceUpdate("paused", jid);
-          marcarEnviado(await sock.sendMessage(jid, { image: { url: f.url }, caption: f.caption || "" }));
+          await sock.sendPresenceUpdate("paused", jidEnvio);
+          marcarEnviado(await sock.sendMessage(jidEnvio, { image: { url: f.url }, caption: f.caption || "" }));
         } catch (e) { console.log("⚠ no pude enviar foto:", e.message); }
       }
       console.log(`📤 ${jid}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
@@ -248,7 +231,7 @@ async function iniciar() {
       }
     } catch (e) {
       console.log(`⚠ Error respondiendo a ${jid}: ${e.message}`);
-      try { marcarEnviado(await sock.sendMessage(jid, { text: "Disculpá, tuve un problemita técnico. ¿Me lo repetís o preferís que te pase con un asesor? 🙏" })); } catch {}
+      try { marcarEnviado(await sock.sendMessage(jidEnvio, { text: "Disculpá, tuve un problemita técnico. ¿Me lo repetís o preferís que te pase con un asesor? 🙏" })); } catch {}
     } finally {
       procesando.delete(jid);
       // Si llegaron mensajes mientras respondíamos, los atendemos ahora.
@@ -343,6 +326,10 @@ async function iniciar() {
       // Guardamos nombre y teléfono del cliente para los avisos al equipo (link a la conversación).
       const telCliente = telDeMsg(msg, jid);
       contactoCliente.set(jid, { nombre: msg.pushName || "", tel: telCliente });
+      // JID al que vamos a responder (mapea @lid → número real; clave del fix de anuncios).
+      const jidEnvio = jidParaResponder(msg, jid);
+      jidEnvioDe.set(jid, jidEnvio);
+      if (jidEnvio !== jid) console.log(`↪ respondo al número real ${jidEnvio} (entró como ${jid})`);
       // Diagnóstico: si NO pudimos sacar el teléfono, mostramos los campos de la key
       // para saber de dónde tomarlo (chats @lid del nuevo direccionamiento de WhatsApp).
       if (!telCliente) {
@@ -367,10 +354,10 @@ async function iniciar() {
         if (esAudio) {
           try {
             const aviso = "¡Hola! Por ahora no puedo escuchar audios 🙏 ¿Me lo podés escribir en un mensajito? Así te ayudo enseguida.";
-            await sock.sendPresenceUpdate("composing", jid);
+            await sock.sendPresenceUpdate("composing", jidEnvio);
             await sleep(900);
-            await sock.sendPresenceUpdate("paused", jid);
-            marcarEnviado(await sock.sendMessage(jid, { text: aviso }));
+            await sock.sendPresenceUpdate("paused", jidEnvio);
+            marcarEnviado(await sock.sendMessage(jidEnvio, { text: aviso }));
             registrarMensajeMax(jid); // métrica: Max respondió (al audio)
             agregar(jid, "user", "[el cliente mandó un audio]");
             agregar(jid, "assistant", aviso);
