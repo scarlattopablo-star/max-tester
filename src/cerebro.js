@@ -595,6 +595,21 @@ const TOOLS_ANTHROPIC = TOOLS.map((t) => ({
 
 const RESPUESTA_FALLBACK = "¡Perdón! ¿Me lo decís de nuevo o con otras palabras? Así te ayudo bien 🙌";
 
+// Corrige por CÓDIGO el saludo de la hora si el modelo se equivocó (ej. "buenas
+// tardes" de mañana). No alcanza con pedírselo en el prompt: el modelo es chico y
+// arrastra el saludo del historial. Acá es determinístico: si el mensaje ARRANCA
+// con un saludo de otra parte del día, lo reemplazamos por el que corresponde
+// ahora en Uruguay. Una despedida ("que tengas buenas noches") al final NO se toca
+// porque solo miramos el comienzo del mensaje.
+function corregirSaludo(texto) {
+  if (!texto) return texto;
+  const correcto = momentoUruguay().saludos[0]; // "Buenos días" / "Buenas tardes" / "Buenas noches"
+  return texto.replace(
+    /^([¡!.\s]*(?:hola[¡!,.\s]*)?)(buen(?:os|as)?\s+(?:d[ií]as?|tardes?|noches?))/i,
+    (_full, pre) => pre + correcto,
+  );
+}
+
 // Arma la respuesta final: texto + fotos numeradas sin duplicados (compartido por ambos caminos).
 // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption.
 function armarRespuesta(texto, acciones) {
@@ -612,7 +627,7 @@ function armarRespuesta(texto, acciones) {
   // una respuesta vacía) y tampoco hay fotos para mandar, no dejamos a Max mudo:
   // damos el fallback. Sin esto, web.js hace `if(data.texto)` y no muestra nada,
   // y WhatsApp intentaría enviar un mensaje vacío.
-  const limpio = (texto || "").trim();
+  const limpio = corregirSaludo((texto || "").trim());
   const textoFinal = limpio || (imagenesEnviar.length ? "" : RESPUESTA_FALLBACK);
   return { texto: textoFinal, acciones, imagenesEnviar };
 }
