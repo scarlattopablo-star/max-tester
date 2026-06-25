@@ -175,13 +175,15 @@ function momentoUruguay() {
   const dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
   const uy = new Date(Date.now() - 3 * 3600 * 1000); // restamos 3h al UTC
   const h = uy.getUTCHours();
+  const min = uy.getUTCMinutes();
+  const horaTxt = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
   const fecha = uy.toISOString().slice(0, 10);
   const dia = dias[uy.getUTCDay()];
   let parte, saludos;
   if (h >= 6 && h < 12) { parte = "la mañana"; saludos = ["Buenos días", "Buen día"]; }
   else if (h >= 12 && h < 20) { parte = "la tarde"; saludos = ["Buenas tardes"]; }
   else { parte = "la noche"; saludos = ["Buenas noches"]; }
-  return { fecha, dia, hora: h, parte, saludos };
+  return { fecha, dia, hora: h, min, horaTxt, parte, saludos };
 }
 
 const _al = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -311,6 +313,7 @@ function systemPromptEstatico() {
 
 # CUBREASIENTOS — DOS LÍNEAS (MUY IMPORTANTE, conocelo bien)
 Hay DOS tipos de cubreasiento a medida. Cuando el cliente consulta por cubreasientos para su auto, mostrá las opciones del catálogo (con foto, vía enviar_foto) y tené clara esta diferencia:
+- ⚠️ MATERIAL — DATO REAL DE TODOS LOS CUBREASIENTOS (vale para el eco cuero Y para el capitoneado, NO lo confundas): la parte de ADELANTE del asiento (la que se ve y donde se apoya el cuerpo) es de CUERO ECOLÓGICO; la parte de ATRÁS / el respaldo trasero (lo que NO queda a la vista) es de LICRA, NO de cuero. Cuando el cliente pregunte de qué material es el cubreasiento, aclaráselo SIEMPRE así, sin inventar: "El frente es de cuero ecológico y la parte de atrás es de licra". Esto es así en TODOS los cubreasientos a medida.
 - ECO CUERO (económico): ronda los $${CUBREASIENTOS.economico.precioDesde}–$${CUBREASIENTOS.economico.precioHasta}. Es SOLO VENTA: NO se coloca (no se ofrece colocación para esta línea). No necesita descripción extra del material.
   · ⚠️ COLOR (REGLA, no la rompas): el eco cuero económico NO tiene variación de color de material — es SIEMPRE ${CUBREASIENTOS.economico.colorUnico}. NUNCA ofrezcas otros colores de material (ej. NO ofrezcas "negro o rojo" como en el capitoneado). Lo ÚNICO que varía es el color del PESPUNTE (la costura): ${CUBREASIENTOS.economico.pespuntes.join(", ")}. Para cerrar la compra del eco cuero, preguntá qué color de pespunte prefiere (no preguntes color de material, que es uno solo).
   · ⚠️ NO HAY ECO CUERO PARA TODOS LOS MODELOS (REGLA, no la rompas): la línea económica de eco cuero existe solo para ALGUNOS vehículos. NUNCA des por hecho que hay eco cuero para el auto del cliente ni lo ofrezcas "de memoria". Guiate SIEMPRE por lo que devuelve el catálogo con "enviar_foto": ofrecé y nombrá únicamente las opciones que REALMENTE aparecen para ese modelo. Si para ese auto solo hay capitoneado, ofrecé solo capitoneado (sin mencionar un eco cuero que no existe); si solo hay eco cuero, ofrecé eso. ⛔ Si no hay eco cuero para el modelo, NO lo ofrezcas ni prometas, NO inventes precio: informá con sinceridad lo que sí tenemos para ese vehículo. Mejor informar correctamente que ofrecer algo que no hay.
@@ -350,7 +353,7 @@ ${datosPagoTexto()}
 
 # REGLAS DE ORO (no las rompas nunca)
 - Las ALFOMBRAS BANDEJA son de GOMA / caucho rígido. NUNCA digas que son de cuero.
-- Los CUBREASIENTOS a medida SÍ son de cuero ecológico premium (eso está bien).
+- Los CUBREASIENTOS a medida SÍ son de cuero ecológico premium en el FRENTE (eso está bien); la parte de ATRÁS (respaldo trasero) es de LICRA. Si preguntan el material, aclarale las dos partes (frente cuero ecológico, atrás licra).
 - PRECIOS: cuando te preguntan cuánto sale CUALQUIER cosa (cubreasiento, alfombra, cubre volante, cubreauto, llavero, accesorio…), usá SIEMPRE la herramienta "consultar_precio" con lo que pide (producto + modelo del auto) y decile el precio que te devuelve (ej: "El cubre volante de cuero sale $X."). Tenés TODO el catálogo de Mercado Libre cargado, así que casi siempre vas a encontrar el precio.
 - Si la herramienta devuelve varios resultados parecidos, ofrecé las opciones cortitas (no más de 2-3) y preguntá cuál es el modelo/versión exacta.
 - MONEDA: casi todos los precios están en PESOS uruguayos ($). Si un resultado trae "moneda":"USD", ese precio está en DÓLARES: decilo como "US$ X" (dólares), nunca como pesos. Si es "UYU" o no aclara, son pesos ($).
@@ -389,8 +392,12 @@ ${resumenCatalogo()}
 function systemPromptDinamico() {
   const m = momentoUruguay();
   const op = m.saludos[Math.floor(Math.random() * m.saludos.length)];
+  // Saludos que NO corresponden a esta hora (para prohibirlos explícitamente: el
+  // modelo es chico y, si no, mete "buenas tardes" de mañana por costumbre).
+  const prohibidos = ["Buenos días", "Buenas tardes", "Buenas noches"].filter((s) => !m.saludos.includes(s));
   let base = `# Momento actual (Uruguay)
-- Ahora en Uruguay es ${m.dia}, de ${m.parte} (hora ${m.hora}). Saludá acorde al momento: ahora corresponde "${op}" (de mañana "buenos días/buen día", de tarde "buenas tardes", de noche "buenas noches"). Hoy es ${m.fecha} (formato para agendar: YYYY-MM-DD; usalo para entender "mañana", "el viernes", etc.).`;
+- Ahora en Uruguay es ${m.dia} y son las ${m.horaTxt} (es ${m.parte}). Hoy es ${m.fecha} (formato para agendar: YYYY-MM-DD; usalo para entender "mañana", "el viernes", etc.).
+- ⛔ SALUDO SEGÚN LA HORA (REGLA DURA, NO LA ROMPAS): si vas a saludar, usá EXACTAMENTE "${op}" porque ahora es ${m.parte}. Está TERMINANTEMENTE PROHIBIDO usar ${prohibidos.map((s) => `"${s}"`).join(" ni ")} ahora — no corresponden a esta hora (${m.horaTxt}). Mañana = "Buenos días/Buen día" (06:00–11:59), tarde = "Buenas tardes" (12:00–19:59), noche = "Buenas noches" (20:00–05:59). Antes de saludar, mirá la hora (${m.horaTxt}) y elegí el saludo correcto.`;
   const lecciones = (leccionesActuales() || "").trim();
   if (lecciones) {
     base += `\n\n# Lecciones aprendidas de conversaciones reales (APLICALAS, sin dejar de ser formal y correcto)\n${lecciones}`;
