@@ -3,7 +3,32 @@
 Bot de WhatsApp (Baileys, sin API de Meta) + derivación de Instagram, para La Casa del Cubreasiento.
 Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`.
 
-## 🟢🟢 SESIÓN 12 jun — SYNC ML EN VIVO RESUELTO (lo más nuevo)
+## 🔵🔵 SESIÓN 25 jun — FIXES + PLAN MIGRACIÓN A API OFICIAL (LO MÁS NUEVO, RETOMAR ACÁ)
+
+### Fixes hechos esta sesión (en `main`, rama `claude/max-message-response-21nigk`)
+- **Saludo por código (mañana/tarde):** el modelo (Haiku) decía "buenas tardes" de mañana aunque el prompt le indicaba la hora. Se reforzó el prompt Y, sobre todo, se agregó `corregirSaludo()` en `cerebro.js` (`armarRespuesta`): reescribe de forma **determinística** el saludo del INICIO del mensaje según la hora real de Uruguay. No toca despedidas ni mensajes sin saludo.
+- **Material del cubreasiento:** regla nueva en el prompt → en TODOS los cubreasientos a medida, el FRENTE es cuero ecológico y la parte de ATRÁS es **licra** (no cuero). Aplica a eco cuero y capitoneado.
+- **Resiliencia IA:** `maxRetries` de 1 → 3 en los clientes OpenAI/Anthropic (`cerebro.js`) para que baches transitorios (429/529/5xx/timeout) se recuperen solos.
+- **Mensaje de error más cálido:** se reemplazó "Disculpá, tuve un problemita técnico..." por "¡Perdón! Se me cruzó un cable 😅 ¿Me lo repetís?" (whatsapp.js + web.js).
+- Causa raíz original del día: la API key de Anthropic se había quedado **sin crédito** → el usuario la recargó y Max volvió a responder.
+
+### DECISIÓN DEL CLIENTE (25 jun): preparar migración a la API OFICIAL, pero NO hacerla todavía
+- **Por ahora seguimos con Baileys** y respondiendo los leads de anuncios **A MANO**. Dejar todo "medio preparado" para hacer la migración más adelante.
+- **Número:** se migrará el **CHIP que ya usa el bot** (NO el 091 629 784 principal). Los anuncios ya apuntan a ese número → no hay que tocar los anuncios. Ese número, al pasar a la Cloud API, deja de funcionar en la app del celular (queda solo para el bot).
+- **Técnico:** el cerebro (`handler.js` + `cerebro.js`, catálogo, precios, fotos, derivación) **se reutiliza tal cual**; se reemplaza `whatsapp.js` (Baileys) por un **webhook de la Cloud API** (recibir + enviar). Hace falta: verificación de Meta Business (1–3 días), app en developers.facebook.com (producto WhatsApp), y luego **Phone Number ID + WhatsApp Business Account ID + token permanente** (van en Render → Environment, NO al código). La memoria de conversaciones está en Neon → se conserva tras migrar.
+- **Control del equipo (2 opciones, ya documentadas en el PDF):**
+  - **Opción 1 (recomendada): panel web propio** — gratis, a medida. La BASE YA EXISTE: `web.js` tiene `/conversaciones` (ver charlas). Falta completarlo para **responder/tomar el control** desde ahí (con la misma lógica de handoff de `previas.js`: cuando un humano escribe, Max se pausa).
+  - **Opción 2: bandeja externa tipo app** (Wati ~US$ 49/mes, Respond.io ~US$ 79/mes; varias suman ~20% de recargo por mensaje). App tipo WhatsApp para los asesores; hay que integrar Max.
+- **Costos (Uruguay/Resto LatAm, 2026):** responder anuncios = GRATIS (ventana 72 h del Click-to-WhatsApp) y responder clientes = GRATIS (ventana 24 h). Solo se paga lo que el negocio INICIA: marketing template **US$ 0,0777** c/u, utility **US$ 0,0119** c/u. La IA Claude cuesta **~US$ 50/mes** (consumo real informado por el cliente) y es **independiente del canal** (igual con Baileys o con la API oficial); subiría algo al atender más leads.
+- **PDF entregado al cliente (para presentarle a Rodrigo Delfino):** `Max_WhatsApp_API_Oficial_vs_Actual.pdf` (cómo funciona, control del equipo con las 2 opciones, costos con escenarios, plan de 5 pasos). Generado con reportlab; el script quedó en el scratchpad (efímero) — si hay que regenerarlo, rehacer con reportlab.
+
+### 🔎 INVESTIGACIÓN (25 jun): "Facebook sí contesta, Instagram no"
+- Observación del cliente: un lead que vino de un anuncio de **Facebook** se respondió, pero los de **Instagram** no.
+- **Conclusión:** es la MISMA limitación **#1723** de WhatsApp (retiene el PRIMER mensaje de anuncios hasta una respuesta MANUAL desde el teléfono / hasta guardar el contacto). La issue oficial de Baileys trata FB e IG **juntos, sin diferencia y SIN workaround** (issue abierta). Es **intermitente**: por eso uno pasa y otro no — NO es una regla "FB sí / IG no". **No hay fix de código confiable** del lado de Baileys.
+- **Mitigaciones mientras seguimos con Baileys:** (1) responder a mano la 1ra vez (lo que ya hacen) → destraba y Max sigue; (2) activar **"Mensaje de bienvenida"** de WhatsApp Business en el teléfono del bot (puede destrabar la entrega); (3) verificar en **`/api/diag?clave=NOTIFY_TOKEN`** qué llega realmente (evento "recibido" con `anuncio` fuente fb/ig, `esLid`, `tel`) para confirmar si los de IG ni siquiera llegan.
+- **La única solución de fondo para el 100% de los anuncios (FB e IG) es la API oficial** → refuerza la decisión de migrar.
+
+## 🟢🟢 SESIÓN 12 jun — SYNC ML EN VIVO RESUELTO
 - **✅ CREDENCIALES ML CARGADAS:** se creó la app **"Max Cubreasiento Sync"** en developers.mercadolibre.com.uy con la cuenta **EVERBOX S.A.** (App ID `4018742690592031`). `ML_CLIENT_ID` + `ML_CLIENT_SECRET` cargadas en Render → Environment. `/api/estado` muestra `syncML:true` y `mercadoPago:true` (el `MP_ACCESS_TOKEN` ya estaba cargado, empieza con `APP_USR-`).
 - **✅ FIX DEL ENDPOINT DE SYNC:** el viejo `/sites/MLU/search?seller_id=` ahora da **403** (ML restringió la búsqueda pública). Se reescribió `src/sync_ml.js` para usar el método soportado: **`/users/{seller}/items/search?status=active`** (IDs) + **multiget `/items?ids=...`** (detalles). El `/sites/search` quedó como respaldo. Verificado en vivo vía `/api/sync-ahora`: `ok:true`, `motivo:"ok (users/items)"`, **270 publicaciones**, `fuente:"api-ml"`. Se actualiza solo cada 6 h.
 - **Diagnóstico nuevo:** `/api/estado` ahora incluye `ultimaSync` (ok/motivo/cuándo/cantidad) y se agregó **`/api/sync-ahora`** (fuerza la sync y devuelve el resultado) para verificar sin revisar logs.
