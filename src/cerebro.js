@@ -141,9 +141,12 @@ function client() {
     }
     // timeout/maxRetries explícitos: sin esto el SDK espera 10 min por llamada y
     // reintenta hasta 2 veces (≈30 min). Para un chat eso es "Max no responde":
-    // el cliente queda mudo. Cortamos a ~60s con 1 reintento → si la IA se cuelga,
-    // la excepción sube y cada canal manda su aviso de error en vez de quedar callado.
-    _client = new OpenAI({ apiKey: _proveedor.apiKey, baseURL: _proveedor.baseURL, timeout: 60_000, maxRetries: 1 });
+    // el cliente queda mudo. Cortamos a ~60s por intento y reintentamos hasta 3 veces
+    // (el SDK reintenta solo los errores transitorios: 429 límite, 529 saturado, 5xx,
+    // timeouts; con backoff). Así un bache momentáneo de la API se recupera solo y Max
+    // contesta normal en vez de tirar el mensaje de error. Si igual falla las 3, la
+    // excepción sube y el canal manda su aviso en vez de quedar callado.
+    _client = new OpenAI({ apiKey: _proveedor.apiKey, baseURL: _proveedor.baseURL, timeout: 60_000, maxRetries: 3 });
   }
   return _client;
 }
@@ -159,9 +162,10 @@ function anthropicClient() {
       e.detalle = `Falta la clave ${_proveedor.envKey} en .env (proveedor: ${_proveedor.nombre}).`;
       throw e;
     }
-    // Mismo motivo que en client(): cortamos el timeout de 10 min del default.
-    // El SDK de Anthropic usa milisegundos para timeout.
-    _anthropic = new Anthropic({ apiKey: _proveedor.apiKey, timeout: 60_000, maxRetries: 1 });
+    // Mismo motivo que en client(): cortamos el timeout de 10 min del default y
+    // reintentamos hasta 3 veces los errores transitorios (el SDK de Anthropic usa
+    // milisegundos para timeout).
+    _anthropic = new Anthropic({ apiKey: _proveedor.apiKey, timeout: 60_000, maxRetries: 3 });
   }
   return _anthropic;
 }
@@ -582,7 +586,7 @@ const TOOLS_ANTHROPIC = TOOLS.map((t) => ({
   input_schema: t.function.parameters,
 }));
 
-const RESPUESTA_FALLBACK = "Disculpá, se me complicó procesar eso. ¿Lo podés repetir o preferís que te pase con un asesor?";
+const RESPUESTA_FALLBACK = "¡Perdón! ¿Me lo decís de nuevo o con otras palabras? Así te ayudo bien 🙌";
 
 // Arma la respuesta final: texto + fotos numeradas sin duplicados (compartido por ambos caminos).
 // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption.

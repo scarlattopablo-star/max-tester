@@ -53,7 +53,7 @@ app.post("/api/chat", async (req, res) => {
     if (msg.includes("FALTA_API_KEY")) return res.json({ texto: "⚠ Falta cargar la clave de IA en el servidor (.env)." });
     if (e?.status === 429 || /rate.?limit/i.test(msg)) return res.json({ texto: "⏳ Se llegó al límite de la IA por ahora. Probá en un ratito." });
     console.error("Error /api/chat:", msg);
-    res.json({ texto: "Disculpá, tuve un problemita técnico. ¿Me lo repetís? 🙏" });
+    res.json({ texto: "¡Perdón! Se me cruzó un cable 😅 ¿Me lo repetís?" });
   }
 });
 

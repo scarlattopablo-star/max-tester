@@ -236,7 +236,7 @@ async function iniciar() {
     } catch (e) {
       diag("error", { jid, jidEnvio, detalle: e.message });
       console.log(`⚠ Error respondiendo a ${jid}: ${e.message}`);
-      try { marcarEnviado(await sock.sendMessage(jidEnvio, { text: "Disculpá, tuve un problemita técnico. ¿Me lo repetís o preferís que te pase con un asesor? 🙏" })); }
+      try { marcarEnviado(await sock.sendMessage(jidEnvio, { text: "¡Perdón! Se me cruzó un cable 😅 ¿Me lo repetís?" })); }
       catch (e2) { diag("error_envio", { jid, jidEnvio, detalle: e2.message }); }
     } finally {
       procesando.delete(jid);
