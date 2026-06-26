@@ -85,6 +85,7 @@ async function iniciar() {
   const turnosAvisados = new Set(); // ids de solicitud de turno ya avisados al equipo
   const contactoCliente = new Map(); // jid -> { nombre, tel } para armar el link en los avisos
   const jidEnvioDe = new Map(); // jid entrante -> jid al que responder (mapea @lid -> número real)
+  const vaciosAvisados = new Map(); // jid -> ts del último saludo por mensaje vacío/no-legible (anti-spam)
 
   // Registra el ID de un mensaje que envió Max (o el notificador), para que en
   // messages.upsert no lo confundamos con un humano escribiendo desde el teléfono.
@@ -378,8 +379,33 @@ async function iniciar() {
             console.log(`🎤 ${jid}: audio → le pedí que lo escriba`);
           } catch (e) { console.log("⚠ no pude responder al audio:", e.message); }
         } else {
-          diag("ignorado_sin_texto", { jid, anuncio: !!anuncio, formato: Object.keys(contenidoReal(msg.message)).join(",") || "vacío" });
-          console.log(`(ignorado ${jid}: mensaje sin texto/foto/audio — ${Object.keys(msg.message || {}).join(",") || "vacío"})`);
+          // Mensaje entrante SIN contenido legible (formato vacío / tipo no soportado).
+          // Suele ser un PRIMER mensaje de un contacto nuevo que WhatsApp no pudo
+          // descifrar (típico de leads de anuncios): sabemos que escribió pero no
+          // podemos leer qué. Antes lo ignorábamos en silencio y se perdía el lead.
+          // Ahora le mandamos UN saludo para reenganchar la charla, pero como mucho
+          // una vez cada 10 min por chat (anti-spam, por si llegan varios vacíos seguidos).
+          const formato = Object.keys(contenidoReal(msg.message)).join(",") || "vacío";
+          const ahora = Date.now();
+          const ultimoAviso = vaciosAvisados.get(jid) || 0;
+          if (ahora - ultimoAviso > 10 * 60 * 1000) {
+            vaciosAvisados.set(jid, ahora);
+            if (vaciosAvisados.size > 2000) vaciosAvisados.clear(); // tope simple de memoria
+            try {
+              const aviso = "¡Hola! 🙌 No me llegó bien tu mensaje. ¿Me lo reenviás o me contás qué estás buscando? Así te ayudo enseguida.";
+              await sock.sendPresenceUpdate("composing", jidEnvio);
+              await sleep(900);
+              await sock.sendPresenceUpdate("paused", jidEnvio);
+              marcarEnviado(await sock.sendMessage(jidEnvio, { text: aviso }));
+              registrarMensajeMax(jid); // métrica: Max respondió
+              agregar(jid, "assistant", aviso);
+              diag("respondido", { jid, jidEnvio, resumen: "(saludo por mensaje no legible)" });
+              console.log(`✉️ ${jid}: mensaje no legible (${formato}) → le mandé un saludo para reenganchar`);
+            } catch (e) { console.log("⚠ no pude responder al mensaje vacío:", e.message); }
+          } else {
+            diag("ignorado_sin_texto", { jid, anuncio: !!anuncio, formato, nota: "ya saludé hace poco" });
+            console.log(`(ignorado ${jid}: vacío repetido — ya le saludé hace menos de 10 min)`);
+          }
         }
         continue;
       }
