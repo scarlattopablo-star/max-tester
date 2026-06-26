@@ -12,6 +12,7 @@ import { sleep, delayEscritura } from "./humano.js";
 import { registrarSock, desregistrarSock, enviarTexto, linkWa } from "./notificador.js";
 import { agregar, cargarConversaciones } from "./memoria.js";
 import { registrarMensajeMax } from "./metricas.js";
+import { linkTurno } from "./confirmacion_turno.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
@@ -228,6 +229,8 @@ async function iniciar() {
             tr.vehiculo ? `🚗 ${tr.vehiculo}` : "",
             cuando ? `📅 Prefiere: ${cuando}` : "📅 Sin preferencia de horario",
             `💬 Entrá a la conversación: ${linkConversacion}`,
+            `✅ Cuando lo coordines con el cliente, confirmalo acá: ${linkTurno(tr.id, "confirmado")}`,
+            `❌ Cancelar el turno: ${linkTurno(tr.id, "cancelado")}`,
           ].filter(Boolean);
           await enviarTexto(lineas.join("\n"));
         } catch (e) {
