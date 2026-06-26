@@ -93,4 +93,23 @@ test("@lid sin número → cae al @lid", () => {
   assert.equal(jidParaResponder({ key: { remoteJid: jid } }, jid), jid);
 });
 
+// 9) Formatos INTERACTIVOS que antes Max ignoraba (los lee Sofi): botón, lista,
+//    plantilla y respuesta interactiva. Ahora textoDelMensaje los reconoce.
+test("botón (buttonsResponseMessage) — lee el texto del botón", () => {
+  const msg = { message: { buttonsResponseMessage: { selectedDisplayText: "Quiero comprar" } } };
+  assert.equal(textoDelMensaje(msg), "Quiero comprar");
+});
+test("lista (listResponseMessage) — lee el título de la opción", () => {
+  const msg = { message: { listResponseMessage: { title: "Cubreasientos a medida" } } };
+  assert.equal(textoDelMensaje(msg), "Cubreasientos a medida");
+});
+test("plantilla (templateMessage hidratada) — lee el contenido", () => {
+  const msg = { message: { templateMessage: { hydratedTemplate: { hydratedContentText: "Hola, info de alfombras" } } } };
+  assert.equal(textoDelMensaje(msg), "Hola, info de alfombras");
+});
+test("respuesta interactiva — lee el body.text", () => {
+  const msg = { message: { interactiveResponseMessage: { body: { text: "Opción A" } } } };
+  assert.equal(textoDelMensaje(msg), "Opción A");
+});
+
 console.log(`\n✅ ${ok} tests OK`);

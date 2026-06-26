@@ -24,7 +24,11 @@ export function contenidoReal(message) {
 }
 
 // Texto del mensaje, ya desenvuelto. Soporta texto plano, texto extendido (el que
-// usan los mensajes con contexto, como los de anuncios) y captions de foto/video.
+// usan los mensajes con contexto, como los de anuncios), captions de foto/video y
+// además los formatos INTERACTIVOS (botones, listas, plantillas y respuestas
+// interactivas). Sin estos últimos, esos mensajes salían vacíos y Max los ignoraba
+// —los lee el bot Sofi de Buda, por eso a veces "contestaba más" que Max—. Ahora
+// Max reconoce los mismos formatos.
 export function textoDelMensaje(msg) {
   const m = contenidoReal(msg?.message);
   return (
@@ -32,6 +36,17 @@ export function textoDelMensaje(msg) {
     m.extendedTextMessage?.text ||
     m.imageMessage?.caption ||
     m.videoMessage?.caption ||
+    // Plantillas (template messages) con texto ya "hidratado".
+    m.templateMessage?.hydratedTemplate?.hydratedContentText ||
+    m.templateMessage?.hydratedFourRowTemplate?.hydratedContentText ||
+    // El cliente tocó un BOTÓN: tomamos el texto del botón elegido.
+    m.buttonsResponseMessage?.selectedDisplayText ||
+    m.templateButtonReplyMessage?.selectedDisplayText ||
+    // El cliente eligió una opción de una LISTA.
+    m.listResponseMessage?.title ||
+    m.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    // Respuesta de un mensaje INTERACTIVO (nuevo formato de WhatsApp).
+    m.interactiveResponseMessage?.body?.text ||
     ""
   ).trim();
 }
