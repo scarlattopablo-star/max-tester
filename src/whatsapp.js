@@ -327,7 +327,17 @@ async function iniciar() {
       // inicial para que Max salude y arranque la conversación en vez de ignorarlo.
       if (anuncio) {
         console.log(`📣 ${jid}: desde ANUNCIO${anuncio.titulo ? ` ("${anuncio.titulo}")` : ""}${anuncio.fuente ? ` — ${anuncio.fuente}` : ""}`);
-        if (!texto && !tieneFoto) texto = "Hola, vengo del anuncio y quiero más información";
+        // Le pasamos el CONTEXTO del anuncio al cerebro (de qué trata: título/cuerpo)
+        // para que Max oriente la respuesta a ESE producto en vez de saludar genérico.
+        // El video/reel no viaja en el mensaje (no se puede ver), pero el título/texto sí.
+        const partes = [];
+        if (anuncio.titulo) partes.push(`sobre "${anuncio.titulo}"`);
+        if (anuncio.cuerpo) partes.push(`— ${anuncio.cuerpo}`);
+        const desc = partes.length ? ` ${partes.join(" ")}` : "";
+        const ctxAnuncio = `[Contexto: el cliente llegó desde un anuncio de Instagram/Facebook${desc}. Orientá la respuesta a ese producto.] `;
+        // Solo el PRIMER mensaje del anuncio trae este contexto; lo prefijamos al texto
+        // que lee el cerebro (si no hay texto, le damos una apertura natural).
+        texto = ctxAnuncio + (texto || (tieneFoto ? "" : "Hola, vengo del anuncio y quiero más información."));
       }
 
       // Guardamos nombre y teléfono del cliente para los avisos al equipo (link a la conversación).
