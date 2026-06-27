@@ -2,7 +2,7 @@
 // Arranca solo cuando escaneás el QR con el chip DEDICADO del bot.
 //   npm run whatsapp
 import "./env.js";
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from "baileys";
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion } from "baileys";
 import qrcode from "qrcode-terminal";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -25,6 +25,9 @@ const AUTH_DIR = join(__dirname, "..", "auth_baileys");
 // Silenciamos el logger interno de Baileys (necesita uno tipo pino).
 const noopLogger = { level: "silent", child: () => noopLogger, trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {} };
 
+// Evita apilar reconexiones (varias "close" seguidas crearían varios sockets a la vez).
+let reconectando = false;
+
 async function iniciar() {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.log("⚠ Falta ANTHROPIC_API_KEY en .env — el bot no va a poder responder. Copiá .env.example a .env.");
@@ -34,7 +37,24 @@ async function iniciar() {
   const { state, saveCreds } = process.env.DATABASE_URL
     ? await useDBAuthState()
     : await useMultiFileAuthState(AUTH_DIR);
-  const sock = makeWASocket({ auth: state, logger: noopLogger, markOnlineOnConnect: false });
+  // Usamos SIEMPRE la última versión del protocolo de WhatsApp Web (como Sofi de Buda).
+  // Con la versión vieja por defecto, Max se caía más (códigos 440/515) y llegaban
+  // mensajes que no se podían descifrar. Pedir la última cierra casi toda esa brecha.
+  let version;
+  try {
+    ({ version } = await fetchLatestBaileysVersion());
+    console.log(`📦 Versión de WhatsApp Web: ${Array.isArray(version) ? version.join(".") : version}`);
+  } catch (e) {
+    console.log("⚠ no pude obtener la última versión de WhatsApp, uso la default:", e.message);
+  }
+  const sock = makeWASocket({
+    version, // si quedó undefined, Baileys usa su default
+    auth: state,
+    logger: noopLogger,
+    browser: ["Max - La Casa del Cubreasiento", "Chrome", "1.0.0"],
+    generateHighQualityLinkPreview: false,
+    markOnlineOnConnect: false,
+  });
 
   sock.ev.on("creds.update", saveCreds);
 
@@ -63,8 +83,17 @@ async function iniciar() {
       desregistrarSock(); // el socket dejó de servir: que hayWhatsApp() diga la verdad
       setConectado(false);
       diag("conexion", { estado: "cerrada", code });
-      console.log(`🔌 Conexión cerrada (code ${code}).` + (cerroSesion ? " Sesión cerrada: borrá auth_baileys/ y volvé a escanear." : " Reintentando…"));
-      if (!cerroSesion) iniciar();
+      if (cerroSesion) {
+        console.log("🔌 Sesión cerrada: reescaneá el QR en /qr (o borrá auth_baileys/) y volvé a vincular.");
+        return;
+      }
+      // Reconexión con BACKOFF (como Sofi): si fue conflicto/reinicio (440/515/503)
+      // esperamos más, para no entrar en un loop de reconexiones que desestabiliza todo.
+      if (reconectando) return; // ya hay una reconexión programada
+      reconectando = true;
+      const espera = (code === 515 || code === 503 || code === 440) ? 10000 : 3000;
+      console.log(`🔌 Conexión cerrada (code ${code}). Reconectando en ${espera / 1000}s…`);
+      setTimeout(() => { reconectando = false; iniciar(); }, espera);
     }
   });
 
