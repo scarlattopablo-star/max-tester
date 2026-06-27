@@ -3,7 +3,7 @@
 Bot de WhatsApp (Baileys, sin API de Meta) + derivación de Instagram, para La Casa del Cubreasiento.
 Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`.
 
-## 🔵🔵 SESIÓN 25 jun — FIXES + PLAN MIGRACIÓN A API OFICIAL (LO MÁS NUEVO, RETOMAR ACÁ)
+## 🔵🔵 SESIÓN 25–27 jun — FIXES + PLAN MIGRACIÓN A API OFICIAL + HOSTING (LO MÁS NUEVO, RETOMAR ACÁ)
 
 ### Fixes hechos esta sesión (en `main`, rama `claude/max-message-response-21nigk`)
 - **Saludo por código (mañana/tarde):** el modelo (Haiku) decía "buenas tardes" de mañana aunque el prompt le indicaba la hora. Se reforzó el prompt Y, sobre todo, se agregó `corregirSaludo()` en `cerebro.js` (`armarRespuesta`): reescribe de forma **determinística** el saludo del INICIO del mensaje según la hora real de Uruguay. No toca despedidas ni mensajes sin saludo.
@@ -32,6 +32,21 @@ Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`
 - **Conclusión:** es la MISMA limitación **#1723** de WhatsApp (retiene el PRIMER mensaje de anuncios hasta una respuesta MANUAL desde el teléfono / hasta guardar el contacto). La issue oficial de Baileys trata FB e IG **juntos, sin diferencia y SIN workaround** (issue abierta). Es **intermitente**: por eso uno pasa y otro no — NO es una regla "FB sí / IG no". **No hay fix de código confiable** del lado de Baileys.
 - **Mitigaciones mientras seguimos con Baileys:** (1) responder a mano la 1ra vez (lo que ya hacen) → destraba y Max sigue; (2) activar **"Mensaje de bienvenida"** de WhatsApp Business en el teléfono del bot (puede destrabar la entrega); (3) verificar en **`/api/diag?clave=NOTIFY_TOKEN`** qué llega realmente (evento "recibido" con `anuncio` fuente fb/ig, `esLid`, `tel`) para confirmar si los de IG ni siquiera llegan.
 - **La única solución de fondo para el 100% de los anuncios (FB e IG) es la API oficial** → refuerza la decisión de migrar.
+
+### 🚉 DECISIÓN DE HOSTING (25 jun): mover Max a Railway (recomendado), NO mover Sofi a Render
+- **Max → Railway = lo mejor.** Railway es always-on (no se duerme como Render free). Con la config nueva (última versión + backoff) Max quedaría a la par de Sofi. Ventajas: conexión 24/7 estable, menos mensajes perdidos, **auto-deploy con cada `git push`** (en Render no andaba el webhook → había que "Deploy latest commit" a mano), el número es el mismo, y como la sesión de Max vive en Neon (`DATABASE_URL` → `useDBAuthState`) **probablemente NO haga falta reescanear el QR**. Costo ~US$ 5/mes (Hobby). Variables a cargar en Railway: ANTHROPIC_API_KEY, DATABASE_URL, NOTIFY_TOKEN, ML_CLIENT_ID/SECRET, MP_ACCESS_TOKEN, APP_URL, WHATSAPP_ON=1, IA_PROVIDER=claude, IA_MODEL.
+- **Sofi → Render = NO.** Render free se duerme → Sofi empezaría a tener los problemas de Max. No mover lo que funciona. Sofi confirmado en Railway (su server.js maneja el apagado de Railway).
+- **Hosting (Railway) y API oficial son cosas distintas:** Railway = estabilidad (ya, ~US$5/mes); API oficial = recibir el 100% sin baneo (más adelante). No se pisan.
+
+### 🆕 DELIVERABLES Y CÓMO PROBAR (25 jun)
+- **PDF actualizado** `Max_WhatsApp_API_Oficial_vs_Actual.pdf` (entregado al cliente, para Rodrigo): suma la **maqueta del Panel del Equipo** (imagen incrustada), una sección de **Beneficios de pasar de Baileys a Meta** (encabezada por "responde el 100% de los mensajes, no solo anuncios"), y **costos un poco inflados** a pedido del cliente (IA ~US$70/mes, total ~US$75–90, escenarios 75-90 / 110-130 / 150-180, bandeja externa US$60–140+). Generado con reportlab (scripts en scratchpad EFÍMERO: `gen_pdf_whatsapp.py` + maqueta `panel_equipo.html`→`panel_equipo.png` con chromium headless). ⚠️ Al regenerar, mantener estos números/estructura.
+- **Maqueta del panel** (`panel_equipo.png`): lista de conversaciones con etiquetas (🤖 Max atendiendo / 🧑 Atiende: <nombre> / 📣 vino de anuncio) + chat abierto + botón "Tomar la conversación" (Max se pausa solo). Es el ejemplo visual de la Opción 1.
+- **Cómo ver/probar a Max:** (1) **Chat de prueba web:** https://max-tester.onrender.com (raíz, `chat.html`) — prueba el CEREBRO, no la conexión WA. (2) **WhatsApp real:** escribir al chip desde otro teléfono. (3) **Diagnóstico:** `/api/diag?clave=NOTIFY_TOKEN` (recibido→respondido por mensaje), `/api/estado` (whatsapp.conectado/hayQr/keepAlive, catálogo, IA). NOTIFY_TOKEN está en Render → Environment.
+
+### 🔧 ESTADO AL CIERRE (27 jun) — RETOMAR ACÁ
+- Todos los cambios de esta sesión están en `main` (último commit `572982b` "Conexión WhatsApp robustecida…") y en la rama `claude/max-message-response-21nigk`. **PENDIENTE: redeployar en Render** para que tomen efecto (Render no auto-deploya; "Manual Deploy → Deploy latest commit"). Hubo una desconexión de WhatsApp (conectado:false, hayQr:false) — la config nueva (última versión del protocolo) debería ayudar a reconectar estable.
+- ⚠️ NO puedo deployar yo: el panel de Render necesita login del usuario, el Deploy Hook está en la PC del usuario (gitignored), y el entorno de Claude tiene bloqueado api.render.com/onrender.com (403). El deploy lo hace el usuario.
+- **PRÓXIMOS PASOS sugeridos (en orden):** (1) redeploy en Render y probar con un lead real de anuncio + chat de prueba; (2) si querés estabilidad total, mover Max a Railway (~US$5/mes); (3) más adelante, API oficial de Meta (todo ya documentado en el PDF y arriba).
 
 ## 🟢🟢 SESIÓN 12 jun — SYNC ML EN VIVO RESUELTO
 - **✅ CREDENCIALES ML CARGADAS:** se creó la app **"Max Cubreasiento Sync"** en developers.mercadolibre.com.uy con la cuenta **EVERBOX S.A.** (App ID `4018742690592031`). `ML_CLIENT_ID` + `ML_CLIENT_SECRET` cargadas en Render → Environment. `/api/estado` muestra `syncML:true` y `mercadoPago:true` (el `MP_ACCESS_TOKEN` ya estaba cargado, empieza con `APP_USR-`).
