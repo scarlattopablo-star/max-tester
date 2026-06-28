@@ -32,6 +32,14 @@ const app = express();
 app.use(express.json({ limit: "15mb" })); // permite fotos en base64
 app.use(express.static(PUBLIC));
 
+// WhatsApp por la Cloud API OFICIAL de Meta: si WA_PROVIDER=meta, montamos el webhook
+// (GET/POST /webhook) sobre ESTE mismo server. Max atiende por la API en vez de Baileys.
+// Sin la variable, no se toca nada y sigue todo como con Baileys.
+if (process.env.WA_PROVIDER === "meta") {
+  const { montarWebhook } = await import("./whatsapp_meta.js");
+  montarWebhook(app);
+}
+
 app.get("/", (req, res) => {
   // Retorno de la autorización de Mercado Libre (la callback de la app apunta
   // a la raíz): viene ?code= → lo canjeamos por el token de usuario.

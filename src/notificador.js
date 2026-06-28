@@ -4,13 +4,18 @@ import "./env.js";
 
 let sockActivo = null;
 let alEnviar = null; // callback de whatsapp.js: registra los IDs de los mensajes que manda el bot
+// Transporte alternativo (Cloud API de Meta): una función async (texto)=>{} que
+// manda al WhatsApp del negocio. Lo registra whatsapp_meta.js cuando WA_PROVIDER=meta.
+// Así enviarTexto/enviarAviso funcionan IGUAL con Baileys o con la API oficial.
+let transporte = null;
 
 export function registrarSock(sock, marcarEnviado) { sockActivo = sock; alEnviar = marcarEnviado || null; }
+export function registrarTransporte(fn) { transporte = fn || null; }
 // Al cerrarse la conexión limpiamos el sock: así hayWhatsApp() refleja el estado
 // REAL (antes quedaba en true para siempre tras la primera conexión, aunque el
 // socket se hubiera caído — daba un diagnóstico engañoso).
 export function desregistrarSock() { sockActivo = null; }
-export function hayWhatsApp() { return !!sockActivo; }
+export function hayWhatsApp() { return !!sockActivo || !!transporte; }
 
 // "091 629 784" -> "59891629784@s.whatsapp.net"
 export function numeroAJid(numero) {
@@ -93,19 +98,20 @@ async function enriquecerVentaMax(pedido) {
 }
 
 export async function enviarAviso(pedido) {
-  if (!sockActivo) {
-    const e = new Error("whatsapp_desconectado");
-    e.whatsapp = false;
-    throw e;
-  }
   const p = await enriquecerVentaMax(pedido);
-  const jid = numeroAJid(process.env.NUMERO_AVISOS || "091629784");
-  const sent = await sockActivo.sendMessage(jid, { text: formatearAviso(p) });
-  alEnviar?.(sent);
+  return enviarTexto(formatearAviso(p));
 }
 
-// Texto pelado al WhatsApp del negocio (lo usa Max para avisos sueltos, ej: derivación a humano).
+// Texto pelado al WhatsApp del negocio (lo usa Max para avisos sueltos, ej: derivación
+// a humano). Sale por el transporte de Meta si está activo, o por Baileys si no.
 export async function enviarTexto(texto) {
+  // Cloud API (Meta): transporte registrado por whatsapp_meta.js.
+  if (transporte) {
+    await transporte(texto);
+    console.log("📢 aviso al equipo enviado por Cloud API (Meta)");
+    return;
+  }
+  // Baileys: el socket vivo.
   if (!sockActivo) {
     const e = new Error("whatsapp_desconectado");
     e.whatsapp = false;
