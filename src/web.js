@@ -15,7 +15,7 @@ import { programarSync, haySyncML, ultimaSync, sincronizar } from "./sync_ml.js"
 import { infoCatalogo, productos } from "./catalogo_vivo.js";
 import { hayMercadoPago } from "./pagos.js";
 import { proveedorIA } from "./config.js";
-import { enviarAviso, enviarTexto, hayWhatsApp, linkWa } from "./notificador.js";
+import { enviarAviso, enviarTexto, enviarTextoA, formatearCupon, hayWhatsApp, linkWa } from "./notificador.js";
 import { urlAutorizacion, conectarConCode, hayUsuarioML, infoUsuarioML } from "./ml_user.js";
 import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
@@ -534,6 +534,24 @@ app.post("/api/notificar-venta", async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error("Aviso de venta falló:", e.message);
+    res.status(503).json({ ok: false, whatsapp: e.whatsapp !== false });
+  }
+});
+
+// Entrega de cupón/bono al CLIENTE por WhatsApp (Baileys). Autenticado con el
+// mismo token compartido. 503 si WhatsApp no está conectado.
+app.post("/api/notificar-cupon", async (req, res) => {
+  const auth = req.headers.authorization || "";
+  if (!process.env.NOTIFY_TOKEN || auth !== `Bearer ${process.env.NOTIFY_TOKEN}`)
+    return res.status(401).json({ error: "no autorizado" });
+  if (!hayWhatsApp()) return res.status(503).json({ ok: false, whatsapp: false });
+  try {
+    const { telefono, nombre, codigo, monto, vence } = req.body || {};
+    if (!telefono || !codigo) return res.status(400).json({ error: "faltan datos" });
+    await enviarTextoA(telefono, formatearCupon({ telefono, nombre, codigo, monto, vence }));
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Aviso de cupón falló:", e.message);
     res.status(503).json({ ok: false, whatsapp: e.whatsapp !== false });
   }
 });

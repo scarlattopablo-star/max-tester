@@ -97,6 +97,31 @@ async function enriquecerVentaMax(pedido) {
   }
 }
 
+// Manda un texto al WhatsApp de un CLIENTE (no al negocio). Solo por Baileys
+// (Cloud API de Meta requiere plantilla para iniciar una conversación; fuera de
+// alcance v1). Lanza si el socket no está vivo o el número es inválido.
+export async function enviarTextoA(telefono, texto) {
+  const jid = numeroAJid(telefono);
+  if (!jid) throw new Error("telefono_invalido");
+  if (transporte) { /* Cloud API: requiere plantilla para iniciar; fuera de alcance v1 */ }
+  if (!sockActivo) {
+    const e = new Error("whatsapp_desconectado");
+    e.whatsapp = false;
+    throw e;
+  }
+  const sent = await sockActivo.sendMessage(jid, { text: texto });
+  alEnviar?.(sent);
+  return sent;
+}
+
+// Arma el mensaje de WhatsApp con el cupón/bono para el cliente.
+export function formatearCupon(c) {
+  const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
+  const vence = c.vence ? new Date(c.vence).toLocaleDateString("es-UY") : "";
+  const hola = c.nombre ? `¡Gracias por tu compra, ${c.nombre}! 🎉` : "¡Gracias por tu compra! 🎉";
+  return `${hola}\n\nTe ganaste un BONO de ${fmt(c.monto)} para tu próxima compra en La Casa del Cubreasiento.\n\n🎟️ Tu código: *${c.codigo}*\n📅 Válido hasta: ${vence}\n\nUsalo en el checkout de la web. ¡Un solo uso y se combina con el 10% por transferencia!`;
+}
+
 export async function enviarAviso(pedido) {
   const p = await enriquecerVentaMax(pedido);
   return enviarTexto(formatearAviso(p));
