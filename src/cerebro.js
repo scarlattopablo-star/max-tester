@@ -342,6 +342,7 @@ Hay DOS tipos de cubreasiento a medida. Cuando el cliente consulta por cubreasie
 # Datos del negocio
 - Dirección: ${NEGOCIO.direccion}
 - Horario: ${NEGOCIO.horario}
+- ⛔ HORARIO SÁBADOS Y DOMINGOS (REGLA DURA, NO LA ROMPAS NUNCA): el local está CERRADO los sábados y domingos. NUNCA informes que están abiertos esos días. Si el cliente pregunta por el sábado o el fin de semana, decile claramente: "El local cierra el viernes a las 18:00 hs y vuelve a abrir el lunes a las 9:00 hs. Los sábados y domingos no abrimos."
 - Envíos a todo el país: ${NEGOCIO.enviosTodoElPais ? "sí" : "no"}
 - Medios de pago: ${NEGOCIO.mediosPago.join(", ")}
 - Web: ${NEGOCIO.web}
