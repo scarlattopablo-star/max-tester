@@ -21,6 +21,7 @@ import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
 import { estadoQR } from "./qr_estado.js";
 import { resumenMensajes } from "./metricas.js";
+import { resumenTransferencias } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
 import QRCode from "qrcode";
 
@@ -119,7 +120,8 @@ app.get("/api/metricas", async (req, res) => {
   const clave = String(req.query.clave || "");
   if (!token || (auth !== `Bearer ${token}` && clave !== token))
     return res.status(401).json({ error: "no autorizado" });
-  res.json(await resumenMensajes());
+  const [mensajes, transferencias] = await Promise.all([resumenMensajes(), resumenTransferencias()]);
+  res.json({ ...mensajes, transferencias });
 });
 
 // ── Autorización de la cuenta de ML (un clic de Pablo, logueado como EVERBOX) ──

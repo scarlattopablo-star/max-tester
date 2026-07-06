@@ -12,6 +12,7 @@ import { registrarDerivacion } from "./derivaciones.js";
 import { productos as productosML } from "./catalogo_vivo.js";
 import { leccionesActuales } from "./aprendizaje.js";
 import { crearLinkPago, hayMercadoPago } from "./pagos.js";
+import { registrarTransferencia } from "./transferencias.js";
 import { resolverPorNombre } from "./ml_stock.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -230,7 +231,9 @@ ${medios}
    y recién cuando elija uno, le pasás los datos concretos de ese medio.
 4. ⚠️ REGLA DE ORO: CADA VEZ que nombres, preguntes o enumeres medios de pago, mencioná SÍ O SÍ que la transferencia tiene ${NEGOCIO.descuentoTransferencia}% de descuento (es un beneficio que el negocio quiere que TODOS conozcan). Si el cliente la elige, decile además el monto final YA descontado, redondeado.
 5. Después de pasar los datos de pago, preguntá cómo desea recibir el producto (envío o retiro; y en CUBREASIENTOS también colocación; ver sección de ENTREGA).
-6. Cuando diga que pagó, tomá el pedido (tomar_pedido) y avisá que el equipo confirma el pago a la brevedad. NUNCA inventes números de cuenta, alias ni links.`;
+6. Cuando diga que pagó, tomá el pedido (tomar_pedido) y avisá que el equipo confirma el pago a la brevedad. NUNCA inventes números de cuenta, alias ni links.
+7. ⚠️ TRANSFERENCIAS — AVISO AL EQUIPO OBLIGATORIO (REGLA DE ORO, esto te estuvo fallando y se PERDIERON VENTAS): CADA VEZ que el cliente diga que YA transfirió/depositó/giró la plata, O que mande la FOTO o el ARCHIVO del comprobante, tu PRIMERA acción de ese turno es llamar a "confirmar_transferencia" (con comprobante=true si mandó el comprobante, false si solo avisó). Frases típicas que SIEMPRE la disparan: "ya transferí", "ya te giré", "listo, transferido", "ya envié", "ya hice el depósito", "ahí te pasé la seña", "te pasé el comprobante". Decir en tu texto "le aviso al equipo" NO alcanza: si no llamás la herramienta, NADIE del equipo se entera del pago y el cliente queda esperando días. Llamála aunque ya hayas tomado el pedido antes con tomar_pedido, y llamála DE NUEVO cuando llegue el comprobante aunque ya la hayas llamado por el aviso.
+8. ⛔ NUNCA digas que el pago "llegó", "se acreditó" o "fue recibido correctamente": vos NO podés ver la cuenta bancaria. Aunque el comprobante se vea perfecto, decí siempre algo como "¡Gracias! Le paso el comprobante al equipo para que verifique el pago y te confirme a la brevedad". Confirmar plata que no llegó es un problema grave para el negocio.`;
 }
 
 // Parte FIJA del prompt (cacheable): reglas, catálogo y datos del negocio.
@@ -279,6 +282,8 @@ function systemPromptEstatico() {
 - Si el cliente te manda una foto, MIRALA con atención y reconocé qué es: un auto (y de qué marca/modelo parece), un asiento, una alfombra, una funda, un producto, etc.
 - Asociá lo que ves con el catálogo y continuá en consecuencia. Si ves una camioneta, "Veo que se trata de una Hilux. Para ese modelo tenemos..."; si ves un asiento, indicá qué cubreasiento corresponde.
 - Si NO estás seguro del modelo/año, indicalo con cortesía y pedí confirmación ("Por la imagen parecería una Strada, ¿me confirmás el año?"). No afirmes un modelo si no estás seguro.
+- 🏦 Si la foto es un COMPROBANTE de pago (captura o foto de una transferencia bancaria, giro o depósito), llamá SÍ O SÍ a "confirmar_transferencia" con comprobante=true (mirá el monto en la imagen si se ve). Agradecé y decí que el equipo verifica el pago y le confirma a la brevedad. ⛔ NO digas que el pago ya "llegó" o "se acreditó": vos no ves la cuenta.
+- 📎 Si el cliente manda un ARCHIVO/documento (un PDF, por ejemplo) en medio de una compra o después de que le pasaste los datos de la cuenta, es casi seguro el comprobante de la transferencia: tratalo igual que el punto anterior (confirmar_transferencia con comprobante=true), aunque no puedas abrir el archivo.
 
 # LINKS QUE TE MANDA EL CLIENTE
 - Si el cliente te manda un LINK de un producto (de Mercado Libre, de nuestra web, o de otro lado), leé el texto del link: casi siempre dice el producto y el modelo (ej: ".../cubreasiento-ford-ranger..." o ".../alfombra-hilux..."). Reconocé qué producto es y ASESORALO: confirmá si lo tenemos, para qué modelo, el precio (con "consultar_precio") y ofrecé mandarle fotos ("enviar_foto") o el link a nuestra tienda ("link_web").
@@ -518,6 +523,24 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "confirmar_transferencia",
+      description: "Registra que el cliente AVISÓ que hizo una transferencia bancaria o que ENVIÓ el comprobante, y le avisa al equipo asesor para que verifique el pago en la cuenta. Usar SIEMPRE, sin excepción, cuando el cliente diga que ya transfirió/depositó/giró la plata, o cuando mande la foto o el archivo del comprobante. Si primero avisa y después manda el comprobante, llamarla las dos veces (con comprobante=false y luego true).",
+      parameters: {
+        type: "object",
+        properties: {
+          monto: { type: "number", description: "Monto transferido en pesos uruguayos, si se conoce (con el descuento ya aplicado)" },
+          nombre: { type: "string", description: "Nombre del cliente, si lo dijo" },
+          telefono: { type: "string", description: "Teléfono del cliente, si lo dio" },
+          detalle: { type: "string", description: "Qué compró / qué es la transferencia (producto, modelo, seña, etc.)" },
+          comprobante: { type: "boolean", description: "true si el cliente MANDÓ el comprobante (foto o archivo); false si solo avisó que transfirió" },
+        },
+        required: ["comprobante"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "derivar_a_humano",
       description: "Marca que esta conversación necesita que la atienda una persona (reclamos, mayorista, alto valor, negociación, o pedido explícito del cliente).",
       parameters: {
@@ -574,6 +597,7 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
     }
     if (nombre === "solicitar_turno") return await solicitarTurno(input);
     if (nombre === "tomar_pedido") return registrarPedido(input);
+    if (nombre === "confirmar_transferencia") return await registrarTransferencia({ ...input, chatId: ctx.chatId, nombre: input.nombre || ctx.contacto?.nombre, telefono: input.telefono || ctx.contacto?.tel });
     if (nombre === "derivar_a_humano") return registrarDerivacion(input);
     if (nombre === "link_web") {
       const base = (NEGOCIO.web || "https://lacasadelcubreasiento.com.uy").replace(/\/$/, "");
@@ -672,6 +696,10 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
   }
   const messages = [...previos, { role: "user", content: userContent }];
   const acciones = [];
+  // Texto que el modelo escribió JUNTO con un tool_use: se guarda como respaldo.
+  // Sin esto, si la vuelta final viene vacía caía al fallback "¿Me lo decís de
+  // nuevo?" — pésimo justo después de que el cliente manda un comprobante.
+  let textoParcial = "";
 
   for (let vuelta = 0; vuelta < 6; vuelta++) {
     const resp = await cli.messages.create({
@@ -685,6 +713,8 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
 
     const toolUses = (resp.content || []).filter((b) => b.type === "tool_use");
     if (toolUses.length) {
+      const acompanante = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+      if (acompanante) textoParcial = acompanante;
       messages.push({ role: "assistant", content: resp.content });
       const resultados = [];
       for (const tu of toolUses) {
@@ -698,9 +728,9 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
     }
 
     const texto = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
-    return armarRespuesta(texto, acciones);
+    return armarRespuesta(texto.trim() || textoParcial, acciones);
   }
-  return { texto: RESPUESTA_FALLBACK, acciones, imagenesEnviar: [] };
+  return armarRespuesta(textoParcial, acciones);
 }
 
 // historialPrevio: array de {role:'user'|'assistant', content:string}

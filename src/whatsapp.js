@@ -16,8 +16,9 @@ import { linkTurno } from "./confirmacion_turno.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
-import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder } from "./ws_mensaje.js";
+import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder, documentoDelMensaje, dijoQueTransfirio } from "./ws_mensaje.js";
 import { diag } from "./diag.js";
+import { registrarTransferencia } from "./transferencias.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AUTH_DIR = join(__dirname, "..", "auth_baileys");
@@ -242,6 +243,47 @@ async function iniciar() {
           console.log(`⚠ No pude avisar el pedido al negocio: ${e.message}`);
         }
       }
+      // TRANSFERENCIA: el cliente avisó que transfirió o mandó el comprobante.
+      // Aviso SIEMPRE (aunque el pedido ya se haya avisado antes): es el momento
+      // en que el equipo tiene que ir a verificar la plata en la cuenta.
+      const avisarTransferencia = async (t) => {
+        const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
+        const datosCliente = [t.nombre, t.telefono].filter(Boolean).join(" · ");
+        const lineas = [
+          t.comprobante
+            ? "🏦 COMPROBANTE DE TRANSFERENCIA RECIBIDO — verificá que la plata esté en la cuenta"
+            : "🏦 UN CLIENTE AVISA QUE TRANSFIRIÓ — verificá que la plata esté en la cuenta",
+          t.monto ? `💵 Monto: ${fmt(t.monto)}` : "",
+          t.detalle ? `📝 ${t.detalle}` : "",
+          datosCliente ? `👤 ${datosCliente}` : lineaCliente,
+          "⚠️ Max no ve la cuenta bancaria: el pago hay que confirmarlo a mano y avisarle al cliente.",
+          `💬 Entrá a la conversación: ${linkBase(t.telefono)}`,
+        ].filter(Boolean);
+        await enviarTexto(lineas.join("\n"));
+      };
+      let transferenciaAvisada = false;
+      for (const a of acciones) {
+        if (a.herramienta !== "confirmar_transferencia") continue;
+        try {
+          await avisarTransferencia(a.resultado?.transferencia || a.input || {});
+          transferenciaAvisada = true;
+        } catch (e) {
+          console.log(`⚠ No pude avisar la transferencia al negocio: ${e.message}`);
+        }
+      }
+      // RED DE SEGURIDAD determinística: si el cliente dijo claramente que YA
+      // transfirió pero el modelo NO llamó la herramienta (le pasaba), registramos
+      // y avisamos igual por código. Mejor un aviso de más que una venta perdida.
+      if (!transferenciaAvisada && dijoQueTransfirio(texto)) {
+        try {
+          const t = { chatId: jid, nombre: contacto.nombre, telefono: contacto.tel, detalle: texto.slice(0, 140), comprobante: /comprobante/i.test(texto) };
+          await registrarTransferencia(t);
+          await avisarTransferencia(t);
+          console.log(`🏦 ${jid}: aviso de transferencia por red de seguridad (el modelo no llamó la herramienta)`);
+        } catch (e) {
+          console.log(`⚠ No pude avisar la transferencia (red de seguridad): ${e.message}`);
+        }
+      }
       // TURNO: el cliente quiere ir al local. Max NO confirma: avisa al equipo
       // con los datos para que el EQUIPO confirme el día y la hora.
       for (const a of acciones) {
@@ -353,6 +395,19 @@ async function iniciar() {
       let texto = textoDelMensaje(msg);
       const tieneFoto = !!inner.imageMessage;
       const esAudio = !!(inner.audioMessage || inner.pttMessage);
+
+      // DOCUMENTO adjunto (PDF, etc.): casi siempre es el COMPROBANTE de una
+      // transferencia. Antes caía en la rama de "mensaje no legible" (Max contestaba
+      // "no me llegó bien tu mensaje") y el aviso al equipo no salía nunca. Ahora le
+      // contamos al cerebro que llegó un archivo para que registre la transferencia
+      // (confirmar_transferencia) y el equipo reciba el aviso de verificar el pago.
+      const doc = documentoDelMensaje(msg);
+      if (doc) {
+        const queEs = `un archivo adjunto${doc.nombre ? ` ("${doc.nombre}")` : ""}${doc.mime ? ` de tipo ${doc.mime}` : ""}`;
+        const nota = `[El cliente te mandó ${queEs}. No podés abrirlo. Si están en medio de un pago o ya le pasaste los datos de la cuenta, es casi seguro el COMPROBANTE de la transferencia: registralo con confirmar_transferencia (comprobante=true) y decile que el equipo verifica el pago y le confirma.]`;
+        texto = texto ? `${texto}\n${nota}` : nota;
+        console.log(`📎 ${jid}: documento adjunto${doc.nombre ? ` "${doc.nombre}"` : ""}`);
+      }
 
       // Mensaje desde un anuncio: lo registramos y, si no trajo texto ni foto
       // (algunos clicks llegan sin cuerpo), lo tratamos igual como una consulta

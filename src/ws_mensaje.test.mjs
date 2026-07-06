@@ -1,6 +1,6 @@
 // Test de los helpers de mensajes entrantes. Correr: node src/ws_mensaje.test.mjs
 import assert from "node:assert/strict";
-import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder } from "./ws_mensaje.js";
+import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder, documentoDelMensaje, dijoQueTransfirio } from "./ws_mensaje.js";
 
 let ok = 0;
 function test(nombre, fn) { fn(); ok++; console.log(`  ✓ ${nombre}`); }
@@ -110,6 +110,63 @@ test("plantilla (templateMessage hidratada) — lee el contenido", () => {
 test("respuesta interactiva — lee el body.text", () => {
   const msg = { message: { interactiveResponseMessage: { body: { text: "Opción A" } } } };
   assert.equal(textoDelMensaje(msg), "Opción A");
+});
+
+// 10) COMPROBANTES COMO DOCUMENTO (PDF del banco): antes caían como "mensaje no
+//     legible" y Max contestaba "no me llegó bien tu mensaje" sin avisar al equipo.
+test("documento PDF (comprobante) — se detecta con nombre y mime", () => {
+  const msg = { message: { documentMessage: { fileName: "comprobante_transferencia.pdf", mimetype: "application/pdf" } } };
+  const doc = documentoDelMensaje(msg);
+  assert.ok(doc, "debería detectar el documento");
+  assert.equal(doc.nombre, "comprobante_transferencia.pdf");
+  assert.equal(doc.mime, "application/pdf");
+});
+test("documento CON caption (documentWithCaptionMessage) — lee caption y documento", () => {
+  const msg = {
+    message: {
+      documentWithCaptionMessage: {
+        message: { documentMessage: { fileName: "recibo.pdf", mimetype: "application/pdf", caption: "ahí va el comprobante" } },
+      },
+    },
+  };
+  assert.equal(textoDelMensaje(msg), "ahí va el comprobante");
+  assert.equal(documentoDelMensaje(msg).nombre, "recibo.pdf");
+});
+test("mensaje sin documento — documentoDelMensaje devuelve null", () => {
+  assert.equal(documentoDelMensaje({ message: { conversation: "hola" } }), null);
+});
+
+// 11) Red de seguridad "ya transferí": frases REALES de producción que DEBEN avisar…
+test("dijoQueTransfirio — frases reales que avisan", () => {
+  const positivas = [
+    "Listo, ya te hice la transferencia de $8.307",
+    "Ya hice el depósito de la compra.",
+    "Te pase comprobante de los 4000 pesos",
+    "Ya te pase los 4000",
+    "Ya tranferencia",
+    "Me estaba equivocando en el último Nr... Te transferi ahora",
+    "ya transferí",
+    "recién giré la seña",
+    "ahí te paso el comprobante",
+    "transferencia hecha",
+    "ya envié la plata",
+  ];
+  for (const f of positivas) assert.ok(dijoQueTransfirio(f), `debería avisar: "${f}"`);
+});
+
+// …y frases a FUTURO / ambiguas que NO deben avisar (evita avisos falsos al equipo).
+test("dijoQueTransfirio — promesas a futuro NO avisan", () => {
+  const negativas = [
+    "En un rato te giro la seña",
+    "Dale impecable ya te transfiero",
+    "cuanto pueda les ago el giro",
+    "Sería así al medio día paso foto de comprobante y coordinamos",
+    "Ok ya te transfiero la seña",
+    "¿me pasás los datos para la transferencia?",
+    "quiero pagar por transferencia",
+    "Mandame número de cuenta y banco",
+  ];
+  for (const f of negativas) assert.ok(!dijoQueTransfirio(f), `NO debería avisar: "${f}"`);
 });
 
 console.log(`\n✅ ${ok} tests OK`);

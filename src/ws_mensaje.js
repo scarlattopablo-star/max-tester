@@ -36,6 +36,8 @@ export function textoDelMensaje(msg) {
     m.extendedTextMessage?.text ||
     m.imageMessage?.caption ||
     m.videoMessage?.caption ||
+    // Documentos (PDF, etc.) con caption: típico COMPROBANTE de transferencia.
+    m.documentMessage?.caption ||
     // Plantillas (template messages) con texto ya "hidratado".
     m.templateMessage?.hydratedTemplate?.hydratedContentText ||
     m.templateMessage?.hydratedFourRowTemplate?.hydratedContentText ||
@@ -49,6 +51,51 @@ export function textoDelMensaje(msg) {
     m.interactiveResponseMessage?.body?.text ||
     ""
   ).trim();
+}
+
+// Documento adjunto (PDF, etc.), ya desenvuelto. Los clientes mandan el COMPROBANTE
+// de la transferencia muchas veces como PDF del banco: antes caía en la rama de
+// "mensaje no legible" y Max contestaba "no me llegó bien tu mensaje" — el aviso al
+// equipo no salía nunca. Devuelve { nombre, mime } o null si no hay documento.
+export function documentoDelMensaje(msg) {
+  const d = contenidoReal(msg?.message)?.documentMessage;
+  if (!d) return null;
+  return { nombre: d.fileName || "", mime: d.mimetype || "" };
+}
+
+// ¿El cliente dice (EN PASADO) que YA hizo la transferencia / mandó el comprobante?
+// Red de seguridad de los avisos al equipo: si el modelo no llama a la herramienta
+// confirmar_transferencia, whatsapp.js registra y avisa igual por código.
+// Calibrado con frases REALES de las conversaciones de producción. A propósito NO
+// matchea promesas a futuro ("ya te transfiero", "en un rato te giro la seña",
+// "cuando pueda hago el giro"): solo pasado inequívoco.
+// El texto se NORMALIZA antes (minúsculas y sin tildes): la regex va sin acentos.
+// Ojo: el \b de JS no funciona después de una vocal acentuada (\w es solo ASCII),
+// por eso NO se evalúa sobre el texto crudo.
+const RE_YA_TRANSFIRIO = new RegExp(
+  [
+    // "ya transferí / ya te giré / recién deposité / listo, envié"
+    /\b(?:ya|recien|ahi|listo,?)\s+(?:te\s+|le\s+|les\s+)?(?:trans?feri|gire|deposite|envie)\b/,
+    // "te transferí" (pasado, sin el "ya")
+    /\bte\s+trans?feri\b/,
+    // "hice la transferencia / el depósito / el giro" · "quedó el depósito hecho"
+    /\bhice\s+(?:la|el)\s+(?:trans?ferencia|deposito|giro|pago)\b/,
+    /\bdeposito\s+h?echo\b/,
+    // "te pasé (el) comprobante / la transferencia / la seña" · "ya te pasé los 4000"
+    /\b(?:te|les?)\s+pase\s+(?:(?:el|la)\s+)?(?:comprobante|trans?ferencia|sena)\b/,
+    /\bya\s+te\s+pase\s+(?:los?|las?)\s+\$?\d/,
+    // "ahí va / te mando / te paso el comprobante" (lo está mandando en ese momento)
+    /\bahi\s+(?:va|te\s+va|te\s+mando|te\s+paso|te\s+pase)\s+el\s+comprobante\b/,
+    // "transferencia hecha / realizada / enviada" · "ya transferencia" (telegráfico real)
+    /\btrans?ferencia\s+(?:hecha|realizada|pronta|enviada)\b/,
+    /\bya\s+trans?ferencia\b/,
+  ].map((r) => r.source).join("|"),
+  "i",
+);
+
+export function dijoQueTransfirio(texto) {
+  const plano = String(texto || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ñ/g, "n");
+  return RE_YA_TRANSFIRIO.test(plano);
 }
 
 // Teléfono REAL del cliente para armar el link wa.me y para responder a los chats
