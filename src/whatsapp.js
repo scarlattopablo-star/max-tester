@@ -81,9 +81,17 @@ async function iniciar() {
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
       const cerroSesion = code === DisconnectReason.loggedOut;
-      desregistrarSock(); // el socket dejó de servir: que hayWhatsApp() diga la verdad
+      // Solo si el que se cerró es EL SOCKET ACTIVO: el "close" tardío de un socket
+      // viejo (zombie de una reconexión anterior) no debe borrar el registro del
+      // nuevo ni disparar OTRA reconexión (dos sockets compitiendo = conflicto 440,
+      // y los avisos al equipo quedaban rotos aunque Max siguiera chateando).
+      const eraElActivo = desregistrarSock(sock);
+      diag("conexion", { estado: "cerrada", code, zombie: !eraElActivo });
+      if (!eraElActivo) {
+        console.log(`🔌 (cierre de un socket viejo, code ${code} — el activo sigue conectado, no reconecto)`);
+        return;
+      }
       setConectado(false);
-      diag("conexion", { estado: "cerrada", code });
       if (cerroSesion) {
         console.log("🔌 Sesión cerrada: reescaneá el QR en /qr (o borrá auth_baileys/) y volvé a vincular.");
         return;

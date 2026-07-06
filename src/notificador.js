@@ -14,7 +14,16 @@ export function registrarTransporte(fn) { transporte = fn || null; }
 // Al cerrarse la conexión limpiamos el sock: así hayWhatsApp() refleja el estado
 // REAL (antes quedaba en true para siempre tras la primera conexión, aunque el
 // socket se hubiera caído — daba un diagnóstico engañoso).
-export function desregistrarSock() { sockActivo = null; }
+// ⚠️ Solo si el que se cierra ES el registrado: el "close" tardío de un socket
+// VIEJO (zombie de una reconexión) no debe borrar al nuevo — eso dejaba a Max
+// chateando pero con TODOS los avisos al equipo rotos (whatsapp_desconectado).
+// Devuelve true si el cierre era del socket activo (o no había ninguno).
+export function desregistrarSock(sock) {
+  if (sock && sockActivo && sockActivo !== sock) return false; // zombie: no tocar el activo
+  sockActivo = null;
+  alEnviar = null;
+  return true;
+}
 export function hayWhatsApp() { return !!sockActivo || !!transporte; }
 
 // "091 629 784" -> "59891629784@s.whatsapp.net"
