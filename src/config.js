@@ -128,7 +128,7 @@ const PRESETS = {
   },
   claude: {
     baseURL: "https://api.anthropic.com/v1/",
-    model: "claude-haiku-4-5-20251001", // Haiku 4.5: ~1/3 del precio de Sonnet; con caché de prompt queda en centavos
+    model: "claude-sonnet-5", // Sonnet 5: mucho más inteligente que Haiku; con caché de prompt sigue costando centavos por chat
     envKey: "ANTHROPIC_API_KEY",
   },
 };

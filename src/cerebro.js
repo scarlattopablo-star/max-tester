@@ -702,10 +702,13 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
   let textoParcial = "";
 
   for (let vuelta = 0; vuelta < 6; vuelta++) {
+    // Sonnet 5 no acepta temperature y prende el razonamiento extendido solo
+    // (thinking) si no se lo apaga: lo apagamos para que la respuesta salga
+    // rápida y entera dentro de max_tokens.
     const resp = await cli.messages.create({
       model: _proveedor.model,
       max_tokens: 350,
-      temperature: 0.85,
+      thinking: { type: "disabled" },
       system,
       tools: TOOLS_ANTHROPIC,
       messages,
