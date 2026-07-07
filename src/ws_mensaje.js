@@ -56,11 +56,11 @@ export function textoDelMensaje(msg) {
 // Documento adjunto (PDF, etc.), ya desenvuelto. Los clientes mandan el COMPROBANTE
 // de la transferencia muchas veces como PDF del banco: antes caía en la rama de
 // "mensaje no legible" y Max contestaba "no me llegó bien tu mensaje" — el aviso al
-// equipo no salía nunca. Devuelve { nombre, mime } o null si no hay documento.
+// equipo no salía nunca. Devuelve { nombre, mime, bytes } o null si no hay documento.
 export function documentoDelMensaje(msg) {
   const d = contenidoReal(msg?.message)?.documentMessage;
   if (!d) return null;
-  return { nombre: d.fileName || "", mime: d.mimetype || "" };
+  return { nombre: d.fileName || "", mime: d.mimetype || "", bytes: Number(d.fileLength) || 0 };
 }
 
 // ¿El cliente dice (EN PASADO) que YA hizo la transferencia / mandó el comprobante?

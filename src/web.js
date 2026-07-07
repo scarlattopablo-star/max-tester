@@ -21,7 +21,7 @@ import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
 import { estadoQR } from "./qr_estado.js";
 import { resumenMensajes } from "./metricas.js";
-import { resumenTransferencias } from "./transferencias.js";
+import { resumenTransferencias, listarTransferencias } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
 import QRCode from "qrcode";
 
@@ -122,6 +122,19 @@ app.get("/api/metricas", async (req, res) => {
     return res.status(401).json({ error: "no autorizado" });
   const [mensajes, transferencias] = await Promise.all([resumenMensajes(), resumenTransferencias()]);
   res.json({ ...mensajes, transferencias });
+});
+
+// Lista de transferencias recientes (una fila por gestión, con monto) para el
+// panel /admin de la web. Misma autenticación que /api/metricas.
+app.get("/api/transferencias", async (req, res) => {
+  const token = process.env.NOTIFY_TOKEN;
+  const auth = req.headers.authorization || "";
+  const clave = String(req.query.clave || "");
+  if (!token || (auth !== `Bearer ${token}` && clave !== token))
+    return res.status(401).json({ error: "no autorizado" });
+  const dias = Math.min(Number(req.query.dias) || 30, 90);
+  const lista = await listarTransferencias({ dias, limite: 100 });
+  res.json({ disponible: true, dias, transferencias: lista });
 });
 
 // ── Autorización de la cuenta de ML (un clic de Pablo, logueado como EVERBOX) ──

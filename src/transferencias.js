@@ -79,6 +79,35 @@ export async function registrarTransferencia({ chatId, monto, nombre, telefono, 
   return { ok: true, transferencia: t, instruccion: "Registrado. Decile al cliente que el equipo verifica el pago y le confirma a la brevedad. NUNCA afirmes que la plata ya llegó." };
 }
 
+/** Lista las transferencias recientes para el panel /admin de la web: una fila
+ *  por gestión, con fecha, cliente, MONTO y si mandó comprobante. */
+export async function listarTransferencias({ dias = 30, limite = 100 } = {}) {
+  if (!usaDB) {
+    const todas = leer(ARCHIVO, []);
+    return todas.slice(-limite).reverse().map((t, i) => ({ id: i, ...t }));
+  }
+  try {
+    await asegurarTabla();
+    const filas = await sql`select id, chat_id, monto, nombre, telefono, detalle, comprobante, ts
+      from transferencias_max
+      where ts >= now() - (${dias} || ' days')::interval
+      order by ts desc limit ${limite}`;
+    return filas.map((f) => ({
+      id: Number(f.id),
+      chatId: f.chat_id || "",
+      monto: Number(f.monto) || 0,
+      nombre: f.nombre || "",
+      telefono: f.telefono || "",
+      detalle: f.detalle || "",
+      comprobante: !!f.comprobante,
+      ts: f.ts instanceof Date ? f.ts.toISOString() : String(f.ts),
+    }));
+  } catch (e) {
+    console.log("⚠ no pude listar las transferencias:", e.message);
+    return [];
+  }
+}
+
 const cero = () => ({ gestiones: 0, comprobantes: 0 });
 
 /** Resumen para el panel: gestiones por transferencia de Max (hoy / 7 / 30 días)

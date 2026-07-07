@@ -282,8 +282,8 @@ function systemPromptEstatico() {
 - Si el cliente te manda una foto, MIRALA con atención y reconocé qué es: un auto (y de qué marca/modelo parece), un asiento, una alfombra, una funda, un producto, etc.
 - Asociá lo que ves con el catálogo y continuá en consecuencia. Si ves una camioneta, "Veo que se trata de una Hilux. Para ese modelo tenemos..."; si ves un asiento, indicá qué cubreasiento corresponde.
 - Si NO estás seguro del modelo/año, indicalo con cortesía y pedí confirmación ("Por la imagen parecería una Strada, ¿me confirmás el año?"). No afirmes un modelo si no estás seguro.
-- 🏦 Si la foto es un COMPROBANTE de pago (captura o foto de una transferencia bancaria, giro o depósito), llamá SÍ O SÍ a "confirmar_transferencia" con comprobante=true (mirá el monto en la imagen si se ve). Agradecé y decí que el equipo verifica el pago y le confirma a la brevedad. ⛔ NO digas que el pago ya "llegó" o "se acreditó": vos no ves la cuenta.
-- 📎 Si el cliente manda un ARCHIVO/documento (un PDF, por ejemplo) en medio de una compra o después de que le pasaste los datos de la cuenta, es casi seguro el comprobante de la transferencia: tratalo igual que el punto anterior (confirmar_transferencia con comprobante=true), aunque no puedas abrir el archivo.
+- 🏦 Si la foto es un COMPROBANTE de pago (captura o foto de una transferencia bancaria, giro o depósito), llamá SÍ O SÍ a "confirmar_transferencia" con comprobante=true. ⚠️ LEÉ EL COMPROBANTE Y SACÁ EL IMPORTE (obligatorio): buscá el monto en la imagen (dice "importe", "monto" o "$") y pasalo en el campo monto de la herramienta; el equipo lo necesita para verificar el pago. Solo si de verdad no se lee, registrá sin monto. Agradecé y decí que el equipo verifica el pago y le confirma a la brevedad. ⛔ NO digas que el pago ya "llegó" o "se acreditó": vos no ves la cuenta.
+- 📎 Si el cliente manda un ARCHIVO PDF, casi siempre es el comprobante del banco y LO PODÉS LEER (te llega adjunto como documento): abrilo, extraé el IMPORTE exacto (y banco/fecha si aparecen) y registralo con "confirmar_transferencia" (comprobante=true, monto=el importe leído, detalle con banco y fecha). Si el archivo no se pudo adjuntar o no es legible, registrá igual con comprobante=true pero sin inventar monto.
 
 # LINKS QUE TE MANDA EL CLIENTE
 - Si el cliente te manda un LINK de un producto (de Mercado Libre, de nuestra web, o de otro lado), leé el texto del link: casi siempre dice el producto y el modelo (ej: ".../cubreasiento-ford-ranger..." o ".../alfombra-hilux..."). Reconocé qué producto es y ASESORALO: confirmá si lo tenemos, para qué modelo, el precio (con "consultar_precio") y ofrecé mandarle fotos ("enviar_foto") o el link a nuestra tienda ("link_web").
@@ -665,6 +665,8 @@ function armarRespuesta(texto, acciones) {
 // ─────────────────────────────────────────────────────────────────────
 function _imagenAnthropic(url) {
   const m = /^data:([^;]+);base64,(.*)$/s.exec(url || "");
+  // PDF (comprobantes de transferencia del banco): va como DOCUMENTO, Claude lo lee.
+  if (m && m[1] === "application/pdf") return { type: "document", source: { type: "base64", media_type: "application/pdf", data: m[2] } };
   if (m) return { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } };
   return { type: "image", source: { type: "url", url } };
 }
@@ -748,10 +750,12 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
   }
 
   let userContent = textoUsuario;
-  if (imagenes && imagenes.length) {
+  // Los PDFs (comprobantes) solo los lee el camino nativo de Claude; acá se filtran.
+  const soloImagenes = (imagenes || []).filter((u) => !/^data:application\/pdf/.test(u));
+  if (soloImagenes.length) {
     userContent = [
       { type: "text", text: textoUsuario || "(El cliente mandó esta foto, mirala y ayudá en consecuencia.)" },
-      ...imagenes.map((url) => ({ type: "image_url", image_url: { url } })),
+      ...soloImagenes.map((url) => ({ type: "image_url", image_url: { url } })),
     ];
   }
   const messages = [

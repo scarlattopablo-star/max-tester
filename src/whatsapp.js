@@ -341,6 +341,21 @@ async function iniciar() {
     }
   }
 
+  // Descarga un PDF adjunto (comprobante de transferencia, casi siempre) y lo
+  // devuelve como data-URI para que el cerebro lo LEA (Claude abre PDFs) y
+  // extraiga el importe. Tope de tamaño: los comprobantes pesan pocos KB.
+  const PDF_MAX_BYTES = 5 * 1024 * 1024;
+  async function pdfComoDataUri(msg) {
+    try {
+      const buffer = await downloadMediaMessage(msg, "buffer", {}, { logger: noopLogger, reuploadRequest: sock.updateMediaMessage });
+      if (!buffer?.length || buffer.length > PDF_MAX_BYTES) return null;
+      return `data:application/pdf;base64,${buffer.toString("base64")}`;
+    } catch (e) {
+      console.log("⚠ No pude descargar el PDF adjunto:", e.message);
+      return null;
+    }
+  }
+
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
     for (const msg of messages) {
@@ -410,11 +425,16 @@ async function iniciar() {
       // contamos al cerebro que llegó un archivo para que registre la transferencia
       // (confirmar_transferencia) y el equipo reciba el aviso de verificar el pago.
       const doc = documentoDelMensaje(msg);
+      let pdfAdjunto = null; // data-URI del PDF, viaja al cerebro junto con las imágenes
       if (doc) {
+        const esPdf = /pdf/i.test(doc.mime || "") || /\.pdf$/i.test(doc.nombre || "");
+        if (esPdf && (!doc.bytes || doc.bytes <= PDF_MAX_BYTES)) pdfAdjunto = await pdfComoDataUri(msg);
         const queEs = `un archivo adjunto${doc.nombre ? ` ("${doc.nombre}")` : ""}${doc.mime ? ` de tipo ${doc.mime}` : ""}`;
-        const nota = `[El cliente te mandó ${queEs}. No podés abrirlo. Si están en medio de un pago o ya le pasaste los datos de la cuenta, es casi seguro el COMPROBANTE de la transferencia: registralo con confirmar_transferencia (comprobante=true) y decile que el equipo verifica el pago y le confirma.]`;
+        const nota = pdfAdjunto
+          ? `[El cliente te mandó ${queEs} y LO TENÉS ADJUNTO: leelo. Si es un comprobante de transferencia/giro/depósito, extraé el IMPORTE exacto (y banco y fecha si se ven) y registralo con confirmar_transferencia (comprobante=true, monto=el importe leído). Decile que el equipo verifica el pago y le confirma a la brevedad. ⛔ NO digas que el pago ya llegó o se acreditó.]`
+          : `[El cliente te mandó ${queEs}. No podés abrirlo. Si están en medio de un pago o ya le pasaste los datos de la cuenta, es casi seguro el COMPROBANTE de la transferencia: registralo con confirmar_transferencia (comprobante=true) y decile que el equipo verifica el pago y le confirma.]`;
         texto = texto ? `${texto}\n${nota}` : nota;
-        console.log(`📎 ${jid}: documento adjunto${doc.nombre ? ` "${doc.nombre}"` : ""}`);
+        console.log(`📎 ${jid}: documento adjunto${doc.nombre ? ` "${doc.nombre}"` : ""}${pdfAdjunto ? " (PDF legible para el cerebro)" : ""}`);
       }
 
       // Mensaje desde un anuncio: lo registramos y, si no trajo texto ni foto
@@ -523,6 +543,7 @@ async function iniciar() {
       } else {
         console.log(`📩 ${jid}: ${texto}`);
       }
+      if (pdfAdjunto) imagenes.push(pdfAdjunto); // el cerebro lo reconoce por el mime y lo manda como documento
       encolar(jid, texto, imagenes);
     }
   });
