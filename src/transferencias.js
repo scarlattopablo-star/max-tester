@@ -79,6 +79,34 @@ export async function registrarTransferencia({ chatId, monto, nombre, telefono, 
   return { ok: true, transferencia: t, instruccion: "Registrado. Decile al cliente que el equipo verifica el pago y le confirma a la brevedad. NUNCA afirmes que la plata ya llegó." };
 }
 
+/** Importa transferencias recuperadas a mano (ej: gestiones que pasaron antes de
+ *  un fix y no quedaron registradas). Respeta el timestamp que venga y saltea
+ *  las que ya existen para ese chat en el mismo día (idempotente). */
+export async function importarTransferencias(filas = []) {
+  if (!usaDB) return { ok: false, motivo: "sin base de datos" };
+  await asegurarTabla();
+  let insertadas = 0, salteadas = 0;
+  for (const f of filas) {
+    const t = {
+      chatId: String(f.chatId || ""),
+      monto: Number(f.monto) || 0,
+      nombre: String(f.nombre || ""),
+      telefono: String(f.telefono || ""),
+      detalle: String(f.detalle || ""),
+      comprobante: !!f.comprobante,
+      ts: f.ts ? new Date(f.ts) : new Date(),
+    };
+    if (!t.chatId) { salteadas++; continue; }
+    const ya = await sql`select 1 from transferencias_max
+      where chat_id = ${t.chatId} and ts::date = ${t.ts.toISOString()}::date limit 1`;
+    if (ya.length) { salteadas++; continue; }
+    await sql`insert into transferencias_max (chat_id, monto, nombre, telefono, detalle, comprobante, ts)
+      values (${t.chatId}, ${t.monto}, ${t.nombre}, ${t.telefono}, ${t.detalle}, ${t.comprobante}, ${t.ts.toISOString()})`;
+    insertadas++;
+  }
+  return { ok: true, insertadas, salteadas };
+}
+
 /** Lista las transferencias recientes para el panel /admin de la web: una fila
  *  por gestión, con fecha, cliente, MONTO y si mandó comprobante. */
 export async function listarTransferencias({ dias = 30, limite = 100 } = {}) {

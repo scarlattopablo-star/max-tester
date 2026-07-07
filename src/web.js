@@ -21,7 +21,7 @@ import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
 import { estadoQR } from "./qr_estado.js";
 import { resumenMensajes } from "./metricas.js";
-import { resumenTransferencias, listarTransferencias } from "./transferencias.js";
+import { resumenTransferencias, listarTransferencias, importarTransferencias } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
 import QRCode from "qrcode";
 
@@ -135,6 +135,20 @@ app.get("/api/transferencias", async (req, res) => {
   const dias = Math.min(Number(req.query.dias) || 30, 90);
   const lista = await listarTransferencias({ dias, limite: 100 });
   res.json({ disponible: true, dias, transferencias: lista });
+});
+
+// Importación manual de transferencias recuperadas (idempotente por chat+día).
+// body: { transferencias: [{chatId, monto, nombre, telefono, detalle, comprobante, ts}] }
+app.post("/api/transferencias/importar", async (req, res) => {
+  const token = process.env.NOTIFY_TOKEN;
+  const auth = req.headers.authorization || "";
+  if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "no autorizado" });
+  try {
+    const filas = Array.isArray(req.body?.transferencias) ? req.body.transferencias : [];
+    res.json(await importarTransferencias(filas));
+  } catch (e) {
+    res.status(500).json({ ok: false, motivo: String(e.message || e) });
+  }
 });
 
 // ── Autorización de la cuenta de ML (un clic de Pablo, logueado como EVERBOX) ──
