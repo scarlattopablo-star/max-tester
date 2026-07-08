@@ -21,7 +21,7 @@ import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
 import { estadoQR } from "./qr_estado.js";
 import { resumenMensajes } from "./metricas.js";
-import { resumenTransferencias, listarTransferencias, importarTransferencias } from "./transferencias.js";
+import { resumenTransferencias, listarTransferencias, importarTransferencias, borrarTransferencias } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
 import QRCode from "qrcode";
 
@@ -146,6 +146,19 @@ app.post("/api/transferencias/importar", async (req, res) => {
   try {
     const filas = Array.isArray(req.body?.transferencias) ? req.body.transferencias : [];
     res.json(await importarTransferencias(filas));
+  } catch (e) {
+    res.status(500).json({ ok: false, motivo: String(e.message || e) });
+  }
+});
+
+// Borrado puntual (limpieza de registros que no eran transferencia bancaria).
+// body: { ids: [1, 2, ...] }
+app.post("/api/transferencias/borrar", async (req, res) => {
+  const token = process.env.NOTIFY_TOKEN;
+  const auth = req.headers.authorization || "";
+  if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "no autorizado" });
+  try {
+    res.json(await borrarTransferencias(Array.isArray(req.body?.ids) ? req.body.ids : []));
   } catch (e) {
     res.status(500).json({ ok: false, motivo: String(e.message || e) });
   }

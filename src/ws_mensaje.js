@@ -78,8 +78,9 @@ const RE_YA_TRANSFIRIO = new RegExp(
     /\b(?:ya|recien|ahi|listo,?)\s+(?:te\s+|le\s+|les\s+)?(?:trans?feri|gire|deposite|envie)\b/,
     // "te transferí" (pasado, sin el "ya")
     /\bte\s+trans?feri\b/,
-    // "hice la transferencia / el depósito / el giro" · "quedó el depósito hecho"
-    /\bhice\s+(?:la|el)\s+(?:trans?ferencia|deposito|giro|pago)\b/,
+    // "hice la transferencia / el depósito" (⛔ SIN "pago": "hice el pago" puede ser
+    // Mercado Pago/tarjeta y el negocio solo quiere acá transferencias BANCARIAS)
+    /\bhice\s+(?:la|el)\s+(?:trans?ferencia|deposito)\b/,
     /\bdeposito\s+h?echo\b/,
     // "te pasé (el) comprobante / la transferencia / la seña" · "ya te pasé los 4000"
     /\b(?:te|les?)\s+pase\s+(?:(?:el|la)\s+)?(?:comprobante|trans?ferencia|sena)\b/,

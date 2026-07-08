@@ -62,7 +62,8 @@ export async function registrarTransferencia({ chatId, monto, nombre, telefono, 
             monto = case when ${t.monto} > 0 then ${t.monto} else monto end,
             nombre = case when ${t.nombre} <> '' then ${t.nombre} else nombre end,
             telefono = case when ${t.telefono} <> '' then ${t.telefono} else telefono end,
-            detalle = case when ${t.detalle} <> '' then ${t.detalle} else detalle end
+            detalle = case when ${t.detalle} <> '' then ${t.detalle} else detalle end,
+            ts = now()
           where id = ${p.id}`;
         return { ok: true, transferencia: t, actualizada: true, instruccion: "Registrado. Decile al cliente que el equipo verifica el pago y le confirma a la brevedad. NUNCA afirmes que la plata ya llegó." };
       }
@@ -105,6 +106,17 @@ export async function importarTransferencias(filas = []) {
     insertadas++;
   }
   return { ok: true, insertadas, salteadas };
+}
+
+/** Borra gestiones puntuales (limpieza manual: pagos que NO eran transferencia
+ *  bancaria — Mercado Pago, giros, etc. — registrados por error). */
+export async function borrarTransferencias(ids = []) {
+  if (!usaDB) return { ok: false, motivo: "sin base de datos" };
+  const limpios = ids.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  if (!limpios.length) return { ok: true, borradas: 0 };
+  await asegurarTabla();
+  const r = await sql`delete from transferencias_max where id = any(${limpios}) returning id`;
+  return { ok: true, borradas: r.length };
 }
 
 /** Lista las transferencias recientes para el panel /admin de la web: una fila
