@@ -20,6 +20,7 @@ import { urlAutorizacion, conectarConCode, hayUsuarioML, infoUsuarioML } from ".
 import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
 import { estadoQR } from "./qr_estado.js";
+import { resetearSesion } from "./auth_db.js";
 import { resumenMensajes } from "./metricas.js";
 import { resumenTransferencias, listarTransferencias, importarTransferencias, borrarTransferencias } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
@@ -669,6 +670,22 @@ app.get("/api/qr", (req, res) => {
   const e = estadoQR();
   // No mandamos el string del QR al navegador: solo si HAY uno y el estado.
   res.json({ conectado: e.conectado, hayQr: !!e.qr, ts: e.ts, whatsappOn: process.env.WHATSAPP_ON === "1" });
+});
+
+// Resetea la sesión de WhatsApp (Baileys): borra wa_auth en Neon y reinicia el
+// proceso para re-vincular con OTRO número (Baileys arranca sin sesión → QR nuevo).
+// Protegido con ?clave=<NOTIFY_TOKEN>. Se usa cuando el número cambió (ej: se sacó
+// de Meta y se re-registró en el celular) y la sesión vieja impide el QR.
+app.get("/api/wa-reset", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  try {
+    const filas = await resetearSesion();
+    res.json({ ok: true, filasBorradas: filas, msg: "Sesión borrada. Reiniciando para pedir un QR nuevo…" });
+    console.log(`🧹 wa_auth borrada (${filas} filas) por /api/wa-reset → reinicio para QR nuevo`);
+    setTimeout(() => process.exit(0), 800); // Render reinicia el servicio → Baileys sin sesión → QR nuevo
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
 });
 
 // El QR como IMAGEN PNG generada en el servidor (no depende de nada del navegador).

@@ -23,6 +23,15 @@ async function borrar(clave) {
   await sql`delete from wa_auth where clave = ${clave}`;
 }
 
+// Borra TODA la sesión guardada (tabla wa_auth) para re-vincular con OTRO número:
+// al reiniciar, Baileys no encuentra sesión y pide un QR nuevo. Devuelve cuántas filas borró.
+export async function resetearSesion() {
+  await prepararTabla();
+  const antes = await sql`select count(*)::int as n from wa_auth`;
+  await sql`delete from wa_auth`;
+  return antes[0]?.n ?? 0;
+}
+
 export async function useDBAuthState() {
   await prepararTabla();
   const creds = (await leer("creds")) || initAuthCreds();
