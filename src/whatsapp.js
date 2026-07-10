@@ -358,6 +358,11 @@ async function iniciar() {
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
+    // Recibir un mensaje EN VIVO prueba que el socket está realmente conectado.
+    // Autocorrige el flag `conectado` (que a veces queda en false tras reconexiones
+    // por el "close" tardío de un socket zombie), del que dependen /api/estado, la
+    // página /qr y el reenvío automático de ventas.
+    setConectado(true);
     for (const msg of messages) {
       const jid = msg.key.remoteJid || "";
       if (jid === "status@broadcast" || jid.endsWith("@g.us")) continue; // ignorar estados y grupos
