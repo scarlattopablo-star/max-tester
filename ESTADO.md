@@ -1,7 +1,18 @@
 # ESTADO del Agente IA "Max" — RETOMAR ACÁ
 
-Bot de WhatsApp (Baileys, sin API de Meta) + derivación de Instagram, para La Casa del Cubreasiento.
+Bot de WhatsApp (**WhatsApp Cloud API oficial de Meta** desde el 9-jul-2026; antes Baileys) + derivación de Instagram, para La Casa del Cubreasiento.
 Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`.
+
+## ✅✅ SESIÓN 9–10 jul — MIGRACIÓN A META COMPLETADA (LO MÁS NUEVO)
+
+**Max corre en la API oficial de Meta. Verificado en vivo: responde mensajes reales.**
+
+- **Código:** commit `ff3c373` "Migración a la WhatsApp Cloud API oficial (Meta) — gateada con WA_PROVIDER=meta" (webhook `/webhook` en el server, `whatsapp_meta.js`/`meta_api.js`). Baileys quedó apagado (sin `WHATSAPP_ON`); por eso `/api/estado` muestra `whatsapp.on:false` — es lo esperado, el estado de Meta NO se refleja ahí todavía (pendiente cosmético).
+- **Render (env):** `WA_PROVIDER=meta`, `WHATSAPP_TOKEN` (token permanente de System User), `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN`, `NUMERO_AVISOS` — todo cargado.
+- **Meta:** app **"RePost Cubreasiento"** (ID 2442553329591792, negocio "La Casa Del Cubreasiento", business_id 1568026806653348, developers.facebook.com con la cuenta de Pablo). Caso de uso WhatsApp con los 4 pasos de producción en verde (webhook suscrito, número registrado, pago cargado, número probado). **Verificación del negocio: APROBADA.** La app también tiene el caso de uso de Instagram.
+- **App PUBLICADA (10-jul):** estaba "En desarrollo" (los webhooks solo llegaban de números con rol en la app — a Pablo le andaba por ser admin, a clientes reales no les iba a responder). Se completó lo que faltaba para publicar: **política de privacidad** en `https://max-tester.onrender.com/privacidad.html` (archivo `public/privacidad.html`, commit `421e51a`) + **categoría "Compras"** en Configuración básica → botón Publicar → "Tu app se publicó correctamente". Estado: **Publicada**.
+- **IA:** sigue en `claude-haiku-4-5-20251001` (modo ahorro, commit `61923ba`). La migración ya está hecha → si el cliente quiere, volver a Sonnet 5 = revertir esa línea de `config.js` (preset claude). OJO presupuesto: límite mensual Anthropic US$200, Sonnet gasta 2-3x Haiku.
+- **Pendientes menores:** (1) `/api/estado` no reporta el estado del canal Meta; (2) probar un lead real de ANUNCIO (fb/ig) — la razón de fondo de la migración era responder el 100% de los anuncios; (3) el campo "URL de Condiciones del servicio" y "Eliminación de datos" en Meta quedaron con placeholder facebook.com de la sesión anterior — se puede apuntar a páginas propias si Meta lo exige algún día.
 
 ## 🔵🔵 SESIÓN 25–27 jun — FIXES + PLAN MIGRACIÓN A API OFICIAL + HOSTING (LO MÁS NUEVO, RETOMAR ACÁ)
 
