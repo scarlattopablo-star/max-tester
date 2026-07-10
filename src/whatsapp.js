@@ -406,14 +406,21 @@ async function iniciar() {
           console.log(`(equipo, sin pausa en ${jid}: evento no-mensaje — ${Object.keys(m).join(",") || "vacío"})`);
           continue;
         }
-        // AUTO-HANDOFF DESHABILITADO (10-jul-2026): con Baileys vinculado a un celular
-        // EN USO, WhatsApp sincroniza los mensajes salientes del teléfono y —con el lío
-        // de los @lid— el mismo cliente queda partido en dos jids, disparando falsos
-        // "un asesor tomó la conversación" que auto-pausaban a Max y lo dejaban sin
-        // responder. Por ahora los fromMe con contenido NO pausan: solo se registran.
-        // (Refinar más adelante: distinguir eco/sync propio vs. respuesta humana real.)
+        // HANDOFF (reactivado con FILTRO DE FRESCURA — 10-jul-2026): un fromMe con
+        // contenido que NO mandó Max (no está en enviadosPorMax) es un ASESOR escribiendo
+        // desde el celular → Max se hace a un lado en ESA conversación. PERO solo si el
+        // mensaje es RECIENTE: al vincular/reconectar, WhatsApp re-entrega como "notify"
+        // el historial de salientes del teléfono (con su fecha ORIGINAL, vieja), que NO
+        // son intervenciones en vivo — eso causó 586 falsas pausas. Filtramos por edad.
+        const UMBRAL_HANDOFF_MIN = Number(process.env.HANDOFF_MAX_EDAD_MIN || 3);
+        if (ts && demoraMin > UMBRAL_HANDOFF_MIN) {
+          console.log(`(fromMe viejo en ${jid}: ${demoraMin} min — sync de historial, NO pausa a Max)`);
+          continue;
+        }
+        // Asesor EN VIVO → Max NO vuelve a participar en esta conversación (persistido).
+        marcarHumano(jid);
         if (textoHumano) agregar(jid, "assistant", textoHumano);
-        console.log(`(fromMe con contenido en ${jid}: NO pausa a Max — auto-handoff deshabilitado)`);
+        console.log(`🧑 un asesor intervino en ${jid} → Max se pausa en ese chat`);
         continue;
       }
 
