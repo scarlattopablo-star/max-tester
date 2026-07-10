@@ -406,11 +406,14 @@ async function iniciar() {
           console.log(`(equipo, sin pausa en ${jid}: evento no-mensaje — ${Object.keys(m).join(",") || "vacío"})`);
           continue;
         }
-        // Un ASESOR escribió desde el teléfono del bot → SE HIZO CARGO de esta
-        // conversación: Max NO vuelve a participar en ella (permanente, persistido).
-        marcarHumano(jid);
+        // AUTO-HANDOFF DESHABILITADO (10-jul-2026): con Baileys vinculado a un celular
+        // EN USO, WhatsApp sincroniza los mensajes salientes del teléfono y —con el lío
+        // de los @lid— el mismo cliente queda partido en dos jids, disparando falsos
+        // "un asesor tomó la conversación" que auto-pausaban a Max y lo dejaban sin
+        // responder. Por ahora los fromMe con contenido NO pausan: solo se registran.
+        // (Refinar más adelante: distinguir eco/sync propio vs. respuesta humana real.)
         if (textoHumano) agregar(jid, "assistant", textoHumano);
-        console.log(`🧑 un asesor tomó la conversación ${jid}: Max no participa más acá`);
+        console.log(`(fromMe con contenido en ${jid}: NO pausa a Max — auto-handoff deshabilitado)`);
         continue;
       }
 

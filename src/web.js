@@ -24,7 +24,7 @@ import { resetearSesion } from "./auth_db.js";
 import { resumenMensajes } from "./metricas.js";
 import { resumenTransferencias, listarTransferencias, importarTransferencias, borrarTransferencias } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
-import { esHumano, marcarHumano, liberar } from "./previas.js";
+import { esHumano, marcarHumano, liberar, liberarTodo } from "./previas.js";
 import { enviarTextoMeta, metaConfigurado } from "./meta_api.js";
 import { listarClientes } from "./clientes.js";
 import QRCode from "qrcode";
@@ -683,6 +683,19 @@ app.get("/api/wa-reset", async (req, res) => {
     res.json({ ok: true, filasBorradas: filas, msg: "Sesión borrada. Reiniciando para pedir un QR nuevo…" });
     console.log(`🧹 wa_auth borrada (${filas} filas) por /api/wa-reset → reinicio para QR nuevo`);
     setTimeout(() => process.exit(0), 800); // Render reinicia el servicio → Baileys sin sesión → QR nuevo
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+// Libera TODAS las conversaciones pausadas por "asesor" (útil tras un misfire de
+// handoffs, ej: al vincular Baileys a un celular en uso). Protegido con ?clave=<NOTIFY_TOKEN>.
+app.get("/api/reset-handoffs", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  try {
+    const n = await liberarTodo();
+    res.json({ ok: true, liberadas: n, msg: "Pausas de asesor liberadas: Max retoma todos los chats." });
+    console.log(`🔓 ${n} conversaciones liberadas por /api/reset-handoffs`);
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }

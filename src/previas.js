@@ -74,3 +74,14 @@ export async function liberar(jid) {
   if (!process.env.DATABASE_URL) return;
   try { await sql`delete from conversaciones_humano where jid = ${jid}`; } catch {}
 }
+
+/** Libera TODAS las conversaciones pausadas (útil tras un misfire de handoffs).
+ *  Devuelve cuántas había. */
+export async function liberarTodo() {
+  const n = humanas.size;
+  humanas.clear();
+  if (process.env.DATABASE_URL) {
+    try { await sql`delete from conversaciones_humano`; } catch {}
+  }
+  return n;
+}
