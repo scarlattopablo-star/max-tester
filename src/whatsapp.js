@@ -15,7 +15,7 @@ import { registrarMensajeMax } from "./metricas.js";
 import { linkTurno } from "./confirmacion_turno.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
-import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
+import { cargarEstado, esHumano, marcarHumano, liberar } from "./previas.js";
 import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder, documentoDelMensaje, dijoQueTransfirio } from "./ws_mensaje.js";
 import { diag } from "./diag.js";
 import { registrarTransferencia } from "./transferencias.js";
@@ -420,6 +420,16 @@ async function iniciar() {
         const UMBRAL_HANDOFF_MIN = Number(process.env.HANDOFF_MAX_EDAD_MIN || 3);
         if (ts && demoraMin > UMBRAL_HANDOFF_MIN) {
           console.log(`(fromMe viejo en ${jid}: ${demoraMin} min — sync de historial, NO pausa a Max)`);
+          continue;
+        }
+        // REACTIVAR (como Sofi con "sofi"): si el asesor escribe SOLO "max" / "/max" /
+        // "activar" en el chat → Max vuelve a atender ESA conversación, sin esperar el
+        // timeout ni resetear todo. Se responde al jid real (mapeo @lid → número).
+        if (textoHumano && /^\/?(max|activar)\s*$/i.test(textoHumano.trim())) {
+          liberar(jid);
+          const jidEnvioReact = jidEnvioDe.get(jid) || jid;
+          try { marcarEnviado(await sock.sendMessage(jidEnvioReact, { text: "Listo, Max vuelve a responder en este chat 🙌" })); } catch {}
+          console.log(`🔓 asesor reactivó a Max en ${jid} con comando`);
           continue;
         }
         // Asesor EN VIVO → Max NO vuelve a participar en esta conversación (persistido).
