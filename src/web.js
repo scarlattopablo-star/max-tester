@@ -23,6 +23,9 @@ import { estadoQR } from "./qr_estado.js";
 import { resumenMensajes } from "./metricas.js";
 import { resumenTransferencias, listarTransferencias, importarTransferencias, borrarTransferencias } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
+import { esHumano, marcarHumano, liberar } from "./previas.js";
+import { enviarTextoMeta, metaConfigurado } from "./meta_api.js";
+import { listarClientes } from "./clientes.js";
 import QRCode from "qrcode";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -290,6 +293,224 @@ app.get("/conversaciones", async (req, res) => {
 </style></head><body>
 <h1>Últimas ${convs.length} conversaciones de Max</h1>
 ${bloques || "<p>No hay conversaciones todavía.</p>"}
+</body></html>`);
+});
+
+// ══════════════════ PANEL DEL EQUIPO (/equipo) ══════════════════
+// El número vive en la Cloud API (ya no está en la app del celular): esta página
+// es la BANDEJA del equipo. Ver las charlas, responder por la API y tomar/devolver
+// la conversación. Al responder o "tomar", Max se pausa en ese chat (previas.js,
+// 3 h desde el último mensaje del asesor). Protegido con ?clave=NOTIFY_TOKEN.
+
+// Marca invisible (tras el separador ⁣) para distinguir en el historial lo que
+// escribió un asesor de lo que escribió Max. El cerebro la VE (así Max sabe que
+// no lo dijo él); las vistas la recortan con split("⁣").
+const MARCA_ASESOR = "⁣[respuesta escrita por un ASESOR humano del equipo — no la escribió Max]";
+const esMsgAsesor = (m) => m.role === "assistant" && String(m.content || "").includes("ASESOR humano");
+const esChatWa = (id) => /^\d{8,}$/.test(String(id)); // solo charlas de WhatsApp (el tester web usa otros ids)
+
+// tel → nombre (de la base de clientes), cacheado 1 min para no pegarle a Neon en cada refresco.
+let clientesCache = { ts: 0, mapa: new Map() };
+async function nombresClientes() {
+  if (Date.now() - clientesCache.ts < 60_000) return clientesCache.mapa;
+  const mapa = new Map();
+  try {
+    for (const c of await listarClientes({ limite: 1000 })) if (c.telefono) mapa.set(String(c.telefono), c.nombre || "");
+  } catch {}
+  clientesCache = { ts: Date.now(), mapa };
+  return mapa;
+}
+
+app.get("/api/equipo/charlas", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const n = Math.min(Math.max(parseInt(req.query.n) || 30, 1), 100);
+  const nombres = await nombresClientes();
+  const convs = (await ultimasConversaciones(100)).filter((c) => esChatWa(c.chatId)).slice(0, n);
+  res.json({
+    charlas: convs.map((c) => {
+      const msgs = c.mensajes || [];
+      const ult = msgs[msgs.length - 1];
+      return {
+        id: c.chatId,
+        nombre: nombres.get(String(c.chatId)) || "",
+        actualizado: c.actualizado,
+        pausado: esHumano(c.chatId),
+        ultimo: ult ? { de: ult.role === "user" ? "cliente" : esMsgAsesor(ult) ? "asesor" : "max", texto: String(ult.content || "").split("⁣")[0].slice(0, 90) } : null,
+      };
+    }),
+  });
+});
+
+app.get("/api/equipo/chat", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const id = String(req.query.id || "");
+  if (!esChatWa(id)) return res.status(400).json({ error: "id inválido" });
+  const nombres = await nombresClientes();
+  res.json({
+    id,
+    nombre: nombres.get(id) || "",
+    pausado: esHumano(id),
+    mensajes: historial(id)
+      .map((m) => ({ de: m.role === "user" ? "cliente" : esMsgAsesor(m) ? "asesor" : "max", texto: String(m.content || "").split("⁣")[0].trim() }))
+      .filter((m) => m.texto),
+  });
+});
+
+// Enviar la respuesta de un asesor al cliente (por la Cloud API) + pausar a Max.
+app.post("/api/equipo/enviar", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const id = String(req.body?.id || "");
+  const texto = String(req.body?.texto || "").trim();
+  if (!esChatWa(id) || !texto) return res.status(400).json({ error: "faltan datos" });
+  if (!metaConfigurado()) return res.status(503).json({ error: "la API de Meta no está configurada en este server" });
+  try {
+    await enviarTextoMeta(id, texto);
+    agregar(id, "assistant", `${texto}${MARCA_ASESOR}`);
+    await marcarHumano(id); // el asesor tomó la charla: Max no se mete
+    res.json({ ok: true, pausado: true });
+  } catch (e) {
+    res.status(502).json({
+      error: e.metaCode === 131047
+        ? "Fuera de la ventana de 24 h: como el cliente no escribió en las últimas 24 h, WhatsApp solo permite plantillas aprobadas."
+        : `No se pudo enviar: ${e.message}`,
+    });
+  }
+});
+
+app.post("/api/equipo/tomar", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const id = String(req.body?.id || "");
+  if (!esChatWa(id)) return res.status(400).json({ error: "id inválido" });
+  await marcarHumano(id);
+  res.json({ ok: true, pausado: true });
+});
+
+app.post("/api/equipo/devolver", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const id = String(req.body?.id || "");
+  if (!esChatWa(id)) return res.status(400).json({ error: "id inválido" });
+  await liberar(id);
+  res.json({ ok: true, pausado: false });
+});
+
+// La página del panel (móvil y escritorio). Toda la lógica va del lado del cliente
+// contra los /api/equipo/* de arriba; acá no se interpola nada del servidor.
+app.get("/equipo", (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).send("No autorizado. Agregá ?clave=TU_NOTIFY_TOKEN al final del link.");
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel del equipo — Max</title>
+<style>
+  *{box-sizing:border-box} body{font-family:system-ui,Segoe UI,sans-serif;background:#0d0d10;color:#e8e8ea;margin:0;height:100dvh;display:flex;flex-direction:column;}
+  header{padding:10px 14px;background:#16161b;border-bottom:1px solid #26262e;display:flex;align-items:center;gap:10px;flex:0 0 auto;}
+  header h1{font-size:16px;margin:0;flex:1;} header .sub{font-size:12px;color:#889;}
+  #volver{background:none;border:none;color:#9bd;font-size:22px;cursor:pointer;padding:0 4px;display:none;}
+  .chip{font-size:11px;padding:3px 8px;border-radius:99px;white-space:nowrap;}
+  .chip.max{background:#143a2a;color:#8fb;} .chip.humano{background:#3a2a14;color:#fb8;}
+  main{flex:1;overflow-y:auto;padding:10px;}
+  .fila{background:#16161b;border:1px solid #26262e;border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;}
+  .fila:active{background:#1d1d24;}
+  .fila .arriba{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:4px;}
+  .fila b{font-size:15px;} .fila .fecha{font-size:11px;color:#667;} .fila .prev{font-size:13px;color:#9aa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .msg{padding:7px 11px;border-radius:10px;margin:5px 0;font-size:15px;line-height:1.35;max-width:86%;white-space:pre-wrap;word-break:break-word;}
+  .cli{background:#222630;margin-right:auto;} .bot{background:#143a2a;margin-left:auto;} .ase{background:#14293a;margin-left:auto;}
+  .msg small{display:block;font-size:10px;color:#99a;margin-bottom:2px;}
+  #acciones{display:none;gap:8px;padding:8px 10px;background:#111116;border-top:1px solid #26262e;flex:0 0 auto;}
+  #acciones button{flex:1;padding:9px;border-radius:10px;border:none;font-size:14px;cursor:pointer;}
+  #tomar{background:#3a2a14;color:#fb8;} #devolver{background:#143a2a;color:#8fb;display:none;}
+  #cajaenvio{display:none;gap:8px;padding:8px 10px 14px;background:#111116;flex:0 0 auto;}
+  #texto{flex:1;background:#1b1b22;border:1px solid #2c2c36;border-radius:10px;color:#e8e8ea;padding:10px;font-size:15px;resize:none;min-height:42px;max-height:120px;}
+  #enviar{background:#1f6feb;color:#fff;border:none;border-radius:10px;padding:0 18px;font-size:15px;cursor:pointer;}
+  #enviar:disabled{opacity:.5;}
+  #error{display:none;background:#3a1414;color:#f99;font-size:13px;padding:8px 12px;flex:0 0 auto;}
+</style></head><body>
+<header><button id="volver">←</button><div style="flex:1"><h1 id="titulo">Conversaciones de Max</h1><div class="sub" id="subtitulo">El equipo responde desde acá; Max se pausa solo.</div></div><span class="chip max" id="estadochip" style="display:none"></span></header>
+<main id="main"></main>
+<div id="error"></div>
+<div id="acciones"><button id="tomar">🧑 Tomar la conversación (pausa a Max)</button><button id="devolver">🤖 Devolver a Max</button></div>
+<div id="cajaenvio"><textarea id="texto" placeholder="Escribí tu respuesta como asesor…"></textarea><button id="enviar">Enviar</button></div>
+<script>
+var CLAVE = new URLSearchParams(location.search).get('clave') || '';
+var chatAbierto = null, pausado = false;
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function fmtFecha(f){ if(!f) return ''; try { return new Date(f).toLocaleString('es-UY',{timeZone:'America/Montevideo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
+function api(ruta){ return fetch(ruta + (ruta.indexOf('?')>=0?'&':'?') + 'clave=' + encodeURIComponent(CLAVE)); }
+function apiPost(ruta, datos){ return fetch(ruta + '?clave=' + encodeURIComponent(CLAVE), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(datos)}); }
+function mostrarError(t){ var e=document.getElementById('error'); e.textContent=t; e.style.display=t?'block':'none'; if(t) setTimeout(function(){ e.style.display='none'; },6000); }
+
+function pintarLista(charlas){
+  var h = charlas.map(function(c){
+    var quien = c.nombre ? esc(c.nombre)+' · '+esc(c.id) : esc(c.id);
+    var chip = c.pausado ? '<span class="chip humano">🧑 Asesor</span>' : '<span class="chip max">🤖 Max</span>';
+    var prev = c.ultimo ? esc((c.ultimo.de==='cliente'?'Cliente: ':c.ultimo.de==='asesor'?'Asesor: ':'Max: ') + c.ultimo.texto) : '(sin mensajes)';
+    return '<div class="fila" data-id="'+esc(c.id)+'"><div class="arriba"><b>'+quien+'</b>'+chip+'<span class="fecha">'+fmtFecha(c.actualizado)+'</span></div><div class="prev">'+prev+'</div></div>';
+  }).join('');
+  document.getElementById('main').innerHTML = h || '<p style="color:#889">No hay conversaciones todavía.</p>';
+  Array.prototype.forEach.call(document.querySelectorAll('.fila'), function(f){ f.onclick = function(){ abrirChat(f.getAttribute('data-id')); }; });
+}
+function pintarChat(d){
+  pausado = d.pausado;
+  document.getElementById('titulo').textContent = d.nombre ? d.nombre : d.id;
+  document.getElementById('subtitulo').textContent = d.nombre ? d.id : '';
+  var chip = document.getElementById('estadochip');
+  chip.style.display='inline-block';
+  chip.className = 'chip ' + (pausado?'humano':'max');
+  chip.textContent = pausado ? '🧑 Atiende un asesor' : '🤖 Max atendiendo';
+  document.getElementById('tomar').style.display = pausado?'none':'block';
+  document.getElementById('devolver').style.display = pausado?'block':'none';
+  var main = document.getElementById('main');
+  var abajo = main.scrollHeight - main.scrollTop - main.clientHeight < 60;
+  main.innerHTML = d.mensajes.map(function(m){
+    var cls = m.de==='cliente'?'cli':m.de==='asesor'?'ase':'bot';
+    var quien = m.de==='cliente'?'Cliente':m.de==='asesor'?'Asesor':'Max';
+    return '<div class="msg '+cls+'"><small>'+quien+'</small>'+esc(m.texto)+'</div>';
+  }).join('') || '<p style="color:#889">(sin mensajes)</p>';
+  if (abajo) main.scrollTop = main.scrollHeight;
+}
+function refrescar(){
+  if (chatAbierto) {
+    api('/api/equipo/chat?id='+encodeURIComponent(chatAbierto)).then(function(r){ return r.json(); }).then(function(d){ if(!d.error) pintarChat(d); });
+  } else {
+    api('/api/equipo/charlas').then(function(r){ return r.json(); }).then(function(d){ if(d.charlas) pintarLista(d.charlas); });
+  }
+}
+function abrirChat(id){
+  chatAbierto = id;
+  document.getElementById('volver').style.display='block';
+  document.getElementById('acciones').style.display='flex';
+  document.getElementById('cajaenvio').style.display='flex';
+  document.getElementById('main').innerHTML='';
+  refrescar();
+  var main = document.getElementById('main');
+  setTimeout(function(){ main.scrollTop = main.scrollHeight; }, 400);
+}
+document.getElementById('volver').onclick = function(){
+  chatAbierto = null;
+  this.style.display='none';
+  document.getElementById('acciones').style.display='none';
+  document.getElementById('cajaenvio').style.display='none';
+  document.getElementById('estadochip').style.display='none';
+  document.getElementById('titulo').textContent='Conversaciones de Max';
+  document.getElementById('subtitulo').textContent='El equipo responde desde acá; Max se pausa solo.';
+  refrescar();
+};
+document.getElementById('tomar').onclick = function(){ apiPost('/api/equipo/tomar',{id:chatAbierto}).then(refrescar); };
+document.getElementById('devolver').onclick = function(){ apiPost('/api/equipo/devolver',{id:chatAbierto}).then(refrescar); };
+document.getElementById('enviar').onclick = function(){
+  var caja = document.getElementById('texto'), t = caja.value.trim();
+  if (!t || !chatAbierto) return;
+  var btn = this; btn.disabled = true;
+  apiPost('/api/equipo/enviar',{id:chatAbierto,texto:t}).then(function(r){ return r.json(); }).then(function(d){
+    btn.disabled = false;
+    if (d.error) return mostrarError(d.error);
+    caja.value=''; refrescar();
+    var main=document.getElementById('main'); setTimeout(function(){ main.scrollTop = main.scrollHeight; },300);
+  }).catch(function(){ btn.disabled=false; mostrarError('Error de red, probá de nuevo.'); });
+};
+document.getElementById('texto').addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.shiftKey && window.innerWidth>700){ e.preventDefault(); document.getElementById('enviar').click(); } });
+refrescar();
+setInterval(refrescar, 5000);
+</script>
 </body></html>`);
 });
 
