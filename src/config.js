@@ -128,7 +128,7 @@ const PRESETS = {
   },
   claude: {
     baseURL: "https://api.anthropic.com/v1/",
-    model: "claude-haiku-4-5-20251001", // Haiku 4.5: modo ahorro (jul 2026) hasta migrar a Meta; Sonnet 5 empujó el gasto al límite mensual. Volver a "claude-sonnet-5" si hace falta más calidad.
+    model: "claude-sonnet-5", // Sonnet 5 (10-jul-2026): más inteligente, ~2-3x el costo de Haiku. OJO: comparte el límite mensual de Anthropic con Sofi/Juli — si se vuelve a tocar el tope, subir el límite en la Consola o volver a "claude-haiku-4-5-20251001".
     envKey: "ANTHROPIC_API_KEY",
   },
 };
