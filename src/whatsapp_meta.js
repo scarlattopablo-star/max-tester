@@ -47,6 +47,29 @@ function marcarEnviado(resp) {
   }
 }
 
+// COEXISTENCE (número en la app del celular Y en la Cloud API a la vez):
+// cuando un asesor responde a un cliente DESDE la app de WhatsApp Business, Meta
+// nos avisa por el webhook `smb_message_echoes` → value.message_echoes[], con el
+// cliente en el campo `to`. Ese es el handoff: pausamos a Max en ese chat 3 h para
+// que no hable encima del asesor. (En "API pura", sin app, esto nunca dispara.)
+// REQUISITO Meta: suscribir el campo `smb_message_echoes` en el panel de la app.
+async function procesarEcoEquipo(echo) {
+  const id = echo?.id;
+  if (id) {
+    if (idsVistos.has(id)) return;          // anti-duplicado (Meta reentrega)
+    idsVistos.add(id);
+    if (idsVistos.size > 4000) idsVistos.clear();
+    if (enviadosPorMax.has(id)) return;     // por las dudas: no es un envío de Max por la API
+  }
+  const cliente = aWaId(echo?.to);          // a QUIÉN le escribió el asesor
+  if (!cliente) return;
+  await marcarHumano(cliente);              // Max se calla 3 h en ese chat
+  const t = echo?.text?.body || (echo?.type ? `[${echo.type}]` : "[mensaje]");
+  agregar(cliente, "assistant", t);         // guardar en el historial lo que escribió el asesor
+  diag("handoff_equipo", { jid: cliente });
+  console.log(`🧑 el equipo respondió a ${cliente} desde la app → Max en pausa 3 h`);
+}
+
 function encolar(tel, { texto, imagenes = [], contacto, msgId }) {
   const b = buffers.get(tel) || { textos: [], imagenes: [], timer: null, contacto: {}, msgId: null };
   if (texto) b.textos.push(texto);
@@ -297,11 +320,15 @@ export function montarWebhook(app) {
       for (const entry of entradas) {
         for (const ch of entry.changes || []) {
           const value = ch.value || {};
-          // statuses = recibos de entrega/lectura: los ignoramos.
-          if (!value.messages) continue;
-          for (const msg of value.messages) {
+          // messages = mensajes de clientes → los atiende Max.
+          for (const msg of value.messages || []) {
             procesarEntrante(msg, value).catch((e) => console.log("⚠ error procesando entrante:", e.message));
           }
+          // message_echoes (smb_message_echoes) = el equipo respondió desde la app → handoff.
+          for (const eco of value.message_echoes || []) {
+            procesarEcoEquipo(eco).catch((e) => console.log("⚠ error procesando eco:", e.message));
+          }
+          // statuses = recibos de entrega/lectura: se ignoran solos.
         }
       }
     } catch (e) {
