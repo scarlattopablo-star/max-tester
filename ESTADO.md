@@ -1,9 +1,23 @@
 # ESTADO del Agente IA "Max" — RETOMAR ACÁ
 
-Bot de WhatsApp (**WhatsApp Cloud API oficial de Meta** desde el 9-jul-2026; antes Baileys) + derivación de Instagram, para La Casa del Cubreasiento.
-Asistente se llama **Max** (antes Vale; renombrado 4 jun). Carpeta: `agente_ia/`.
+Bot de WhatsApp para La Casa del Cubreasiento. Asistente **Max** (antes Vale). Carpeta: `agente_ia/`.
 
-## ✅✅ SESIÓN 9–10 jul — MIGRACIÓN A META COMPLETADA (LO MÁS NUEVO)
+## 🔴🔴 ESTADO ACTUAL (10-jul tarde): Max EN BAILEYS (se revirtió Meta)
+
+**El canal es BAILEYS de nuevo**, no Meta. El 091 volvió a la app de WhatsApp Business del celular; Baileys corre como dispositivo vinculado. Se revirtió la migración a Meta porque el equipo odiaba el panel `/equipo`. Render: `WA_PROVIDER=baileys` + `WHATSAPP_ON=1`. Modelo Sonnet 5. Verificado: Max cotiza y deriva OK.
+
+Cosas del corte (10-jul):
+- Se sacó el 091 de Meta (🗑 en WhatsApp Manager, pide password de Rodrigo — la cuenta Meta es de él, 2FA a su tel …99) y se re-registró en el celular.
+- **`/api/wa-reset?clave=<NOTIFY_TOKEN>`** (nuevo): borra la sesión vieja de Baileys en Neon (`wa_auth`) y reinicia → QR nuevo. La sesión vieja impedía el QR.
+- **Auto-handoff DESHABILITADO** (`whatsapp.js`): al vincular a un celular en uso, los salientes sincronizados + `@lid` disparaban 586 falsas pausas → Max mudo. **`/api/reset-handoffs?clave=<NOTIFY_TOKEN>`** (nuevo) las limpia. Contra: Max ya no se pausa si un asesor responde a mano.
+- `/api/estado` `conectado:false` es **glitch cosmético** — Max está conectado (mirar `/api/diag` o logs).
+- **PENDIENTE: mover a Railway** (~US$5/mes) — Render Free se duerme y la conexión parpadea.
+
+QR para revincular: `/qr?clave=<NOTIFY_TOKEN>`. Ver también memoria [[max-migracion-meta]].
+
+---
+
+## (HISTORIAL) SESIÓN 9–10 jul — MIGRACIÓN A META (ya revertida, datos por si se retoma Coexistence)
 
 **Max corre en la API oficial de Meta. Verificado en vivo: responde mensajes reales.**
 
