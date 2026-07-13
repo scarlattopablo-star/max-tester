@@ -3,6 +3,7 @@
 import { responder } from "./cerebro.js";
 import { historial, agregar } from "./memoria.js";
 import { respuestaInstagram } from "./instagram.js";
+import { guardarComprobanteDataUri } from "./comprobantes.js";
 
 // canal: 'whatsapp' | 'simulador' | 'instagram' | 'web'
 // imagenes: array de URLs/data-URIs que mandó el cliente (opcional)
@@ -22,8 +23,18 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
   // de qué charla/cliente vino la venta para avisar al equipo con ese dato).
   const ctx = { chatId, contacto };
   const { texto: respuesta, acciones, imagenesEnviar = [] } = await responder(texto, previo, imagenes, ctx);
-  // En la memoria guardamos solo texto (no el base64 de la imagen, que es pesado).
-  const marca = imagenes && imagenes.length ? (texto ? texto + " [+foto]" : "[el cliente mandó una foto]") : texto;
+  // Guardamos los comprobantes (imágenes/PDF) que mandó el cliente y dejamos un
+  // marcador liviano con el id en el historial (el base64 NO va al historial: es
+  // pesado y el modelo no lo necesita). Si no se pudo guardar (sin base, muy grande),
+  // se conserva el texto de siempre. El visor de conversaciones muestra los archivos.
+  let marcadores = "";
+  for (const dataUri of imagenes || []) {
+    const id = await guardarComprobanteDataUri(chatId, dataUri);
+    if (id) marcadores += ` ${/^data:application\/pdf/i.test(dataUri) ? `[comprobante-pdf #${id}]` : `[comprobante #${id}]`}`;
+  }
+  const marca = imagenes && imagenes.length
+    ? (marcadores ? `${texto ? texto + " " : ""}${marcadores.trim()}` : (texto ? texto + " [+foto]" : "[el cliente mandó una foto]"))
+    : texto;
   agregar(chatId, "user", marca);
   // IMPORTANTE: si Max mostró opciones con foto numeradas, las registramos como CONTEXTO
   // interno en el historial (después del separador ⁣) para que en el próximo turno
