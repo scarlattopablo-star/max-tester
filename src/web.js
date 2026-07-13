@@ -24,6 +24,7 @@ import { resetearSesion } from "./auth_db.js";
 import { resumenMensajes } from "./metricas.js";
 import { resumenTransferencias, listarTransferencias, importarTransferencias, borrarTransferencias, marcarVerificada } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
+import { obtenerMedia } from "./comprobantes.js";
 import { esHumano, marcarHumano, liberar, liberarTodo } from "./previas.js";
 import { enviarTextoMeta, metaConfigurado } from "./meta_api.js";
 import { listarClientes } from "./clientes.js";
@@ -275,6 +276,32 @@ app.get("/api/conversaciones", async (req, res) => {
   const n = Math.min(Math.max(parseInt(req.query.n) || 20, 1), 100);
   const convs = await ultimasConversaciones(n);
   res.json({ cantidad: convs.length, conversaciones: convs.map((c) => ({ chatId: c.chatId, actualizado: c.actualizado, mensajes: limpiarMensajes(c.mensajes) })) });
+});
+
+// Conversación COMPLETA de un chat puntual (para el visor del panel /admin de la web).
+// A diferencia de /api/equipo/chat, NO exige que el id sea solo dígitos: el panel pasa
+// el chatId EXACTO guardado en la transferencia (misma clave que usa memoria.js).
+app.get("/api/conversacion", (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const id = String(req.query.id || "");
+  if (!id) return res.status(400).json({ error: "falta id" });
+  const mensajes = historial(id)
+    .map((m) => ({
+      de: m.role === "user" ? "cliente" : (String(m.content || "").includes("ASESOR humano") ? "asesor" : "max"),
+      texto: String(m.content || "").split("⁣")[0].trim(),
+    }))
+    .filter((m) => m.texto);
+  res.json({ chatId: id, mensajes });
+});
+
+// Devuelve el archivo (imagen/PDF) de un comprobante guardado, por id.
+app.get("/api/comprobante/:id", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).send("no autorizado");
+  const media = await obtenerMedia(req.params.id);
+  if (!media) return res.status(404).send("no encontrado");
+  res.setHeader("Content-Type", media.mime || "application/octet-stream");
+  res.setHeader("Cache-Control", "private, max-age=86400");
+  res.send(Buffer.from(media.datos || "", "base64"));
 });
 
 // Página legible (móvil) para LEER las últimas charlas desde el celular.
