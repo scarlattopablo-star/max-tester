@@ -31,6 +31,8 @@ async function asegurarTabla() {
     comprobante boolean default false,
     ts timestamptz default now()
   )`;
+  await sql`alter table transferencias_max add column if not exists verificada boolean default false`;
+  await sql`alter table transferencias_max add column if not exists verificada_ts timestamptz`;
   tablaLista = true;
 }
 
@@ -119,16 +121,43 @@ export async function borrarTransferencias(ids = []) {
   return { ok: true, borradas: r.length };
 }
 
+/** Marca una transferencia como verificada/cobrada (o la vuelve a pendiente) desde
+ *  el panel /admin de la web. En modo archivo el id es el índice de la vista de
+ *  listarTransferencias (0 = la más nueva). */
+export async function marcarVerificada({ id, verificada = true } = {}) {
+  const idNum = Number(id);
+  if (!Number.isInteger(idNum) || idNum < 0) return { ok: false, motivo: "id inválido" };
+  if (usaDB) {
+    try {
+      await asegurarTabla();
+      const r = await sql`update transferencias_max
+        set verificada = ${!!verificada},
+            verificada_ts = ${verificada ? new Date().toISOString() : null}
+        where id = ${idNum} returning id`;
+      return { ok: r.length > 0, verificada: !!verificada };
+    } catch (e) {
+      return { ok: false, motivo: String(e.message || e) };
+    }
+  }
+  const todas = leer(ARCHIVO, []);
+  const idx = todas.length - 1 - idNum; // listar hace slice(-limite).reverse()
+  if (idx < 0 || idx >= todas.length) return { ok: false, motivo: "no encontrada" };
+  todas[idx].verificada = !!verificada;
+  todas[idx].verificadaTs = verificada ? new Date().toISOString() : null;
+  guardar(ARCHIVO, todas);
+  return { ok: true, verificada: !!verificada };
+}
+
 /** Lista las transferencias recientes para el panel /admin de la web: una fila
  *  por gestión, con fecha, cliente, MONTO y si mandó comprobante. */
 export async function listarTransferencias({ dias = 30, limite = 100 } = {}) {
   if (!usaDB) {
     const todas = leer(ARCHIVO, []);
-    return todas.slice(-limite).reverse().map((t, i) => ({ id: i, ...t }));
+    return todas.slice(-limite).reverse().map((t, i) => ({ id: i, ...t, verificada: !!t.verificada, verificadaTs: t.verificadaTs || null }));
   }
   try {
     await asegurarTabla();
-    const filas = await sql`select id, chat_id, monto, nombre, telefono, detalle, comprobante, ts
+    const filas = await sql`select id, chat_id, monto, nombre, telefono, detalle, comprobante, verificada, verificada_ts, ts
       from transferencias_max
       where ts >= now() - (${dias} || ' days')::interval
       order by ts desc limit ${limite}`;
@@ -140,6 +169,8 @@ export async function listarTransferencias({ dias = 30, limite = 100 } = {}) {
       telefono: f.telefono || "",
       detalle: f.detalle || "",
       comprobante: !!f.comprobante,
+      verificada: !!f.verificada,
+      verificadaTs: f.verificada_ts ? (f.verificada_ts instanceof Date ? f.verificada_ts.toISOString() : String(f.verificada_ts)) : null,
       ts: f.ts instanceof Date ? f.ts.toISOString() : String(f.ts),
     }));
   } catch (e) {
