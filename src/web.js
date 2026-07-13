@@ -22,7 +22,7 @@ import { ordenesML } from "./ml_ordenes.js";
 import { estadoQR } from "./qr_estado.js";
 import { resetearSesion } from "./auth_db.js";
 import { resumenMensajes } from "./metricas.js";
-import { resumenTransferencias, listarTransferencias, importarTransferencias, borrarTransferencias } from "./transferencias.js";
+import { resumenTransferencias, listarTransferencias, importarTransferencias, borrarTransferencias, marcarVerificada } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
 import { esHumano, marcarHumano, liberar, liberarTodo } from "./previas.js";
 import { enviarTextoMeta, metaConfigurado } from "./meta_api.js";
@@ -163,6 +163,21 @@ app.post("/api/transferencias/borrar", async (req, res) => {
   if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "no autorizado" });
   try {
     res.json(await borrarTransferencias(Array.isArray(req.body?.ids) ? req.body.ids : []));
+  } catch (e) {
+    res.status(500).json({ ok: false, motivo: String(e.message || e) });
+  }
+});
+
+// Marcar una transferencia como verificada/cobrada (o volver a pendiente) desde el
+// panel /admin de la web. body: { id, verificada }
+app.post("/api/transferencias/verificar", async (req, res) => {
+  const token = process.env.NOTIFY_TOKEN;
+  const auth = req.headers.authorization || "";
+  if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "no autorizado" });
+  try {
+    const id = req.body?.id;
+    const verificada = req.body?.verificada !== false; // default true
+    res.json(await marcarVerificada({ id, verificada }));
   } catch (e) {
     res.status(500).json({ ok: false, motivo: String(e.message || e) });
   }
