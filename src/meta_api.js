@@ -3,15 +3,21 @@
 // el Graph API de Meta. Lo usa whatsapp_meta.js (entrante/saliente) y el broadcast
 // de promos (clientes.js).
 //
-// Necesita en el .env (se cargan desde la WABA en Meta Business, ver META_SETUP.md):
-//   WHATSAPP_TOKEN          token PERMANENTE del System User (no el temporal de 24h)
-//   WHATSAPP_PHONE_ID       Phone Number ID del 091 dentro de la WABA
+// Dos transportes posibles (mismo formato de payloads, cambia el host y la auth):
+//   A) Meta directo:  WHATSAPP_TOKEN (System User permanente) + WHATSAPP_PHONE_ID
+//   B) 360dialog:     D360_API_KEY (Coexistence; el número vive en 360dialog y
+//      NO hace falta phone_id: la key ya identifica al número). Si D360_API_KEY
+//      está presente, gana sobre el transporte directo.
 //   WHATSAPP_API_VERSION    (opcional) versión del Graph API, por defecto v21.0
 import "./env.js";
 
 const API_VERSION = process.env.WHATSAPP_API_VERSION || "v21.0";
 const GRAPH = `https://graph.facebook.com/${API_VERSION}`;
+const D360_BASE = "https://waba-v2.360dialog.io";
 
+function d360Key() {
+  return process.env.D360_API_KEY || "";
+}
 function token() {
   const t = process.env.WHATSAPP_TOKEN;
   if (!t) throw new Error("FALTA_WHATSAPP_TOKEN");
@@ -25,15 +31,21 @@ function phoneId() {
 
 // ¿Está configurada la Cloud API? (para que start.js/web.js sepan si pueden arrancarla)
 export function metaConfigurado() {
-  return !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID);
+  return !!(d360Key() || (process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID));
 }
 
-// POST genérico a /{PHONE_ID}/messages. Devuelve el JSON de Meta (incluye el id del
+// POST genérico a .../messages. Devuelve el JSON de Meta (incluye el id del
 // mensaje saliente en messages[0].id). Lanza con el detalle del error de Meta.
+// Con 360dialog el endpoint es /messages a secas (sin phone_id) y la auth es
+// el header D360-API-KEY; los payloads y las respuestas son idénticos a Meta.
 async function postMensaje(payload) {
-  const r = await fetch(`${GRAPH}/${phoneId()}/messages`, {
+  const url = d360Key() ? `${D360_BASE}/messages` : `${GRAPH}/${phoneId()}/messages`;
+  const headers = d360Key()
+    ? { "D360-API-KEY": d360Key(), "Content-Type": "application/json" }
+    : { Authorization: `Bearer ${token()}`, "Content-Type": "application/json" };
+  const r = await fetch(url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token()}`, "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ messaging_product: "whatsapp", ...payload }),
   });
   const data = await r.json().catch(() => ({}));
@@ -102,14 +114,21 @@ export async function marcarLeidoEscribiendo(messageId) {
 
 // Descarga un media entrante (imagen que mandó el cliente) y lo devuelve como
 // data-URI base64, igual formato que usaba Baileys (lo consume el cerebro/visión).
+// Con 360dialog: la info del media se pide a su proxy, y la URL temporal que
+// devuelve (lookaside.fbsbx.com) hay que bajarla REEMPLAZANDO el dominio por el
+// proxy de 360dialog (regla de su doc; el binario no sale directo de Meta).
 export async function mediaComoDataUri(mediaId) {
   try {
+    const key = d360Key();
+    const infoUrl = key ? `${D360_BASE}/${mediaId}` : `${GRAPH}/${mediaId}`;
+    const headers = key ? { "D360-API-KEY": key } : { Authorization: `Bearer ${token()}` };
     // 1) pedir la URL temporal del media
-    const meta = await fetch(`${GRAPH}/${mediaId}`, { headers: { Authorization: `Bearer ${token()}` } });
+    const meta = await fetch(infoUrl, { headers });
     const info = await meta.json();
     if (!info?.url) return null;
-    // 2) bajar el binario (requiere el mismo Bearer)
-    const bin = await fetch(info.url, { headers: { Authorization: `Bearer ${token()}` } });
+    // 2) bajar el binario (misma auth; con 360dialog, vía su proxy)
+    const binUrl = key ? String(info.url).replace(/^https:\/\/[^/]+/, D360_BASE) : info.url;
+    const bin = await fetch(binUrl, { headers });
     const buf = Buffer.from(await bin.arrayBuffer());
     const mime = info.mime_type || "image/jpeg";
     return `data:${mime};base64,${buf.toString("base64")}`;
