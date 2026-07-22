@@ -47,7 +47,13 @@ cargar. Se aprueban en **WhatsApp Manager → Plantillas de mensajes → Crear p
   o para coordinar el envío por DAC. ¿Cómo preferís recibirlo?
   ```
 
-## Plantilla 4 — Aviso interno al equipo (UTILITY) ⚠️ PRIORITARIA
+## Plantilla 4 — Aviso interno al equipo (UTILITY) ⚠️ PRIORITARIA — ✅ CREADA 22 jul 2026
+> **Estado:** enviada a aprobación por la API de 360dialog (`POST /message_templates`),
+> **id 1041867608221562**, categoría UTILITY, idioma `es`. Cuerpo real:
+> `🔔 Aviso de Max para el equipo: {{1}} — La Casa del Cubreasiento.`
+> El código ya la usa POR DEFECTO (PLANTILLA_AVISO default "aviso_equipo") con caída
+> a texto libre si falla. Falta SOLO: fondos en 360dialog (Billing) para que Meta
+> cobre los envíos (~US$ 0,013 por aviso; gratis dentro de la ventana de 24 h).
 - **Para qué:** que los avisos de Max al equipo (derivación / venta / turno) lleguen SIEMPRE
   al `NUMERO_AVISOS` (el 096 895 164). Sin plantilla, esos avisos son texto libre y Meta
   **los descarta en silencio** si el asesor no le escribió a Max en las últimas 24 h
