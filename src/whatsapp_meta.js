@@ -205,6 +205,17 @@ async function procesarEntrante(msg, value) {
     if (idsVistos.size > 4000) idsVistos.clear();
   }
 
+  // COEXISTENCE: la sincronización de historial (hasta 6 meses) puede entregar
+  // mensajes VIEJOS por el webhook como si fueran nuevos. Igual que hacía Baileys
+  // con arranqueTs, todo lo que tenga más de 10 minutos se ignora: responder
+  // charlas de hace días/semanas confundiría a los clientes.
+  const ts = parseInt(msg.timestamp || "0", 10);
+  if (ts && Date.now() / 1000 - ts > 600) {
+    diag("ignorado_viejo", { jid: tel, ts });
+    console.log(`🕰️ ${tel}: mensaje viejo (sync de historial), ignorado`);
+    return;
+  }
+
   // COEXISTENCE: un mensaje con from = nuestro propio número es el EQUIPO escribiendo
   // desde la app del celular. Si no lo mandó Max por la API, es un humano → handoff.
   if (propio && tel === propio) {
