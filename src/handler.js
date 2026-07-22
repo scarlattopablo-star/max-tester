@@ -47,7 +47,7 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
   }
   if (videosEnviar.length) {
     const vids = videosEnviar.map((v) => v.caption).join("; ");
-    contenidoAssistant += `${contenidoAssistant.includes("⁣") ? " " : "⁣"}[Contexto interno — YA le envié el video de: ${vids} (con su material). ⛔ NO vuelvas a llamar "mostrar_tela" ni "mostrar_cuero_sport" en esta conversación: el cliente ya lo tiene, no repitas el video ni sus fotos.]`;
+    contenidoAssistant += `${contenidoAssistant.includes("⁣") ? " " : "⁣"}[Contexto interno — YA le envié el video de: ${vids} (con su material). Mientras se hable del MISMO auto/pedido, NO repitas ese video ni sus fotos; si el cliente pregunta después por OTRO modelo, ahí sí va la presentación completa de nuevo.]`;
   }
   agregar(chatId, "assistant", contenidoAssistant);
   return { texto: respuesta, acciones, imagenesEnviar, videosEnviar };
