@@ -6,6 +6,15 @@ Bot de WhatsApp para La Casa del Cubreasiento. Asistente **Max** (antes Vale). C
 
 **Contexto: desde el 22 jul Max corre en la Cloud API vía 360dialog Coexistence** (`WA_PROVIDER=meta` + `D360_API_KEY`; Baileys = legado). Esta sesión arregló los avisos al equipo y sumó 2 líneas de producto:
 
+> ✅✅ **CIERRE (22 jul ~15:15): AVISOS RESUELTOS DEFINITIVO.** La plantilla **`aviso_equipo_max`**
+> (id 4573476226266094, UTILITY, es) fue creada por la API de 360dialog y **APROBADA**; Pablo cargó
+> saldo en 360dialog (auto-recharge €50 al bajar de €10; antes daba 403 "lack of payment") y la
+> **prueba real por plantilla LLEGÓ al 096** (sin status failed). El transporte usa la plantilla POR
+> DEFECTO (`PLANTILLA_AVISO ?? "aviso_equipo_max"`; "" la desactiva) con caída a texto libre — sin
+> tocar Render. Ya NO hace falta el mensaje diario del 096. ⚠️ El nombre `aviso_equipo` quedó quemado
+> (primera versión con encoding roto por curl/Windows; crear plantillas siempre con cuerpo ASCII).
+> ⚠️ Dos avisos reales de las 15:03–15:05 del 22 jul se perdieron (pre-aprobación): revisar bandeja.
+
 1. **AVISOS AL EQUIPO (096 895 164) — diagnóstico y arreglo.** Los avisos son texto libre y la Cloud API **solo los entrega si el 096 le escribió a Max en las últimas 24 h**; fuera de esa ventana la API "acepta" el envío pero Meta lo descarta en silencio (status `failed` code 131047 al webhook, que se ignoraba). Cambios en `whatsapp_meta.js`:
    - Los `statuses` **fallados ahora se loguean** (evento `envio_fallido` en `/api/diag` + consola) — antes no dejaban rastro.
    - Si el **096 le escribe a Max**, ya no lo trata como cliente: responde confirmando el canal (máx. 1 vez/12 h) y esa escritura ABRE la ventana de 24 h. **Mientras no haya plantilla, el 096 debe mandarle un mensaje por día a Max** (un "ok" alcanza).
