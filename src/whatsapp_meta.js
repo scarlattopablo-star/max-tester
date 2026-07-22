@@ -105,8 +105,15 @@ async function procesar(tel) {
     // Si el cliente escribió MÁS mientras Max pensaba, reprocesamos con eso incluido.
     if (b.textos.length || b.imagenes.length) { procesando.delete(tel); return procesar(tel); }
 
-    await sleep(delayEscritura(respuesta));
-    marcarEnviado(await enviarTextoMeta(tel, respuesta));
+    // Envío HUMANO: la respuesta se parte en mensajitos (bloques separados por
+    // línea en blanco) y cada uno sale con su pausa de tipeo, como chatea una
+    // persona. Máximo 3 burbujas para no spammear.
+    const partes = String(respuesta || "").split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+    const burbujas = partes.length <= 3 ? partes : [...partes.slice(0, 2), partes.slice(2).join("\n\n")];
+    for (const parte of (burbujas.length ? burbujas : [respuesta])) {
+      await sleep(delayEscritura(parte));
+      marcarEnviado(await enviarTextoMeta(tel, parte));
+    }
     registrarMensajeMax(tel);
 
     for (const f of imagenesEnviar) {
