@@ -61,6 +61,11 @@ async function procesarEcoEquipo(echo) {
     if (idsVistos.size > 4000) idsVistos.clear();
     if (enviadosPorMax.has(id)) return;     // por las dudas: no es un envío de Max por la API
   }
+  // La sincronización de historial de Coexistence también entrega ECOS VIEJOS del
+  // equipo (meses de respuestas desde la app). Solo un eco RECIENTE significa "un
+  // asesor está atendiendo AHORA": los históricos no deben pausar a Max.
+  const ts = parseInt(echo?.timestamp || "0", 10);
+  if (ts && Date.now() / 1000 - ts > 600) return;
   const cliente = aWaId(echo?.to);          // a QUIÉN le escribió el asesor
   if (!cliente) return;
   await marcarHumano(cliente);              // Max se calla 3 h en ese chat
