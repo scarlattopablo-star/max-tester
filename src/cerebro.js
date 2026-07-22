@@ -500,7 +500,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "mostrar_capitoneado",
-      description: "Manda al cliente las FOTOS REALES del material capitoneado premium (muestras de color negro y rojo, y detalle de la espuma de 8mm). Usar cuando el cliente se interesa por el cubreasiento capitoneado y hay que mostrarle los colores disponibles.",
+      description: "Manda al cliente las FOTOS REALES del material capitoneado premium: muestras de los colores disponibles (negro, rojo, negro con costura naranja, negro con costura azul, negro con costura blanca) y detalle de la espuma de 8mm. Usar SIEMPRE que el cliente pregunte por colores del capitoneado o se interese por el cubreasiento capitoneado: mostrale las opciones.",
       parameters: {
         type: "object",
         properties: {
@@ -571,12 +571,25 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
     if (nombre === "mostrar_capitoneado") {
       const m = CUBREASIENTOS.capitoneado.muestras || {};
       const que = _normTxt(input.que || "colores");
+      // Catálogo de muestras: clave → nombre para el cliente + palabras que la piden.
+      const catalogo = [
+        { img: m.negro, nombre: "Capitoneado premium - Negro", pide: ["negro"] },
+        { img: m.rojo, nombre: "Capitoneado premium - Rojo", pide: ["rojo"] },
+        { img: m.negroNaranja, nombre: "Capitoneado premium - Negro con costura naranja", pide: ["naranja"] },
+        { img: m.negroAzul, nombre: "Capitoneado premium - Negro con costura azul", pide: ["azul"] },
+        { img: m.negroBlanco, nombre: "Capitoneado premium - Negro con costura blanca", pide: ["blanc", "gris"] },
+      ];
       let fotos = [];
-      if (que.includes("negro") && !que.includes("rojo")) fotos = [{ nombre: "Capitoneado premium - Negro", img: m.negro }];
-      else if (que.includes("rojo") && !que.includes("negro")) fotos = [{ nombre: "Capitoneado premium - Rojo", img: m.rojo }];
-      else if (que.includes("espuma") || que.includes("detalle") || que.includes("material")) fotos = [{ nombre: "Detalle del material capitoneado (ambos colores)", img: m.detalle }, { nombre: "Espuma de alta densidad de 8 mm", img: m.espuma }];
-      else fotos = [{ nombre: "Capitoneado premium - Negro", img: m.negro }, { nombre: "Capitoneado premium - Rojo", img: m.rojo }];
-      fotos = fotos.filter((f) => f.img);
+      if (que.includes("espuma") || que.includes("detalle") || que.includes("material")) {
+        fotos = [{ nombre: "Detalle del material capitoneado", img: m.detalle }, { nombre: "Espuma de alta densidad de 8 mm", img: m.espuma }];
+      } else {
+        // Colores puntuales que haya nombrado; si no nombró ninguno, TODOS los colores.
+        const pedidas = catalogo.filter((c) => c.pide.some((p) => que.includes(p)));
+        // "negro" solo cuenta como color puntual si no vino acompañando a una costura.
+        const soloNegro = que.includes("negro") && pedidas.length === 1 && pedidas[0].pide[0] === "negro";
+        fotos = (pedidas.length && (pedidas.length > 1 || soloNegro || pedidas[0].pide[0] !== "negro")) ? pedidas : catalogo;
+      }
+      fotos = fotos.filter((f) => f.img).map(({ nombre: n, img }) => ({ nombre: n, img }));
       if (!fotos.length) return { ok: false, mensaje: "No hay fotos de muestra cargadas." };
       return { ok: true, enviadas: fotos.length, fotos };
     }

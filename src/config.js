@@ -65,7 +65,7 @@ export const CUBREASIENTOS = {
     nombre: "Cubreasiento capitoneado premium",
     colocacion: true,
     costoColocacion: "se cotiza con un vendedor (consultar)",
-    coloresCapitoneado: ["Negro", "Rojo"],
+    coloresCapitoneado: ["Negro", "Rojo", "Negro con costura naranja", "Negro con costura azul", "Negro con costura blanca"],
     logoOpcional: true,
     coloresLogo: ["Rojo", "Negro", "Gris", "Azul"],
     // Fotos REALES de muestra del material (en public/capitoneado/). URLs absolutas
@@ -73,6 +73,9 @@ export const CUBREASIENTOS = {
     muestras: {
       negro: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro.jpg`,
       rojo: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/rojo.jpg`,
+      negroNaranja: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro-naranja.jpg`,
+      negroAzul: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro-azul.jpg`,
+      negroBlanco: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro-blanco.jpg`,
       detalle: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/detalle.jpg`, // ambos colores + espuma a la vista
       espuma: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/espuma.jpg`, // grosor de espuma 8mm
     },
