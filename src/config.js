@@ -89,23 +89,23 @@ export const CUBREASIENTOS = {
       detalle: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/detalle.jpg`, // ambos colores + espuma a la vista
       espuma: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/espuma.jpg`, // grosor de espuma 8mm
     },
-    // Descripción del material (Max la da DESPUÉS de que el cliente elige el capitoneado).
-    // Son los puntos de venta del cuero ecológico capitoneado. Max NO los recita de
-    // corrido: los explica de a poco, en una charla amena (ver reglas en cerebro.js).
-    descripcion: [
-      "Cubreasientos premium en cuero ecológico capitoneado, de alta gama, pensados para renovar y proteger el interior del vehículo con máxima protección, confort y elegancia.",
-      "Cuero ecológico premium de excelente calidad.",
-      "Capitoneado de lujo con espuma de alta densidad de 8 mm.",
-      "100% impermeables.",
-      "Lavables y de fácil mantenimiento.",
-      "Material resistente al desgaste y al uso diario.",
-      "Costuras reforzadas y terminaciones premium.",
-      "Protegen los asientos originales conservando el valor de reventa del vehículo.",
-      "Diseño elegante y moderno, con excelente presentación.",
-      "Materiales importados directamente por la empresa, seleccionados para garantizar mayor durabilidad, resistencia y una terminación superior.",
-      "Garantía de 1 año por defectos de fabricación.",
-      "Combinan protección, confort y estilo: son la opción ideal para mantener el interior del vehículo impecable y con una apariencia exclusiva.",
-    ],
+    // Descripción OFICIAL del cuero ecológico capitoneado (los puntos de venta de
+    // siempre, en bloque textual — Pablo pidió el 22 jul 2026 que Max la dé TAL CUAL
+    // cuando el cliente elige el capitoneado o pregunta por el material).
+    descripcionExacta: `Cubreasientos premium en cuero ecológico capitoneado, de alta gama, pensados para renovar y proteger el interior del vehículo con máxima protección, confort y elegancia.
+
+✅ Cuero ecológico premium de excelente calidad.
+✅ Capitoneado de lujo con espuma de alta densidad de 8 mm.
+✅ 100% impermeables.
+✅ Lavables y de fácil mantenimiento.
+✅ Material resistente al desgaste y al uso diario.
+✅ Costuras reforzadas y terminaciones premium.
+✅ Protegen los asientos originales conservando el valor de reventa del vehículo.
+✅ Diseño elegante y moderno, con excelente presentación.
+✅ Materiales importados directamente por la empresa, seleccionados para garantizar mayor durabilidad, resistencia y una terminación superior.
+✅ Garantía de 1 año por defectos de fabricación.
+
+Combinan protección, confort y estilo: son la opción ideal para mantener el interior del vehículo impecable y con una apariencia exclusiva.`,
   },
   // Línea TELA: a medida en tela de tapicería capitoneada de 8 mm. El precio final
   // depende del modelo, así que la cotización la cierra SIEMPRE un asesor: Max la
@@ -115,14 +115,23 @@ export const CUBREASIENTOS = {
     precioDesde: 9500,
     precioHasta: 12500,
     video: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/tela.mp4`,
-    descripcion: [
-      "Cubreasientos a medida confeccionados en tela de tapicería capitoneada de 8 mm de alta densidad, con materiales de máxima calidad, excelente terminación y gran durabilidad.",
-      "Diseño exclusivo y elegante.",
-      "Espuma de 8 mm de alta densidad para mayor confort.",
-      "Material resistente al uso diario.",
-      "Excelente ajuste según el modelo del vehículo.",
-      "Gran durabilidad y terminaciones premium.",
-    ],
+    // Descripción OFICIAL del negocio (Pablo, 22 jul 2026): Max la envía TAL CUAL,
+    // sin cambiar una palabra, cuando el cliente se interesa por esta línea.
+    descripcionExacta: `Trabajamos con cubreasientos a medida confeccionados en tela de tapicería capitoneada de 8 mm de alta densidad, con materiales de máxima calidad, excelente terminación y gran durabilidad.
+
+✅ Diseño exclusivo y elegante.
+✅ Espuma de 8 mm de alta densidad para mayor confort.
+✅ Material resistente al uso diario.
+✅ Excelente ajuste según el modelo de tu vehículo.
+✅ Gran durabilidad y terminaciones premium.
+
+💰 Precio: entre $9.500 y $12.500, dependiendo del modelo del vehículo.
+
+📲 Para poder cotizarte correctamente, por favor indicanos:
+
+Marca
+Modelo
+Año del vehículo`,
   },
   // Línea SPORT: premium en cuero automotriz Sport, a medida de cada vehículo.
   // Igual que la tela: el precio exacto lo da un asesor (Max muestra fotos + video,
@@ -136,14 +145,19 @@ export const CUBREASIENTOS = {
       `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/cuero-1.jpg`,
       `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/cuero-2.jpg`,
     ],
-    descripcion: [
-      "Línea Premium en cuero automotriz Sport, confeccionada a medida para cada vehículo.",
-      "Cuero automotriz Sport de máxima calidad.",
-      "Espumas de 8 mm de alta densidad para mayor confort.",
-      "Impermeables y lavables.",
-      "Máxima resistencia y durabilidad.",
-      "Excelente terminación y ajuste específico para cada modelo.",
-    ],
+    // Descripción OFICIAL del negocio (Pablo, 22 jul 2026): Max la envía TAL CUAL,
+    // sin cambiar una palabra, cuando el cliente se interesa por esta línea.
+    descripcionExacta: `Contamos con una línea Premium en cuero automotriz Sport, confeccionada a medida para cada vehículo.
+
+✅ Cuero automotriz Sport de máxima calidad.
+✅ Espumas de 8 mm de alta densidad para mayor confort.
+✅ Impermeables y lavables.
+✅ Máxima resistencia y durabilidad.
+✅ Excelente terminación y ajuste específico para cada modelo.
+
+💰 Precio: entre $18.000 y $22.000, dependiendo del modelo del vehículo.
+
+Si esta opción es de su interés, por favor indíquenos la marca, modelo y año de su vehículo. Un asesor de ventas se comunicará con usted a la brevedad para brindarle el precio exacto y toda la información que necesite.`,
   },
 };
 

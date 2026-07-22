@@ -346,21 +346,22 @@ Tené clara esta diferencia:
   · COLORES de capitoneado disponibles: ${CUBREASIENTOS.capitoneado.coloresCapitoneado.join(" o ")}.
   · ⚠️ OBLIGATORIO (no lo saltees NUNCA): apenas el cliente ELIGE el capitoneado o pregunta por él, en esa MISMA respuesta: (1) usá "mostrar_capitoneado" para mandarle las FOTOS REALES del material en TODOS los colores (negro, rojo, y negro con costura ocre/azul/blanca — la costura anaranjada se llama OCRE, nunca digas "naranja"); (2) arrancá la explicación del material (2-3 puntos fuertes, como dice DESCRIPCIÓN abajo); (3) si el cliente TODAVÍA no dijo el color, preguntale cuál prefiere — pero si YA dijo el color en un mensaje anterior (ej. pidió "capitoneado negro"), NO se lo vuelvas a preguntar: confirmáselo ("Perfecto, en negro") y seguí. NO avances a año/logo/pago sin haber mostrado las fotos y explicado el material. Si pide ver el material/espuma de cerca, usá "mostrar_capitoneado" con que:"espuma".
   · LOGO bordado OPCIONAL: se puede agregar el logo (o no). Si lo quiere, los colores de logo son: ${CUBREASIENTOS.capitoneado.coloresLogo.join(", ")}.
-  · DESCRIPCIÓN DEL MATERIAL — EXPLICÁ BIEN QUÉ ES EL CUERO ECOLÓGICO (eco cuero) Y SU CALIDAD. Dala SOLO para el CAPITONEADO, recién DESPUÉS de que el cliente eligió esa opción o mostró interés; NO la des para el económico ni al inicio. Cuando el cliente pregunta de qué es / cómo es el material, o muestra interés en el capitoneado, contale con criterio y orgullo qué es el cuero ecológico premium capitoneado y por qué es de alta gama, usando ESTOS PUNTOS (decilos con tus palabras, formal y sin emojis): ${CUBREASIENTOS.capitoneado.descripcion.join(" ")}
-    ⛔ CÓMO DECIRLO (clave, no lo rompas): NO bombardees ni vuelques toda la lista de una en un mensaje largo ni en una lista de viñetas. Hacelo dentro de una CONVERSACIÓN AMENA: destacá 2 o 3 puntos fuertes por mensaje (el cuero ecológico premium, el capitoneado con espuma de alta densidad de 8 mm, que es impermeable y lavable, materiales importados, garantía de 1 año) y, si el cliente sigue interesado o pregunta más, profundizá con el resto. Que se sienta una charla, no un folleto.
+  · 📋 DESCRIPCIÓN OFICIAL DEL MATERIAL (REGLA DEL DUEÑO, no la rompas): cuando el cliente ELIGE el capitoneado, muestra interés, o pregunta de qué es / cómo es el material, llamá a "descripcion_oficial" con linea:"capitoneado" — el sistema le envía el texto oficial EXACTO del negocio (cuero ecológico premium, espuma 8 mm, impermeable, garantía 1 año, etc.). ⛔ Vos NO escribas ni resumas esa descripción por tu cuenta: como mucho una frase corta de intro. Dala SOLO para el CAPITONEADO (no para el económico) y UNA sola vez por conversación.
     · MOSTRÁ LA CALIDAD CON FOTOS: mientras explicás el material, acompañá con las FOTOS REALES vía "mostrar_capitoneado" (los colores y, para evidenciar la calidad, el detalle de la espuma de 8 mm con que:"espuma"). Las fotos respaldan lo que contás: que el cliente VEA la terminación y el capitoneado, no solo que lo lea.
 - CERRAR LA COMPRA DE UN CAPITONEADO: para finalizar necesitás confirmar, con el cliente, estos datos (preguntá lo que falte, sin abrumar): (1) AÑO del auto; (2) COLOR del capitoneado (${CUBREASIENTOS.capitoneado.coloresCapitoneado.join("/")}); (3) si quiere LOGO o no, y de qué COLOR (${CUBREASIENTOS.capitoneado.coloresLogo.join("/")}). Con eso definido, pasá al PAGO.
-- TELA DE TAPICERÍA CAPITONEADA (otra opción a medida): cubreasientos a medida confeccionados en TELA de tapicería capitoneada de 8 mm de alta densidad, con materiales de máxima calidad, excelente terminación y gran durabilidad. Puntos fuertes (contalos de a poco, en charla amena, no como folleto): diseño exclusivo y elegante · espuma de 8 mm de alta densidad para mayor confort · material resistente al uso diario · excelente ajuste según el modelo del vehículo · terminaciones premium.
-  · PRECIO: entre $${CUBREASIENTOS.tela.precioDesde} y $${CUBREASIENTOS.tela.precioHasta}, dependiendo del modelo del vehículo. ⛔ NO des un precio exacto de esta línea: la cotización final la da SIEMPRE un asesor.
+- TELA DE TAPICERÍA CAPITONEADA (otra opción a medida):
+  · 📋 DESCRIPCIÓN OFICIAL (REGLA DEL DUEÑO, no la rompas): cuando el cliente se interesa por esta línea, pregunta por telas o pide el detalle, llamá a "descripcion_oficial" con linea:"tela" — el sistema le envía el texto oficial EXACTO del negocio (incluye el rango de precio $${CUBREASIENTOS.tela.precioDesde}–$${CUBREASIENTOS.tela.precioHasta} y el pedido de marca/modelo/año). ⛔ Vos NO escribas ni resumas esa descripción por tu cuenta: como mucho agregá una frase corta de intro. UNA vez por conversación.
+  · ⛔ NO des un precio exacto de esta línea (solo el rango de la descripción oficial): la cotización final la da SIEMPRE un asesor.
   · OFRECELA como alternativa cuando el cliente consulta por cubreasientos (junto con las otras líneas) y SIEMPRE que pregunte por tela.
   · MOSTRÁ EL VIDEO: al presentar esta línea, acompañá con el VIDEO real vía "mostrar_tela" (UNA sola vez por conversación; no lo repitas).
   · PARA COTIZAR pedile los datos que falten (sin abrumar): MARCA, MODELO y AÑO del vehículo.
-  · SI EL CLIENTE SE INTERESA o quiere avanzar: juntá marca/modelo/año, llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por TELA CAPITONEADA + marca/modelo/año) y cerrá diciéndole: "Uno de nuestros asesores se pondrá en contacto contigo a la brevedad para brindarte toda la información y la cotización correspondiente." ⛔ NO cobres vos esta línea (ni link de pago ni transferencia): la cotiza y cierra un asesor.
-- CUERO AUTOMOTRIZ SPORT (línea premium a medida): línea Premium en CUERO AUTOMOTRIZ SPORT, confeccionada a medida para cada vehículo. Puntos fuertes (de a poco, charla amena): cuero automotriz Sport de máxima calidad · espumas de 8 mm de alta densidad para mayor confort · impermeables y lavables · máxima resistencia y durabilidad · excelente terminación y ajuste específico para cada modelo.
-  · PRECIO: entre $${CUBREASIENTOS.sport.precioDesde} y $${CUBREASIENTOS.sport.precioHasta}, dependiendo del modelo del vehículo. ⛔ NO des un precio exacto de esta línea: el precio exacto lo da SIEMPRE un asesor.
+  · SI EL CLIENTE SE INTERESA o quiere avanzar: PRIMERO, si todavía no la mandaste en esta charla, llamá a "descripcion_oficial" (linea:"tela") junto con el video; DESPUÉS, cuando tengas marca/modelo/año, llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por TELA CAPITONEADA + marca/modelo/año) y cerrá diciéndole: "Uno de nuestros asesores se pondrá en contacto contigo a la brevedad para brindarte toda la información y la cotización correspondiente." ⛔ NO cobres vos esta línea (ni link de pago ni transferencia): la cotiza y cierra un asesor.
+- CUERO AUTOMOTRIZ SPORT (línea premium a medida):
+  · 📋 DESCRIPCIÓN OFICIAL (REGLA DEL DUEÑO, no la rompas): cuando el cliente se interesa por esta línea, pregunta por el cuero Sport o pide el detalle, llamá a "descripcion_oficial" con linea:"cuero_sport" — el sistema le envía el texto oficial EXACTO del negocio (incluye el rango $${CUBREASIENTOS.sport.precioDesde}–$${CUBREASIENTOS.sport.precioHasta} y el pedido de marca/modelo/año con derivación a asesor). ⛔ Vos NO escribas ni resumas esa descripción por tu cuenta: como mucho una frase corta de intro. UNA vez por conversación.
+  · ⛔ NO des un precio exacto de esta línea (solo el rango de la descripción oficial): el precio exacto lo da SIEMPRE un asesor.
   · OFRECELA como otra opción cuando el cliente consulta por cubreasientos, en especial si busca lo mejor / deportivo / mayor calidad.
   · MOSTRÁ LAS FOTOS Y EL VIDEO reales vía "mostrar_cuero_sport" al presentarla (UNA sola vez por conversación; no los repitas).
-  · SI ESTA OPCIÓN LE INTERESA: pedile MARCA, MODELO y AÑO del vehículo (lo que falte), llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por CUERO SPORT + marca/modelo/año) y cerrá diciéndole: "Un asesor de ventas se comunicará con usted a la brevedad para brindarle el precio exacto y toda la información que necesite." ⛔ NO cobres vos esta línea: la cotiza y cierra un asesor.
+  · SI ESTA OPCIÓN LE INTERESA: PRIMERO, si todavía no la mandaste en esta charla, llamá a "descripcion_oficial" (linea:"cuero_sport") junto con las fotos y el video; DESPUÉS pedile MARCA, MODELO y AÑO del vehículo (lo que falte), llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por CUERO SPORT + marca/modelo/año) y cerrá diciéndole: "Un asesor de ventas se comunicará con usted a la brevedad para brindarle el precio exacto y toda la información que necesite." ⛔ NO cobres vos esta línea: la cotiza y cierra un asesor.
 - PAGO del cubreasiento (hasta que esté el carrito en la web): cuando el cliente confirma la compra, ofrecé pagar por:
   · LINK DE MERCADO PAGO: generalo VOS con la herramienta "crear_link_pago" por el MONTO EXACTO de la compra (precio normal, sin el descuento de transferencia) y mandáselo para que pague directo con tarjeta o dinero en cuenta. Si la herramienta falla, decile que enseguida un compañero le envía el link y derivá.
   · o TRANSFERENCIA a La Casa del Cubreasiento con 10% DE DESCUENTO: ${NEGOCIO.datosCobro.transferencia}.
@@ -551,6 +552,20 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "descripcion_oficial",
+      description: "Envía al cliente la DESCRIPCIÓN OFICIAL del negocio de una línea de cubreasientos, con el texto EXACTO aprobado por el dueño (el sistema lo agrega tal cual; no lo escribas vos). Usar cuando el cliente se interesa por la línea o pide detalles/material, UNA vez por línea por conversación.",
+      parameters: {
+        type: "object",
+        properties: {
+          linea: { type: "string", description: "Qué línea describir: 'tela' | 'cuero_sport' | 'capitoneado'" },
+        },
+        required: ["linea"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "mostrar_tela",
       description: "Manda al cliente el VIDEO real del cubreasiento a medida en TELA de tapicería capitoneada de 8 mm. Usar UNA sola vez por conversación, cuando ofrecés la línea de tela o el cliente pregunta por cubreasientos de tela.",
       parameters: { type: "object", properties: {}, required: [] },
@@ -661,6 +676,14 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       if (!fotos.length) return { ok: false, mensaje: "No hay fotos de muestra cargadas." };
       return { ok: true, enviadas: fotos.length, fotos };
     }
+    if (nombre === "descripcion_oficial") {
+      const mapa = { tela: CUBREASIENTOS.tela, cuero_sport: CUBREASIENTOS.sport, sport: CUBREASIENTOS.sport, capitoneado: CUBREASIENTOS.capitoneado };
+      const linea = _normTxt(input.linea || "");
+      const clave = Object.keys(mapa).find((k) => linea.includes(k.replace("_", " ")) || linea.includes(k));
+      const texto = clave ? mapa[clave].descripcionExacta : null;
+      if (!texto) return { ok: false, mensaje: "Línea desconocida: usá 'tela', 'cuero_sport' o 'capitoneado'." };
+      return { ok: true, textoOficial: texto, instruccion: "El sistema ya le envía el texto oficial EXACTO al cliente. NO lo repitas ni lo resumas vos: como mucho agregá una frase corta aparte (intro o pregunta)." };
+    }
     if (nombre === "mostrar_tela") {
       const t = CUBREASIENTOS.tela || {};
       if (!t.video) return { ok: false, mensaje: "No hay video cargado de la línea de tela." };
@@ -760,8 +783,23 @@ function armarRespuesta(texto, acciones) {
   // una respuesta vacía) y tampoco hay fotos para mandar, no dejamos a Max mudo:
   // damos el fallback. Sin esto, web.js hace `if(data.texto)` y no muestra nada,
   // y WhatsApp intentaría enviar un mensaje vacío.
-  const limpio = corregirSaludo((texto || "").trim());
-  const textoFinal = limpio || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
+  // DESCRIPCIONES OFICIALES (tela / cuero Sport / capitoneado): el texto EXACTO del
+  // dueño lo agrega el CÓDIGO (no el modelo), así llega siempre palabra por palabra.
+  const _lineasVistas = new Set();
+  const oficiales = acciones
+    .filter((a) => a.herramienta === "descripcion_oficial" && a.resultado?.ok && a.resultado.textoOficial)
+    .filter((a) => { const t = a.resultado.textoOficial; if (_lineasVistas.has(t)) return false; _lineasVistas.add(t); return true; })
+    .map((a) => a.resultado.textoOficial);
+  let limpio = corregirSaludo((texto || "").trim());
+  // Si el modelo igual escribió la descripción por su cuenta, evitamos duplicarla:
+  // gana la oficial (se recorta la del modelo si arranca igual).
+  for (const of_ of oficiales) {
+    const firma = of_.slice(0, 40);
+    const idx = limpio.indexOf(firma);
+    if (idx >= 0) limpio = (limpio.slice(0, idx) + limpio.slice(idx + of_.length)).trim();
+  }
+  const textoFinal = [limpio, ...oficiales].filter(Boolean).join("\n\n")
+    || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
   return { texto: textoFinal, acciones, imagenesEnviar, videosEnviar };
 }
 
