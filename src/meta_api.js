@@ -89,6 +89,16 @@ export async function enviarImagenMeta(to, url, caption = "") {
   });
 }
 
+// Video por URL pública (Max manda los videos reales de la tela capitoneada y
+// del cuero Sport). Límite de Meta: 16 MB.
+export async function enviarVideoMeta(to, url, caption = "") {
+  return postMensaje({
+    to: aWaId(to),
+    type: "video",
+    video: { link: url, caption: String(caption || "").slice(0, 1024) },
+  });
+}
+
 // Plantilla aprobada (para escribir FUERA de las 24 h: promos, reenganche).
 // componentes: array al formato Graph (ej: [{ type:"body", parameters:[{type:"text", text:"15%"}] }]).
 export async function enviarPlantillaMeta(to, nombre, idioma = "es", componentes = []) {

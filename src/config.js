@@ -43,7 +43,7 @@ export const tiendaMLPorModelo = (modelo) =>
   `https://listado.mercadolibre.com.uy/${encodeURIComponent(String(modelo || "").trim().replace(/\s+/g, "-"))}_CustId_${SELLER_ML_ID}`;
 
 // ───────────────────────────────────────────────────────────────────
-// CUBREASIENTOS — dos líneas. Las reglas las usa el cerebro (cerebro.js).
+// CUBREASIENTOS — tres líneas. Las reglas las usa el cerebro (cerebro.js).
 // ───────────────────────────────────────────────────────────────────
 export const CUBREASIENTOS = {
   // Línea ECONÓMICA: eco cuero. SOLO VENTA (no se coloca).
@@ -57,7 +57,15 @@ export const CUBREASIENTOS = {
     // El eco cuero económico NO tiene variación de color de material: es SIEMPRE
     // cuero ecológico NEGRO. Lo único que varía es el color del PESPUNTE (costura).
     colorUnico: "Cuero ecológico negro",
-    pespuntes: ["Rojo", "Azul", "Gris"],
+    // Costuras REALES con foto (Pablo, 22 jul 2026): ocre (no decir "naranja"), azul y blanca.
+    pespuntes: ["Ocre", "Azul", "Blanco"],
+    // Fotos reales de las costuras: Max las muestra SIEMPRE que preguntan por
+    // colores o al describir el eco cuero (tool mostrar_ecocuero).
+    muestras: {
+      costuraOcre: `${process.env.APP_URL || "https://max-tester.onrender.com"}/ecocuero/costura-ocre.jpg`,
+      costuraAzul: `${process.env.APP_URL || "https://max-tester.onrender.com"}/ecocuero/costura-azul.jpg`,
+      costuraBlanca: `${process.env.APP_URL || "https://max-tester.onrender.com"}/ecocuero/costura-blanca.jpg`,
+    },
     descripcion: "", // el económico NO necesita descripción extra del material
   },
   // Línea PREMIUM: capitoneado. SÍ se coloca (costo a consultar con vendedor).
@@ -65,7 +73,9 @@ export const CUBREASIENTOS = {
     nombre: "Cubreasiento capitoneado premium",
     colocacion: true,
     costoColocacion: "se cotiza con un vendedor (consultar)",
-    coloresCapitoneado: ["Negro", "Rojo", "Negro con costura naranja", "Negro con costura azul", "Negro con costura blanca"],
+    // ⚠️ Las fotos de costuras (ocre/azul/blanca) que estaban acá pasaron al ECO
+    // CUERO (Pablo, 22 jul 2026): eran de esa línea. El capitoneado es negro o rojo.
+    coloresCapitoneado: ["Negro", "Rojo"],
     logoOpcional: true,
     coloresLogo: ["Rojo", "Negro", "Gris", "Azul"],
     // Fotos REALES de muestra del material (en public/capitoneado/). URLs absolutas
@@ -73,9 +83,6 @@ export const CUBREASIENTOS = {
     muestras: {
       negro: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro.jpg`,
       rojo: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/rojo.jpg`,
-      negroNaranja: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro-naranja.jpg`,
-      negroAzul: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro-azul.jpg`,
-      negroBlanco: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro-blanco.jpg`,
       detalle: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/detalle.jpg`, // ambos colores + espuma a la vista
       espuma: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/espuma.jpg`, // grosor de espuma 8mm
     },
@@ -95,6 +102,44 @@ export const CUBREASIENTOS = {
       "Materiales importados directamente por la empresa, seleccionados para garantizar mayor durabilidad, resistencia y una terminación superior.",
       "Garantía de 1 año por defectos de fabricación.",
       "Combinan protección, confort y estilo: son la opción ideal para mantener el interior del vehículo impecable y con una apariencia exclusiva.",
+    ],
+  },
+  // Línea TELA: a medida en tela de tapicería capitoneada de 8 mm. El precio final
+  // depende del modelo, así que la cotización la cierra SIEMPRE un asesor: Max la
+  // ofrece con el video real, junta marca/modelo/año y deriva.
+  tela: {
+    nombre: "Cubreasiento a medida en tela de tapicería capitoneada",
+    precioDesde: 9500,
+    precioHasta: 12500,
+    video: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/tela.mp4`,
+    descripcion: [
+      "Cubreasientos a medida confeccionados en tela de tapicería capitoneada de 8 mm de alta densidad, con materiales de máxima calidad, excelente terminación y gran durabilidad.",
+      "Diseño exclusivo y elegante.",
+      "Espuma de 8 mm de alta densidad para mayor confort.",
+      "Material resistente al uso diario.",
+      "Excelente ajuste según el modelo del vehículo.",
+      "Gran durabilidad y terminaciones premium.",
+    ],
+  },
+  // Línea SPORT: premium en cuero automotriz Sport, a medida de cada vehículo.
+  // Igual que la tela: el precio exacto lo da un asesor (Max muestra fotos + video,
+  // junta marca/modelo/año y deriva).
+  sport: {
+    nombre: "Cubreasiento premium en cuero automotriz Sport",
+    precioDesde: 18000,
+    precioHasta: 22000,
+    video: `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/video.mp4`,
+    fotos: [
+      `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/cuero-1.jpg`,
+      `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/cuero-2.jpg`,
+    ],
+    descripcion: [
+      "Línea Premium en cuero automotriz Sport, confeccionada a medida para cada vehículo.",
+      "Cuero automotriz Sport de máxima calidad.",
+      "Espumas de 8 mm de alta densidad para mayor confort.",
+      "Impermeables y lavables.",
+      "Máxima resistencia y durabilidad.",
+      "Excelente terminación y ajuste específico para cada modelo.",
     ],
   },
 };

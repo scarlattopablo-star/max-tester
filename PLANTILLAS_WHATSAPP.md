@@ -47,6 +47,24 @@ cargar. Se aprueban en **WhatsApp Manager → Plantillas de mensajes → Crear p
   o para coordinar el envío por DAC. ¿Cómo preferís recibirlo?
   ```
 
+## Plantilla 4 — Aviso interno al equipo (UTILITY) ⚠️ PRIORITARIA
+- **Para qué:** que los avisos de Max al equipo (derivación / venta / turno) lleguen SIEMPRE
+  al `NUMERO_AVISOS` (el 096 895 164). Sin plantilla, esos avisos son texto libre y Meta
+  **los descarta en silencio** si el asesor no le escribió a Max en las últimas 24 h
+  (status failed, code 131047). Mientras no esté la plantilla, el 096 tiene que mandarle
+  un mensaje cualquiera a Max al menos una vez por día para mantener la ventana abierta.
+- **Nombre:** `aviso_equipo`
+- **Idioma:** `es` · **Categoría:** UTILITY
+- **Cuerpo:**
+  ```
+  🔔 Aviso de Max: {{1}}
+  ```
+  - `{{1}}` = el aviso completo en una línea (el código ya lo aplana solo)
+- **Dónde se crea:** en el hub de 360dialog (o WhatsApp Manager → Plantillas). Requiere
+  tener fondos cargados en 360dialog para mensajes iniciados por el negocio.
+- **Activarla:** una vez APROBADA, cargar en Render `PLANTILLA_AVISO=aviso_equipo` y
+  redeployar. Con eso los avisos dejan de depender de la ventana de 24 h.
+
 ---
 
 ## Cómo se disparan desde el código

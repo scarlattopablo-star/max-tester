@@ -58,10 +58,10 @@ app.post("/api/chat", async (req, res) => {
   const imagenes = imagen ? [imagen] : [];
   if (!chatId || (!texto && !imagenes.length)) return res.status(400).json({ error: "faltan datos" });
   try {
-    const { texto: respuesta, imagenesEnviar = [] } = await procesarMensaje({ chatId: String(chatId), texto: String(texto || ""), canal: "web", imagenes });
+    const { texto: respuesta, imagenesEnviar = [], videosEnviar = [] } = await procesarMensaje({ chatId: String(chatId), texto: String(texto || ""), canal: "web", imagenes });
     // Pausa humana (que se tome su tiempo, como en el tester).
     await sleep(delayEscritura(respuesta));
-    res.json({ texto: respuesta, fotos: imagenesEnviar });
+    res.json({ texto: respuesta, fotos: imagenesEnviar, videos: videosEnviar });
   } catch (e) {
     const msg = String(e?.message || e);
     if (msg.includes("FALTA_API_KEY")) return res.json({ texto: "⚠ Falta cargar la clave de IA en el servidor (.env)." });

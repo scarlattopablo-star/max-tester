@@ -2,7 +2,22 @@
 
 Bot de WhatsApp para La Casa del Cubreasiento. Asistente **Max** (antes Vale). Carpeta: `agente_ia/`.
 
-## 🔴🔴 ESTADO ACTUAL (10-jul tarde): Max EN BAILEYS (se revirtió Meta)
+## 🟢🟢 SESIÓN 22 jul (tarde) — AVISOS AL EQUIPO + "SIN LEER" EN HANDOFF + LÍNEAS TELA Y CUERO SPORT (LO MÁS NUEVO)
+
+**Contexto: desde el 22 jul Max corre en la Cloud API vía 360dialog Coexistence** (`WA_PROVIDER=meta` + `D360_API_KEY`; Baileys = legado). Esta sesión arregló los avisos al equipo y sumó 2 líneas de producto:
+
+1. **AVISOS AL EQUIPO (096 895 164) — diagnóstico y arreglo.** Los avisos son texto libre y la Cloud API **solo los entrega si el 096 le escribió a Max en las últimas 24 h**; fuera de esa ventana la API "acepta" el envío pero Meta lo descarta en silencio (status `failed` code 131047 al webhook, que se ignoraba). Cambios en `whatsapp_meta.js`:
+   - Los `statuses` **fallados ahora se loguean** (evento `envio_fallido` en `/api/diag` + consola) — antes no dejaban rastro.
+   - Si el **096 le escribe a Max**, ya no lo trata como cliente: responde confirmando el canal (máx. 1 vez/12 h) y esa escritura ABRE la ventana de 24 h. **Mientras no haya plantilla, el 096 debe mandarle un mensaje por día a Max** (un "ok" alcanza).
+   - **Solución definitiva: plantilla UTILITY `aviso_equipo`** (cuerpo `🔔 Aviso de Max: {{1}}`, ver PLANTILLAS_WHATSAPP.md). Cuando Pablo cargue fondos en 360dialog y la plantilla esté aprobada → cargar `PLANTILLA_AVISO=aviso_equipo` en Render y los avisos llegan SIEMPRE (el transporte ya la usa solo).
+2. **CHAT SIN LEER cuando Max pide al equipo:** antes Max marcaba TODO como leído (✓✓ + escribiendo) y las conversaciones con aviso (derivación/venta/turno) eran imposibles de encontrar en la bandeja. Ahora el "marcar leído" se hace DESPUÉS de pensar y **se saltea si la respuesta generó `derivar_a_humano`/`tomar_pedido`/`solicitar_turno`** → esos chats quedan resaltados sin leer en la app del 091.
+3. **LÍNEA TELA DE TAPICERÍA CAPITONEADA** (8 mm, $9.500–$12.500 según modelo): Max la ofrece como alternativa, manda el **VIDEO real** (`public/capitoneado/tela.mp4`, tool `mostrar_tela`), pide marca/modelo/año y **deriva a asesor** (no cobra él). Frase de cierre pedida por Pablo incluida.
+4. **LÍNEA CUERO AUTOMOTRIZ SPORT** (premium, $18.000–$22.000 según modelo): ídem con **2 fotos + video** (`public/sport/`, tool `mostrar_cuero_sport`), deriva a "un asesor de ventas se comunicará…". No cobra Max.
+5. **COLORES DEL ECO CUERO (corrección de Pablo):** las 3 fotos de costuras (ocre —NO decir "naranja"—, azul y blanca) eran del **ECO CUERO**, no del capitoneado. El capitoneado volvió a Negro/Rojo; tool nueva `mostrar_ecocuero` (fotos en `public/ecocuero/`) que Max usa SIEMPRE que preguntan colores del eco cuero. Pespuntes en config: Ocre/Azul/Blanco.
+- **Videos por WhatsApp:** `enviarVideoMeta` en `meta_api.js` + circuito `videosEnviar` (cerebro → handler → whatsapp_meta / web tester). Anti-repetición con marcador de contexto interno en el historial.
+- Prueba local: `node test_lineas_nuevas.mjs` (3 charlas reales contra el cerebro).
+
+## 🔴🔴 ESTADO VIEJO (10-jul tarde): Max EN BAILEYS (se revirtió Meta — LUEGO se volvió a Meta vía 360dialog el 22 jul)
 
 **El canal es BAILEYS de nuevo**, no Meta. El 091 volvió a la app de WhatsApp Business del celular; Baileys corre como dispositivo vinculado. Se revirtió la migración a Meta porque el equipo odiaba el panel `/equipo`. Render: `WA_PROVIDER=baileys` + `WHATSAPP_ON=1`. Modelo Sonnet 5. Verificado: Max cotiza y deriva OK.
 

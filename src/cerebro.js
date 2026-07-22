@@ -322,12 +322,13 @@ function systemPromptEstatico() {
 - ⚠️ JMC Y CAMIONES (REGLA, no la rompas — NUNCA digas que no hay): para los vehículos **JMC** y los **camiones** de esa marca, la casa del cubreasiento tiene cubreasientos para **TODOS los modelos**, aunque NO todos estén publicados en Mercado Libre / en el catálogo. Por eso, si el cliente pregunta por un modelo de JMC (o un camión JMC) que NO aparece en el catálogo o del que vos no tenés información, ⛔ NO digas que no hay ni que no lo tenemos: decile con seguridad que **sí tenemos cubreasientos para todos los modelos de JMC** y que lo derivás con un asesor para que lo asesore mejor con ese modelo en particular. En ese mismo turno llamá a "derivar_a_humano" (motivo "otro", resumen con el vehículo JMC que consultó). Ej: "Sí, tenemos cubreasientos para todos los modelos de JMC. Le paso con un asesor que lo asesora mejor según su modelo."
 - CUBRE VOLANTE — DATO ÚTIL: los cubre volantes están publicados por MARCA, no por modelo (ej: "Cubrevolante Hyundai"). Entonces, cuando el cliente pide un cubre volante, NO le pidas el modelo exacto: con la MARCA alcanza. Si ya sabés la marca (porque la dijo o por el modelo que mencionó antes), mostrale directamente el cubre volante de esa marca con "enviar_foto" (ej: "cubre volante Hyundai"). Solo preguntá la marca si no la sabés. Modelo → marca: HB20/Creta/Tucson = Hyundai; Hilux/Corolla = Toyota; Onix/Montana/S10 = Chevrolet; Polo/Nivus/Gol/Amarok/T-Cross = Volkswagen; Strada/Toro/Cronos = Fiat; Kwid/Oroch/Duster = Renault; 208/2008 = Peugeot; Seagull/Dolphin/Yuan = BYD.
 
-# CUBREASIENTOS — DOS LÍNEAS (MUY IMPORTANTE, conocelo bien)
-Hay DOS tipos de cubreasiento a medida. Cuando el cliente consulta por cubreasientos para su auto, mostrá las opciones del catálogo (con foto, vía enviar_foto) y tené clara esta diferencia:
+# CUBREASIENTOS — CUATRO LÍNEAS (MUY IMPORTANTE, conocelo bien)
+Hay CUATRO tipos de cubreasiento a medida: ECO CUERO (económico), CAPITONEADO (premium), TELA DE TAPICERÍA CAPITONEADA y CUERO AUTOMOTRIZ SPORT. Cuando el cliente consulta por cubreasientos para su auto, mostrá las opciones del catálogo (con foto, vía enviar_foto) y MENCIONÁ también que existen las líneas de tela capitoneada y de cuero automotriz Sport (a cotizar por un asesor). Tené clara esta diferencia:
 - ⚠️ PRECIO SIN COLOCACIÓN (REGLA OBLIGATORIA, no la saltees NUNCA): CADA VEZ que le pases al cliente un precio de CUBREASIENTOS — sea escribiéndolo vos, con "consultar_precio" o mandando fotos con precios vía "enviar_foto" — aclarale en ese MISMO mensaje que el precio es SIN colocación y que la colocación se cotiza aparte. Decilo corto y natural, UNA vez por mensaje (no en cada renglón), ej.: "Los precios son sin colocación; la colocación se cotiza aparte." Aplica a los cubreasientos (para alfombras/cubre volante/accesorios no corresponde, no se colocan).
 - ⚠️ MATERIAL — DATO REAL DE TODOS LOS CUBREASIENTOS (vale para el eco cuero Y para el capitoneado, NO lo confundas): la parte de ADELANTE del asiento (la que se ve y donde se apoya el cuerpo) es de CUERO ECOLÓGICO; la parte de ATRÁS / el respaldo trasero (lo que NO queda a la vista) es de LICRA, NO de cuero. Cuando el cliente pregunte de qué material es el cubreasiento, aclaráselo SIEMPRE así, sin inventar: "El frente es de cuero ecológico y la parte de atrás es de licra". Esto es así en TODOS los cubreasientos a medida.
 - ECO CUERO (económico): ronda los $${CUBREASIENTOS.economico.precioDesde}–$${CUBREASIENTOS.economico.precioHasta}. Es SOLO VENTA: NO se coloca (no se ofrece colocación para esta línea). No necesita descripción extra del material.
   · ⚠️ COLOR (REGLA, no la rompas): el eco cuero económico NO tiene variación de color de material — es SIEMPRE ${CUBREASIENTOS.economico.colorUnico}. NUNCA ofrezcas otros colores de material (ej. NO ofrezcas "negro o rojo" como en el capitoneado). Lo ÚNICO que varía es el color del PESPUNTE (la costura): ${CUBREASIENTOS.economico.pespuntes.join(", ")}. Para cerrar la compra del eco cuero, preguntá qué color de pespunte prefiere (no preguntes color de material, que es uno solo).
+  · MOSTRÁ LAS COSTURAS CON FOTOS (OBLIGATORIO): SIEMPRE que el cliente pregunte por los colores del eco cuero, o cuando le describas/ofrezcas esta línea, mandale las FOTOS REALES de las costuras vía "mostrar_ecocuero" (las tres, o la puntual si nombró una). ⚠️ El color de costura anaranjado se llama OCRE: decile siempre "ocre", NUNCA "naranja".
   · ⚠️ NO HAY ECO CUERO PARA TODOS LOS MODELOS (REGLA, no la rompas): la línea económica de eco cuero existe solo para ALGUNOS vehículos. NUNCA des por hecho que hay eco cuero para el auto del cliente ni lo ofrezcas "de memoria". Guiate SIEMPRE por lo que devuelve el catálogo con "enviar_foto": ofrecé y nombrá únicamente las opciones que REALMENTE aparecen para ese modelo. Si para ese auto solo hay capitoneado, ofrecé solo capitoneado (sin mencionar un eco cuero que no existe); si solo hay eco cuero, ofrecé eso. ⛔ Si no hay eco cuero para el modelo, NO lo ofrezcas ni prometas, NO inventes precio: informá con sinceridad lo que sí tenemos para ese vehículo. Mejor informar correctamente que ofrecer algo que no hay.
 - CAPITONEADO (premium): es el de mayor gama. SÍ se puede COLOCAR (el costo de colocación se cotiza con un vendedor).
   · COLORES de capitoneado disponibles: ${CUBREASIENTOS.capitoneado.coloresCapitoneado.join(" o ")}.
@@ -337,6 +338,17 @@ Hay DOS tipos de cubreasiento a medida. Cuando el cliente consulta por cubreasie
     ⛔ CÓMO DECIRLO (clave, no lo rompas): NO bombardees ni vuelques toda la lista de una en un mensaje largo ni en una lista de viñetas. Hacelo dentro de una CONVERSACIÓN AMENA: destacá 2 o 3 puntos fuertes por mensaje (el cuero ecológico premium, el capitoneado con espuma de alta densidad de 8 mm, que es impermeable y lavable, materiales importados, garantía de 1 año) y, si el cliente sigue interesado o pregunta más, profundizá con el resto. Que se sienta una charla, no un folleto.
     · MOSTRÁ LA CALIDAD CON FOTOS: mientras explicás el material, acompañá con las FOTOS REALES vía "mostrar_capitoneado" (los colores y, para evidenciar la calidad, el detalle de la espuma de 8 mm con que:"espuma"). Las fotos respaldan lo que contás: que el cliente VEA la terminación y el capitoneado, no solo que lo lea.
 - CERRAR LA COMPRA DE UN CAPITONEADO: para finalizar necesitás confirmar, con el cliente, estos datos (preguntá lo que falte, sin abrumar): (1) AÑO del auto; (2) COLOR del capitoneado (${CUBREASIENTOS.capitoneado.coloresCapitoneado.join("/")}); (3) si quiere LOGO o no, y de qué COLOR (${CUBREASIENTOS.capitoneado.coloresLogo.join("/")}). Con eso definido, pasá al PAGO.
+- TELA DE TAPICERÍA CAPITONEADA (otra opción a medida): cubreasientos a medida confeccionados en TELA de tapicería capitoneada de 8 mm de alta densidad, con materiales de máxima calidad, excelente terminación y gran durabilidad. Puntos fuertes (contalos de a poco, en charla amena, no como folleto): diseño exclusivo y elegante · espuma de 8 mm de alta densidad para mayor confort · material resistente al uso diario · excelente ajuste según el modelo del vehículo · terminaciones premium.
+  · PRECIO: entre $${CUBREASIENTOS.tela.precioDesde} y $${CUBREASIENTOS.tela.precioHasta}, dependiendo del modelo del vehículo. ⛔ NO des un precio exacto de esta línea: la cotización final la da SIEMPRE un asesor.
+  · OFRECELA como alternativa cuando el cliente consulta por cubreasientos (junto con las otras líneas) y SIEMPRE que pregunte por tela.
+  · MOSTRÁ EL VIDEO: al presentar esta línea, acompañá con el VIDEO real vía "mostrar_tela" (UNA sola vez por conversación; no lo repitas).
+  · PARA COTIZAR pedile los datos que falten (sin abrumar): MARCA, MODELO y AÑO del vehículo.
+  · SI EL CLIENTE SE INTERESA o quiere avanzar: juntá marca/modelo/año, llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por TELA CAPITONEADA + marca/modelo/año) y cerrá diciéndole: "Uno de nuestros asesores se pondrá en contacto contigo a la brevedad para brindarte toda la información y la cotización correspondiente." ⛔ NO cobres vos esta línea (ni link de pago ni transferencia): la cotiza y cierra un asesor.
+- CUERO AUTOMOTRIZ SPORT (línea premium a medida): línea Premium en CUERO AUTOMOTRIZ SPORT, confeccionada a medida para cada vehículo. Puntos fuertes (de a poco, charla amena): cuero automotriz Sport de máxima calidad · espumas de 8 mm de alta densidad para mayor confort · impermeables y lavables · máxima resistencia y durabilidad · excelente terminación y ajuste específico para cada modelo.
+  · PRECIO: entre $${CUBREASIENTOS.sport.precioDesde} y $${CUBREASIENTOS.sport.precioHasta}, dependiendo del modelo del vehículo. ⛔ NO des un precio exacto de esta línea: el precio exacto lo da SIEMPRE un asesor.
+  · OFRECELA como otra opción cuando el cliente consulta por cubreasientos, en especial si busca lo mejor / deportivo / mayor calidad.
+  · MOSTRÁ LAS FOTOS Y EL VIDEO reales vía "mostrar_cuero_sport" al presentarla (UNA sola vez por conversación; no los repitas).
+  · SI ESTA OPCIÓN LE INTERESA: pedile MARCA, MODELO y AÑO del vehículo (lo que falte), llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por CUERO SPORT + marca/modelo/año) y cerrá diciéndole: "Un asesor de ventas se comunicará con usted a la brevedad para brindarle el precio exacto y toda la información que necesite." ⛔ NO cobres vos esta línea: la cotiza y cierra un asesor.
 - PAGO del cubreasiento (hasta que esté el carrito en la web): cuando el cliente confirma la compra, ofrecé pagar por:
   · LINK DE MERCADO PAGO: generalo VOS con la herramienta "crear_link_pago" por el MONTO EXACTO de la compra (precio normal, sin el descuento de transferencia) y mandáselo para que pague directo con tarjeta o dinero en cuenta. Si la herramienta falla, decile que enseguida un compañero le envía el link y derivá.
   · o TRANSFERENCIA a La Casa del Cubreasiento con 10% DE DESCUENTO: ${NEGOCIO.datosCobro.transferencia}.
@@ -500,7 +512,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "mostrar_capitoneado",
-      description: "Manda al cliente las FOTOS REALES del material capitoneado premium: muestras de los colores disponibles (negro, rojo, negro con costura naranja, negro con costura azul, negro con costura blanca) y detalle de la espuma de 8mm. Usar SIEMPRE que el cliente pregunte por colores del capitoneado o se interese por el cubreasiento capitoneado: mostrale las opciones.",
+      description: "Manda al cliente las FOTOS REALES del material capitoneado premium: muestras de los colores disponibles (negro y rojo) y detalle de la espuma de 8mm. Usar SIEMPRE que el cliente pregunte por colores del capitoneado o se interese por el cubreasiento capitoneado: mostrale las opciones.",
       parameters: {
         type: "object",
         properties: {
@@ -508,6 +520,36 @@ const TOOLS = [
         },
         required: [],
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "mostrar_ecocuero",
+      description: "Manda al cliente las FOTOS REALES de las costuras del cubreasiento ECO CUERO (material siempre negro; costuras ocre, azul o blanca). Usar SIEMPRE que el cliente pregunte por los colores del eco cuero o cuando describís esa línea.",
+      parameters: {
+        type: "object",
+        properties: {
+          que: { type: "string", description: "Costura puntual a mostrar ('ocre', 'azul' o 'blanca'); vacío = las tres" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "mostrar_tela",
+      description: "Manda al cliente el VIDEO real del cubreasiento a medida en TELA de tapicería capitoneada de 8 mm. Usar UNA sola vez por conversación, cuando ofrecés la línea de tela o el cliente pregunta por cubreasientos de tela.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "mostrar_cuero_sport",
+      description: "Manda al cliente las FOTOS y el VIDEO reales de la línea Premium en CUERO AUTOMOTRIZ SPORT (a medida). Usar UNA sola vez por conversación, cuando ofrecés la línea Sport o el cliente pregunta por ella.",
+      parameters: { type: "object", properties: {}, required: [] },
     },
   },
   {
@@ -575,23 +617,44 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       const catalogo = [
         { img: m.negro, nombre: "Capitoneado premium - Negro", pide: ["negro"] },
         { img: m.rojo, nombre: "Capitoneado premium - Rojo", pide: ["rojo"] },
-        { img: m.negroNaranja, nombre: "Capitoneado premium - Negro con costura naranja", pide: ["naranja"] },
-        { img: m.negroAzul, nombre: "Capitoneado premium - Negro con costura azul", pide: ["azul"] },
-        { img: m.negroBlanco, nombre: "Capitoneado premium - Negro con costura blanca", pide: ["blanc", "gris"] },
       ];
       let fotos = [];
       if (que.includes("espuma") || que.includes("detalle") || que.includes("material")) {
         fotos = [{ nombre: "Detalle del material capitoneado", img: m.detalle }, { nombre: "Espuma de alta densidad de 8 mm", img: m.espuma }];
       } else {
-        // Colores puntuales que haya nombrado; si no nombró ninguno, TODOS los colores.
+        // Color puntual que haya nombrado; si no nombró ninguno, los dos colores.
         const pedidas = catalogo.filter((c) => c.pide.some((p) => que.includes(p)));
-        // "negro" solo cuenta como color puntual si no vino acompañando a una costura.
-        const soloNegro = que.includes("negro") && pedidas.length === 1 && pedidas[0].pide[0] === "negro";
-        fotos = (pedidas.length && (pedidas.length > 1 || soloNegro || pedidas[0].pide[0] !== "negro")) ? pedidas : catalogo;
+        fotos = pedidas.length === 1 ? pedidas : catalogo;
       }
       fotos = fotos.filter((f) => f.img).map(({ nombre: n, img }) => ({ nombre: n, img }));
       if (!fotos.length) return { ok: false, mensaje: "No hay fotos de muestra cargadas." };
       return { ok: true, enviadas: fotos.length, fotos };
+    }
+    if (nombre === "mostrar_ecocuero") {
+      // Fotos reales de las costuras del eco cuero (material siempre negro).
+      const m = CUBREASIENTOS.economico.muestras || {};
+      const que = _normTxt(input.que || "");
+      const catalogo = [
+        { img: m.costuraOcre, nombre: "Eco cuero negro - Costura ocre", pide: ["ocre", "naranja"] },
+        { img: m.costuraAzul, nombre: "Eco cuero negro - Costura azul", pide: ["azul"] },
+        { img: m.costuraBlanca, nombre: "Eco cuero negro - Costura blanca", pide: ["blanc"] },
+      ];
+      const pedidas = catalogo.filter((c) => c.pide.some((p) => que.includes(p)));
+      let fotos = (pedidas.length ? pedidas : catalogo).filter((f) => f.img).map(({ nombre: n, img }) => ({ nombre: n, img }));
+      if (!fotos.length) return { ok: false, mensaje: "No hay fotos de muestra cargadas." };
+      return { ok: true, enviadas: fotos.length, fotos };
+    }
+    if (nombre === "mostrar_tela") {
+      const t = CUBREASIENTOS.tela || {};
+      if (!t.video) return { ok: false, mensaje: "No hay video cargado de la línea de tela." };
+      return { ok: true, videos: [{ nombre: t.nombre, video: t.video }] };
+    }
+    if (nombre === "mostrar_cuero_sport") {
+      const s = CUBREASIENTOS.sport || {};
+      const fotos = (s.fotos || []).map((img, i) => ({ nombre: `${s.nombre} (${i + 1})`, img }));
+      const videos = s.video ? [{ nombre: s.nombre, video: s.video }] : [];
+      if (!fotos.length && !videos.length) return { ok: false, mensaje: "No hay material cargado de la línea Sport." };
+      return { ok: true, fotos, videos };
     }
     if (nombre === "crear_link_pago") {
       if (!hayMercadoPago()) return { ok: false, mensaje: "El link de pago no está configurado todavía. Decile al cliente que enseguida un compañero le envía el link de pago, y usá derivar_a_humano (motivo otro) con el detalle de la compra y el monto." };
@@ -657,9 +720,10 @@ function corregirSaludo(texto) {
 // Arma la respuesta final: texto + fotos numeradas sin duplicados (compartido por ambos caminos).
 // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption.
 function armarRespuesta(texto, acciones) {
+  const CON_FOTOS = new Set(["enviar_foto", "mostrar_capitoneado", "mostrar_ecocuero", "mostrar_cuero_sport"]);
   let fotosCrudas = acciones
-    .filter((a) => (a.herramienta === "enviar_foto" || a.herramienta === "mostrar_capitoneado") && a.resultado?.ok)
-    .flatMap((a) => a.resultado.fotos)
+    .filter((a) => CON_FOTOS.has(a.herramienta) && a.resultado?.ok)
+    .flatMap((a) => a.resultado.fotos || [])
     .filter((f) => f && f.img);
   const _vistas = new Set();
   fotosCrudas = fotosCrudas.filter((f) => { if (_vistas.has(f.img)) return false; _vistas.add(f.img); return true; });
@@ -667,13 +731,21 @@ function armarRespuesta(texto, acciones) {
     url: f.img,
     caption: f.precio ? `${i + 1}) ${f.nombre} - ${_fmtPrecio(f.precio, f.moneda)}` : `${i + 1}) ${f.nombre}`,
   }));
+  // VIDEOS reales (tela capitoneada / cuero Sport): mismo circuito que las fotos.
+  const _vistosV = new Set();
+  const videosEnviar = acciones
+    .filter((a) => (a.herramienta === "mostrar_tela" || a.herramienta === "mostrar_cuero_sport") && a.resultado?.ok)
+    .flatMap((a) => a.resultado.videos || [])
+    .filter((v) => v && v.video)
+    .filter((v) => { if (_vistosV.has(v.video)) return false; _vistosV.add(v.video); return true; })
+    .map((v) => ({ url: v.video, caption: v.nombre }));
   // Si el modelo no devolvió texto (a veces pasa: termina con solo tool-calls o
   // una respuesta vacía) y tampoco hay fotos para mandar, no dejamos a Max mudo:
   // damos el fallback. Sin esto, web.js hace `if(data.texto)` y no muestra nada,
   // y WhatsApp intentaría enviar un mensaje vacío.
   const limpio = corregirSaludo((texto || "").trim());
-  const textoFinal = limpio || (imagenesEnviar.length ? "" : RESPUESTA_FALLBACK);
-  return { texto: textoFinal, acciones, imagenesEnviar };
+  const textoFinal = limpio || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
+  return { texto: textoFinal, acciones, imagenesEnviar, videosEnviar };
 }
 
 // ─────────────────────────────────────────────────────────────────────

@@ -19,8 +19,8 @@ import { registrarTransporte, enviarTexto, linkWa } from "./notificador.js";
 import { registrarCliente } from "./clientes.js";
 import { diag } from "./diag.js";
 import {
-  enviarTextoMeta, enviarImagenMeta, marcarLeidoEscribiendo,
-  mediaComoDataUri, aWaId, metaConfigurado,
+  enviarTextoMeta, enviarImagenMeta, enviarVideoMeta, enviarPlantillaMeta,
+  marcarLeidoEscribiendo, mediaComoDataUri, aWaId, metaConfigurado,
 } from "./meta_api.js";
 
 const VENTANA_MS = 3500; // junta mensajes seguidos del cliente y responde UNA vez
@@ -30,6 +30,7 @@ const idsVistos = new Set(); // anti-duplicados (Meta puede reentregar el webhoo
 const enviadosPorMax = new Set(); // ids de mensajes que mandó Max (para no confundir el eco en coexistence)
 const pedidosAvisados = new Set();
 const turnosAvisados = new Set();
+let ultimaConfirmacionAvisos = 0; // para confirmar el canal de avisos a lo sumo cada 12 h
 
 // Número propio (el 091 dentro de la WABA): en coexistence, los mensajes que el
 // equipo manda desde la app del celular también llegan al webhook con from = este
@@ -98,12 +99,20 @@ async function procesar(tel) {
   b.textos = []; b.imagenes = [];
   procesando.add(tel);
   try {
-    await marcarLeidoEscribiendo(msgId); // ✓✓ leído + "escribiendo…"
-    const { texto: respuesta, acciones, imagenesEnviar = [] } =
+    const { texto: respuesta, acciones, imagenesEnviar = [], videosEnviar = [] } =
       await procesarMensaje({ chatId: tel, texto, canal: "whatsapp", imagenes, contacto });
 
     // Si el cliente escribió MÁS mientras Max pensaba, reprocesamos con eso incluido.
     if (b.textos.length || b.imagenes.length) { procesando.delete(tel); return procesar(tel); }
+
+    // ✓✓ leído + "escribiendo…" — SOLO si esta respuesta NO genera un aviso al
+    // equipo. Cuando Max pide atención (derivación / venta / turno), el chat queda
+    // SIN LEER a propósito: así el equipo lo encuentra resaltado en la bandeja
+    // (antes Max lo marcaba leído y el aviso era imposible de ubicar). El costo es
+    // que el "escribiendo…" arranca después de pensar, durante las pausas de tipeo.
+    const pideEquipo = (acciones || []).some((a) =>
+      ["derivar_a_humano", "tomar_pedido", "solicitar_turno"].includes(a.herramienta));
+    if (!pideEquipo) await marcarLeidoEscribiendo(msgId);
 
     // Envío HUMANO: la respuesta se parte en mensajitos (bloques separados por
     // línea en blanco) y cada uno sale con su pausa de tipeo, como chatea una
@@ -121,6 +130,12 @@ async function procesar(tel) {
         await sleep(900 + Math.floor(Math.random() * 900));
         marcarEnviado(await enviarImagenMeta(tel, f.url, f.caption || ""));
       } catch (e) { console.log("⚠ no pude enviar foto:", e.message); }
+    }
+    for (const v of videosEnviar) {
+      try {
+        await sleep(900 + Math.floor(Math.random() * 900));
+        marcarEnviado(await enviarVideoMeta(tel, v.url, v.caption || ""));
+      } catch (e) { console.log("⚠ no pude enviar video:", e.message); }
     }
     diag("respondido", { jid: tel, resumen: String(respuesta).slice(0, 80) });
     console.log(`📤 ${tel}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
@@ -238,6 +253,25 @@ async function procesarEntrante(msg, value) {
     return;
   }
 
+  // El NÚMERO DE AVISOS (el celular del asesor que recibe los avisos de Max) NO es
+  // un cliente: no se le vende. Que le escriba a Max además ABRE la ventana de 24 h
+  // que la Cloud API exige para entregarle los avisos como texto libre (fuera de esa
+  // ventana Meta los descarta en silencio, code 131047). Le confirmamos el canal (a
+  // lo sumo una vez cada 12 h) para que el equipo sepa que quedó activo.
+  const numAvisos = aWaId(process.env.NUMERO_AVISOS || "");
+  if (numAvisos && tel === numAvisos) {
+    console.log("🔔 mensaje del número de avisos → ventana de 24 h abierta para los avisos");
+    diag("canal_avisos_abierto", { jid: tel });
+    if (Date.now() - ultimaConfirmacionAvisos > 12 * 3600_000) {
+      ultimaConfirmacionAvisos = Date.now();
+      try {
+        marcarEnviado(await enviarTextoMeta(tel,
+          "✅ Canal de avisos activo: los avisos de Max (derivaciones, ventas y turnos) llegan a este número.\n\nOJO: WhatsApp cierra el canal si pasan 24 h sin que me escribas. Un mensaje cualquiera por día (un \"ok\") lo mantiene abierto."));
+      } catch (e) { console.log("⚠ no pude confirmar el canal de avisos:", e.message); }
+    }
+    return;
+  }
+
   // Nombre del cliente (viene en value.contacts).
   const perfil = (value.contacts || []).find((c) => aWaId(c.wa_id) === tel);
   const nombre = perfil?.profile?.name || "";
@@ -317,8 +351,22 @@ export function montarWebhook(app) {
   cargarConversaciones();
 
   // Avisos al equipo (derivación/venta/turno) salen por la Cloud API.
+  // ⚠️ VENTANA DE 24 h: el texto libre SOLO se entrega si el número de avisos le
+  // escribió a Max en las últimas 24 h; si no, Meta lo descarta EN SILENCIO (la API
+  // acepta el envío y después llega un status "failed" code 131047 al webhook).
+  // Con PLANTILLA_AVISO (plantilla UTILITY aprobada, cuerpo "{{1}}") el aviso llega
+  // SIEMPRE, haya o no ventana abierta — es el modo recomendado.
   registrarTransporte(async (texto) => {
     const destino = process.env.NUMERO_AVISOS || "091629784";
+    const plantilla = process.env.PLANTILLA_AVISO || "";
+    if (plantilla) {
+      // Los parámetros de plantilla no admiten saltos de línea (regla de Meta).
+      const plano = String(texto || "").replace(/\s+/g, " ").trim().slice(0, 1024);
+      await enviarPlantillaMeta(destino, plantilla, "es", [
+        { type: "body", parameters: [{ type: "text", text: plano }] },
+      ]);
+      return;
+    }
     await enviarTextoMeta(destino, texto);
   });
 
@@ -351,7 +399,16 @@ export function montarWebhook(app) {
           for (const eco of value.message_echoes || []) {
             procesarEcoEquipo(eco).catch((e) => console.log("⚠ error procesando eco:", e.message));
           }
-          // statuses = recibos de entrega/lectura: se ignoran solos.
+          // statuses = recibos de entrega/lectura. Los FALLADOS sí importan: es la
+          // ÚNICA señal de que un envío aceptado por la API no se entregó (ej: un
+          // aviso al equipo fuera de la ventana de 24 h → code 131047). Sin esto,
+          // los avisos se perdían sin dejar rastro en ningún log.
+          for (const st of value.statuses || []) {
+            if (st.status !== "failed") continue;
+            const err = (st.errors || [])[0] || {};
+            diag("envio_fallido", { jid: st.recipient_id, detalle: `code ${err.code || "?"} · ${err.title || err.message || ""}` });
+            console.log(`⚠ envío a ${st.recipient_id} FALLÓ: code ${err.code || "?"} ${err.title || err.message || ""}`);
+          }
         }
       }
     } catch (e) {

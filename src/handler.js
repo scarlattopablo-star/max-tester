@@ -22,7 +22,7 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
   // Contexto de la conversación para las herramientas (ej: crear_link_pago guarda
   // de qué charla/cliente vino la venta para avisar al equipo con ese dato).
   const ctx = { chatId, contacto };
-  const { texto: respuesta, acciones, imagenesEnviar = [] } = await responder(texto, previo, imagenes, ctx);
+  const { texto: respuesta, acciones, imagenesEnviar = [], videosEnviar = [] } = await responder(texto, previo, imagenes, ctx);
   // Guardamos los comprobantes (imágenes/PDF) que mandó el cliente y dejamos un
   // marcador liviano con el id en el historial (el base64 NO va al historial: es
   // pesado y el modelo no lo necesita). Si no se pudo guardar (sin base, muy grande),
@@ -45,6 +45,10 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
     const ops = imagenesEnviar.map((f) => f.caption).join("; ");
     contenidoAssistant = `${respuesta}⁣[Contexto interno — opciones que le mostré al cliente con foto, numeradas: ${ops}. Si el cliente elige un número ("la 1", "el 2", "quiero la primera"), corresponde a ESTA lista; NO vuelvas a mostrar las opciones: avanzá con la que eligió.]`;
   }
+  if (videosEnviar.length) {
+    const vids = videosEnviar.map((v) => v.caption).join("; ");
+    contenidoAssistant += `${contenidoAssistant.includes("⁣") ? " " : "⁣"}[Contexto interno — YA le envié el video de: ${vids} (con su material). ⛔ NO vuelvas a llamar "mostrar_tela" ni "mostrar_cuero_sport" en esta conversación: el cliente ya lo tiene, no repitas el video ni sus fotos.]`;
+  }
   agregar(chatId, "assistant", contenidoAssistant);
-  return { texto: respuesta, acciones, imagenesEnviar };
+  return { texto: respuesta, acciones, imagenesEnviar, videosEnviar };
 }
