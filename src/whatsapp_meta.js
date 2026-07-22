@@ -354,13 +354,13 @@ export function montarWebhook(app) {
   // ⚠️ VENTANA DE 24 h: el texto libre SOLO se entrega si el número de avisos le
   // escribió a Max en las últimas 24 h; si no, Meta lo descarta EN SILENCIO (la API
   // acepta el envío y después llega un status "failed" code 131047 al webhook).
-  // Por eso el aviso sale por PLANTILLA (UTILITY "aviso_equipo", creada 22 jul,
-  // id 1041867608221562): llega SIEMPRE, haya o no ventana abierta. Si la plantilla
+  // Por eso el aviso sale por PLANTILLA (UTILITY "aviso_equipo_max", creada 22 jul,
+  // id 4573476226266094): llega SIEMPRE, haya o no ventana abierta. Si la plantilla
   // falla (aún no aprobada / sin fondos en 360dialog), caemos al texto libre, que
   // al menos llega con la ventana abierta. PLANTILLA_AVISO="" la desactiva.
   registrarTransporte(async (texto) => {
     const destino = process.env.NUMERO_AVISOS || "091629784";
-    const plantilla = process.env.PLANTILLA_AVISO ?? "aviso_equipo";
+    const plantilla = process.env.PLANTILLA_AVISO ?? "aviso_equipo_max";
     if (plantilla) {
       // Los parámetros de plantilla no admiten saltos de línea (regla de Meta).
       const plano = String(texto || "").replace(/\s+/g, " ").trim().slice(0, 1024);

@@ -48,10 +48,12 @@ cargar. Se aprueban en **WhatsApp Manager → Plantillas de mensajes → Crear p
   ```
 
 ## Plantilla 4 — Aviso interno al equipo (UTILITY) ⚠️ PRIORITARIA — ✅ CREADA 22 jul 2026
-> **Estado:** enviada a aprobación por la API de 360dialog (`POST /message_templates`),
-> **id 1041867608221562**, categoría UTILITY, idioma `es`. Cuerpo real:
-> `🔔 Aviso de Max para el equipo: {{1}} — La Casa del Cubreasiento.`
-> El código ya la usa POR DEFECTO (PLANTILLA_AVISO default "aviso_equipo") con caída
+> **Estado:** creada por la API de 360dialog (`POST /message_templates`) con nombre
+> **`aviso_equipo_max`**, **id 4573476226266094**, categoría UTILITY, idioma `es`. Cuerpo:
+> `Aviso de Max para el equipo: {{1}} - La Casa del Cubreasiento.` (ASCII a propósito:
+> el primer intento "aviso_equipo" salió con el emoji/acentos rotos por el encoding de
+> curl en Windows y hubo que borrarlo; el nombre viejo queda inutilizable un tiempo).
+> El código ya la usa POR DEFECTO (PLANTILLA_AVISO default "aviso_equipo_max") con caída
 > a texto libre si falla. Falta SOLO: fondos en 360dialog (Billing) para que Meta
 > cobre los envíos (~US$ 0,013 por aviso; gratis dentro de la ventana de 24 h).
 - **Para qué:** que los avisos de Max al equipo (derivación / venta / turno) lleguen SIEMPRE
