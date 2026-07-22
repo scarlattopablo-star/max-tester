@@ -1,10 +1,34 @@
-# Instagram — Respuestas automáticas (derivar a WhatsApp)
+# Instagram y Facebook — Respuestas automáticas (derivar a WhatsApp)
 
-Instagram **no** se automatiza con Baileys (es solo WhatsApp) y no usamos API de Meta. La forma
-**gratis, sin código y sin riesgo** es configurar las respuestas automáticas que ya trae Instagram
-para cuentas de empresa. Copiá y pegá estos textos.
+> ⚠️ **ESTADO REAL:** HOY no hay ninguna respuesta automática activa en IG/FB. Max (Baileys) atiende
+> SOLO WhatsApp; no toca las redes. Estos textos NO están conectados por código — se activan a mano,
+> **una sola vez**, en **Meta Business Suite** (gratis, sin riesgo de baneo, maneja IG + FB juntos).
+> `src/instagram.js` solo usa estos textos dentro del simulador para probar.
+
+Instagram/Facebook **no** se automatizan con Baileys (es solo WhatsApp) y no usamos API de Meta. La
+forma **gratis, sin código y sin riesgo** es configurar las automatizaciones que ya trae Meta
+Business Suite para cuentas de empresa. Copiá y pegá estos textos.
 
 > Link de WhatsApp que usan todos los textos: **https://wa.me/59891629784**
+
+**Dónde se configura todo:** Meta Business Suite → **Bandeja de entrada → Automatizaciones**
+(activar cada una para Instagram Y Facebook).
+
+---
+
+## 0. Comentarios → invitar a escribir por DM (público + privado)
+Automatización **"Responder a comentarios"**. La respuesta pública invita al privado; el DM
+automático ya deriva a WhatsApp.
+
+**Respuesta pública al comentario:**
+```
+¡Gracias por tu comentario! 🙌 Te escribimos por privado con toda la info 👉 mandanos un DM y te pasamos modelos, fotos y precios 🚗
+```
+
+**DM automático a quien comenta:**
+```
+¡Hola! 🙌 Gracias por comentar. Para pasarte modelos, fotos y precios al toque seguimos por acá. Si querés ir más rápido, escribinos al WhatsApp 👉 https://wa.me/59891629784 🚗✅
+```
 
 ---
 
