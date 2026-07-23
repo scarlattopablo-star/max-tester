@@ -141,9 +141,12 @@ Año del vehículo`,
     precioDesde: 18000,
     precioHasta: 22000,
     video: `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/video.mp4`,
+    // Fotos de TRABAJOS REALES instalados (camioneta JMC, jul 2026). Pablo pidió
+    // (23 jul 2026) mostrar SOLO estas — las viejas cuero-1/cuero-2 no van más.
     fotos: [
-      `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/cuero-1.jpg`,
-      `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/cuero-2.jpg`,
+      `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/instalado-1.jpg`,
+      `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/instalado-2.jpg`,
+      `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/instalado-3.jpg`,
     ],
     // Descripción OFICIAL del negocio (Pablo, 22 jul 2026): Max la envía TAL CUAL,
     // sin cambiar una palabra, cuando el cliente se interesa por esta línea.

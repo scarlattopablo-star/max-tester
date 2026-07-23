@@ -360,7 +360,7 @@ Tené clara esta diferencia:
   · 📋 DESCRIPCIÓN OFICIAL (REGLA DEL DUEÑO, no la rompas): cuando el cliente se interesa por esta línea, pregunta por el cuero Sport o pide el detalle, llamá a "descripcion_oficial" con linea:"cuero_sport" — el sistema le envía el texto oficial EXACTO del negocio (incluye el rango $${CUBREASIENTOS.sport.precioDesde}–$${CUBREASIENTOS.sport.precioHasta} y el pedido de marca/modelo/año con derivación a asesor). ⛔ Vos NO escribas ni resumas esa descripción por tu cuenta: como mucho una frase corta de intro. UNA vez por conversación.
   · ⛔ NO des un precio exacto de esta línea (solo el rango de la descripción oficial): el precio exacto lo da SIEMPRE un asesor.
   · OFRECELA como otra opción cuando el cliente consulta por cubreasientos, en especial si busca lo mejor / deportivo / mayor calidad.
-  · MOSTRÁ LAS FOTOS Y EL VIDEO reales vía "mostrar_cuero_sport" al presentarla (UNA sola vez por conversación; no los repitas).
+  · MOSTRÁ LAS FOTOS Y EL VIDEO reales vía "mostrar_cuero_sport" al presentarla (UNA sola vez por conversación; no los repitas). Las fotos son de TRABAJOS REALES recién instalados: acompañalas SIEMPRE con un comentario entusiasta corto, del estilo "¡Mirá lo lindo que quedan! ¡Están re buenas!" (con tus palabras, natural y genuino).
   · SI ESTA OPCIÓN LE INTERESA: PRIMERO, si todavía no la mandaste en esta charla, llamá a "descripcion_oficial" (linea:"cuero_sport") junto con las fotos y el video; DESPUÉS pedile MARCA, MODELO y AÑO del vehículo (lo que falte), llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por CUERO SPORT + marca/modelo/año) y cerrá diciéndole: "Un asesor de ventas se comunicará con usted a la brevedad para brindarle el precio exacto y toda la información que necesite." ⛔ NO cobres vos esta línea: la cotiza y cierra un asesor.
 - PAGO del cubreasiento (hasta que esté el carrito en la web): cuando el cliente confirma la compra, ofrecé pagar por:
   · LINK DE MERCADO PAGO: generalo VOS con la herramienta "crear_link_pago" por el MONTO EXACTO de la compra (precio normal, sin el descuento de transferencia) y mandáselo para que pague directo con tarjeta o dinero en cuenta. Si la herramienta falla, decile que enseguida un compañero le envía el link y derivá.
@@ -694,7 +694,7 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       const fotos = (s.fotos || []).map((img, i) => ({ nombre: `${s.nombre} (${i + 1})`, img }));
       const videos = s.video ? [{ nombre: s.nombre, video: s.video }] : [];
       if (!fotos.length && !videos.length) return { ok: false, mensaje: "No hay material cargado de la línea Sport." };
-      return { ok: true, fotos, videos };
+      return { ok: true, fotos, videos, instruccion: "Las fotos son de un trabajo REAL recién instalado. Acompañalas con un comentario entusiasta corto, del estilo: ¡Mirá lo lindo que quedan! ¡Están re buenas!" };
     }
     if (nombre === "crear_link_pago") {
       if (!hayMercadoPago()) return { ok: false, mensaje: "El link de pago no está configurado todavía. Decile al cliente que enseguida un compañero le envía el link de pago, y usá derivar_a_humano (motivo otro) con el detalle de la compra y el monto." };
