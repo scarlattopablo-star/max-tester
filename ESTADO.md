@@ -26,6 +26,13 @@ Bot de WhatsApp para La Casa del Cubreasiento. Asistente **Max** (antes Vale). C
 - **Videos por WhatsApp:** `enviarVideoMeta` en `meta_api.js` + circuito `videosEnviar` (cerebro → handler → whatsapp_meta / web tester). Anti-repetición con marcador de contexto interno en el historial.
 - Prueba local: `node test_lineas_nuevas.mjs` (3 charlas reales contra el cerebro).
 
+**AJUSTES DE LA TARDE (22 jul, todos verificados en prod — commits 7ef4c2c…1da272c):**
+6. **Presentación COMPLETA una vez POR MODELO:** al preguntar por cubreasientos para CUALQUIER modelo (aunque no esté en ML — nunca decir "no hay"), Max manda TODO junto: catálogo + costuras eco cuero + 5 colores capitoneado + video tela + fotos/video Sport (~10 fotos + 2 videos), con texto de VENDEDOR HUMANO en 2-3 burbujas (sin listados robóticos). Cada modelo nuevo en el mismo chat la repite ("en caso de duda mostrá todo"). Test: `node test_presentacion_completa.mjs`.
+7. **Razonamiento sobre las líneas:** preguntas genéricas sin modelo ("¿qué colores tenés?"/"¿tenés de tela?"/"¿el más top?"/"¿el más barato?") las resuelve razonando qué línea aplica y SIEMPRE con el material visual; el modelo del auto se pide después.
+8. **Capitoneado con los 5 COLORES** (Negro, Rojo, Negro con costura ocre/azul/blanca): las costuras valen para el capitoneado Y el eco cuero. "OCRE", nunca "naranja".
+9. **Videos SIN AUDIO** (ffmpeg -an, pedido de Pablo: sin ruido de fondo de la grabación).
+10. **DESCRIPCIONES OFICIALES TEXTUALES** (tela / cuero Sport / capitoneado): los textos exactos del dueño (con ✅/💰) viven en `config.js` (`descripcionExacta`) y los agrega EL CÓDIGO vía la tool `descripcion_oficial` (armarRespuesta los apendea byte a byte y deduplica lo que escriba el modelo). Para cambiar un texto: editar `descripcionExacta` en config.js.
+
 ## 🔴🔴 ESTADO VIEJO (10-jul tarde): Max EN BAILEYS (se revirtió Meta — LUEGO se volvió a Meta vía 360dialog el 22 jul)
 
 **El canal es BAILEYS de nuevo**, no Meta. El 091 volvió a la app de WhatsApp Business del celular; Baileys corre como dispositivo vinculado. Se revirtió la migración a Meta porque el equipo odiaba el panel `/equipo`. Render: `WA_PROVIDER=baileys` + `WHATSAPP_ON=1`. Modelo Sonnet 5. Verificado: Max cotiza y deriva OK.
