@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -35,6 +35,48 @@ const _normTxt = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ
 const _mapProd = (item) => ({ nombre: item.n, precio: item.p, precio_lista: item.l, moneda: item.usd ? "USD" : "UYU", img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
 // Formatea un precio con su símbolo de moneda. USD => "US$ 60"; UYU => "$ 8.010".
 const _fmtPrecio = (precio, moneda) => `${moneda === "USD" ? "US$ " : "$ "}${Number(precio).toLocaleString("es-UY")}`;
+
+// ¿La venta que se está cerrando es de un cubreasiento COLOCABLE?
+// Colocables: capitoneado, tela y cuero Sport. El ECO CUERO es solo venta (no se
+// coloca), así que ahí NO va el aviso: mandárselo sería prometerle un servicio
+// que no existe. Se mira todo el texto que dejó el modelo (producto + notas).
+// Pedido de Pablo (28 jul 2026): el aviso lo pone el CÓDIGO, no el modelo.
+// Qué línea de cubreasiento nombra un texto. Gana la ÚLTIMA mencionada: en una
+// charla normal Max presenta las CUATRO líneas juntas, así que con "aparece eco
+// cuero => no se coloca" el aviso no saldría nunca. Lo que vale es lo último que
+// se habló, que es lo que el cliente terminó eligiendo.
+// Devuelve "eco" | "colocable" | null.
+function _lineaDe(texto) {
+  const t = _normTxt(texto);
+  if (!t) return null;
+  const ultimo = (re) => { let i = -1, m; const r = new RegExp(re, "g"); while ((m = r.exec(t))) i = m.index; return i; };
+  const iEco = ultimo("eco\\s*cuero|economic|\\becon[oa]mic");
+  const iColocable = ultimo("capiton|tapiceri|\\btela\\b|\\bsport\\b");
+  if (iEco < 0 && iColocable < 0) return null;
+  return iColocable > iEco ? "colocable" : "eco";
+}
+
+// ¿La venta que se está cerrando es de un cubreasiento COLOCABLE?
+// Colocables: capitoneado, tela y cuero Sport. El ECO CUERO es solo venta (no se
+// coloca), así que ahí NO va el aviso: mandárselo sería prometerle un servicio
+// que no existe. Pedido de Pablo (28 jul 2026): el aviso lo pone el CÓDIGO.
+// Se mira primero lo que el modelo declaró al llamar la herramienta y, si no
+// alcanza, la charla (el modelo suele cerrar sin repetir la línea).
+export function esCubreasientoColocable(...partes) {
+  const [charla] = partes.slice(-1);
+  const declarado = partes.slice(0, -1).filter(Boolean).join(" ");
+  const esCubre = (s) => /cubre\s*asiento|cubreasiento|funda[s]?\s+(de\s+)?asiento/.test(_normTxt(s));
+
+  // 1) Lo que el modelo declaró explícitamente manda.
+  const l1 = _lineaDe(declarado);
+  if (l1) return l1 === "colocable";
+  // 2) Si no nombró línea, la resolvemos con la charla.
+  const l2 = _lineaDe(charla);
+  if (l2) return l2 === "colocable";
+  // 3) Sin ninguna línea identificable: si es un cubreasiento, avisamos igual
+  //    (3 de las 4 líneas se colocan y Pablo lo pidió para la venta en general).
+  return esCubre(declarado) || esCubre(charla);
+}
 
 // Detecta la CATEGORÍA de producto que pide el cliente (alfombra, cubreasiento, cubre volante,
 // cubreauto) para NO mezclar tipos: si pide "alfombra para Saveiro", solo alfombras de Saveiro.
@@ -347,6 +389,7 @@ Tené clara esta diferencia:
   · MOSTRÁ LAS COSTURAS CON FOTOS (OBLIGATORIO): SIEMPRE que el cliente pregunte por los colores del eco cuero, o cuando le describas/ofrezcas esta línea, mandale las FOTOS REALES de las costuras vía "mostrar_ecocuero" (las tres, o la puntual si nombró una). ⚠️ El color de costura anaranjado se llama OCRE: decile siempre "ocre", NUNCA "naranja".
   · ⚠️ NO HAY ECO CUERO PARA TODOS LOS MODELOS (REGLA, no la rompas): la línea económica de eco cuero existe solo para ALGUNOS vehículos. NUNCA des por hecho que hay eco cuero para el auto del cliente ni lo ofrezcas "de memoria". Guiate SIEMPRE por lo que devuelve el catálogo con "enviar_foto": ofrecé y nombrá únicamente las opciones que REALMENTE aparecen para ese modelo. Si para ese auto solo hay capitoneado, ofrecé solo capitoneado (sin mencionar un eco cuero que no existe); si solo hay eco cuero, ofrecé eso. ⛔ Si no hay eco cuero para el modelo, NO lo ofrezcas ni prometas, NO inventes precio: informá con sinceridad lo que sí tenemos para ese vehículo. Mejor informar correctamente que ofrecer algo que no hay.
 - CAPITONEADO (premium): es el de mayor gama. SÍ se puede COLOCAR (el costo de colocación se cotiza con un vendedor).
+- ⚙️ QUÉ LÍNEAS SE COLOCAN (actualizado 28 jul 2026): se colocan el CAPITONEADO, la TELA de tapicería y el CUERO SPORT. El ECO CUERO económico NO se coloca (es solo venta). En las tres que sí se colocan, el costo de la colocación va SIEMPRE aparte y lo cotiza un vendedor; el día y la hora los confirma el EQUIPO y el cliente NO debe acercarse al local hasta tener esa confirmación.
   · COLORES de capitoneado disponibles: ${CUBREASIENTOS.capitoneado.coloresCapitoneado.join(" o ")}.
   · ⚠️ OBLIGATORIO (no lo saltees NUNCA): apenas el cliente ELIGE el capitoneado o pregunta por él, en esa MISMA respuesta: (1) usá "mostrar_capitoneado" para mandarle las FOTOS REALES del material en TODOS los colores (negro, rojo, y negro con costura ocre/azul/blanca — la costura anaranjada se llama OCRE, nunca digas "naranja"); (2) arrancá la explicación del material (2-3 puntos fuertes, como dice DESCRIPCIÓN abajo); (3) si el cliente TODAVÍA no dijo el color, preguntale cuál prefiere — pero si YA dijo el color en un mensaje anterior (ej. pidió "capitoneado negro"), NO se lo vuelvas a preguntar: confirmáselo ("Perfecto, en negro") y seguí. NO avances a año/logo/pago sin haber mostrado las fotos y explicado el material. Si pide ver el material/espuma de cerca, usá "mostrar_capitoneado" con que:"espuma".
   · LOGO bordado OPCIONAL: se puede agregar el logo (o no). Si lo quiere, los colores de logo son: ${CUBREASIENTOS.capitoneado.coloresLogo.join(", ")}.
@@ -375,8 +418,9 @@ Tené clara esta diferencia:
 - ENTREGA (después de definir el producto y los medios de pago): preguntá cómo desea recibirlo. Caminos:
   1. ENVÍO — SOLO POR DAC: los envíos se hacen ÚNICAMENTE por DAC (agencia de encomiendas), a todo el país. NO menciones otras formas de envío. Si el cliente elige envío, pedile estos DATOS para coordinarlo: NOMBRE completo, TELÉFONO y DIRECCIÓN. Registralo con "tomar_pedido".
   2. RETIRO en el local (${NEGOCIO.direccion}).
-  3. COLOCACIÓN — SOLO para CUBREASIENTOS CAPITONEADOS (NO para el económico de eco cuero, NO para alfombras/cubre volante/accesorios). El cubreasiento capitoneado SÍ se puede colocar; el COSTO de la colocación NO es fijo: se cotiza con un vendedor. Si el cliente quiere colocación, NO inventes precio ni demora: decile que el costo de la colocación va APARTE (no está incluido en el precio del cubreasiento) y lo cotiza un vendedor, y derivá con "derivar_a_humano" (motivo "otro", resumen con producto, vehículo y que quiere colocación) para coordinar costo, día y hora. ⚠️ La coordinación de la colocación queda SUJETA A DISPONIBILIDAD DE AGENDA: NO le asegures ni des por confirmado ningún día u hora — es el EQUIPO quien le confirma la fecha al cliente. Confirmale algo como: "El costo de la colocación va aparte y lo cotiza un asesor. La fecha queda sujeta a disponibilidad de agenda; el equipo se la confirma a la brevedad."
+  3. COLOCACIÓN — para los CUBREASIENTOS CAPITONEADO, DE TELA y CUERO SPORT (NO para el económico de eco cuero, NO para alfombras/cubre volante/accesorios). Esas tres líneas SÍ se pueden colocar; el COSTO de la colocación NO es fijo: se cotiza con un vendedor. Si el cliente quiere colocación, NO inventes precio ni demora: decile que el costo de la colocación va APARTE (no está incluido en el precio del cubreasiento) y lo cotiza un vendedor, y derivá con "derivar_a_humano" (motivo "otro", resumen con producto, vehículo y que quiere colocación) para coordinar costo, día y hora. ⚠️ La coordinación de la colocación queda SUJETA A DISPONIBILIDAD DE AGENDA: NO le asegures ni des por confirmado ningún día u hora — es el EQUIPO quien le confirma la fecha al cliente. ⛔⛔ Y JAMÁS le digas que puede pasar por el local cuando quiera para la colocación: SOLO puede acercarse DESPUÉS de que el equipo le confirme fecha y hora. Confirmale algo como: "El costo de la colocación va aparte y lo cotiza un asesor. El equipo te confirma día y hora, y recién con esa confirmación te acercás al local."
   ⛔ El cubreasiento ECONÓMICO (eco cuero) y los demás productos (alfombras, cubre volante, cubreauto) NO se colocan: solo envío (DAC) o retiro. Si preguntan si los colocan, aclaralo con cortesía.
+  📌 AL CERRAR LA VENTA de un cubreasiento COLOCABLE (capitoneado, tela o Sport) el SISTEMA agrega solo, al final de tu mensaje, el aviso completo de colocación (que va aparte, que la coordina el equipo y que no se acerque al local sin fecha y hora confirmadas). NO lo escribas vos ni lo resumas: se duplicaría. Vos cerrás cálido y corto, el aviso lo pone el sistema.
 - UBICACIÓN: si el cliente pregunta dónde están / cómo llegar / la dirección, indicá la dirección (${NEGOCIO.direccion}) y enviá el link de ubicación de Google: ${NEGOCIO.ubicacionGoogle}
 - PRODUCTO NO ENCONTRADO: si no está en el catálogo, consultá con un vendedor (ver sección "SI NO ENCONTRÁS EL PRODUCTO").
 
@@ -723,8 +767,22 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       return { ok: true, enviadas: elegidas.length, fotos: elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio, moneda: x.moneda })) };
     }
     if (nombre === "solicitar_turno") return await solicitarTurno(input);
-    if (nombre === "tomar_pedido") return registrarPedido(input);
-    if (nombre === "confirmar_transferencia") return await registrarTransferencia({ ...input, chatId: ctx.chatId, nombre: input.nombre || ctx.contacto?.nombre, telefono: input.telefono || ctx.contacto?.tel });
+    if (nombre === "tomar_pedido") {
+      const r = registrarPedido(input);
+      // Cierre de venta de un cubreasiento colocable => el sistema agrega el aviso
+      // de colocación TAL CUAL (ver AVISO_COLOCACION en config.js).
+      if (esCubreasientoColocable(input.producto, input.notas, ctx.textoCharla)) {
+        return { ...r, avisoColocacion: AVISO_COLOCACION, instruccion: "El sistema ya le manda al cliente el aviso de COLOCACIÓN (que va aparte, que la coordina el equipo y que no se acerque al local hasta tener fecha y hora confirmadas). NO lo repitas ni lo resumas vos: como mucho una frase corta aparte." };
+      }
+      return r;
+    }
+    if (nombre === "confirmar_transferencia") {
+      const r = await registrarTransferencia({ ...input, chatId: ctx.chatId, nombre: input.nombre || ctx.contacto?.nombre, telefono: input.telefono || ctx.contacto?.tel });
+      if (esCubreasientoColocable(input.detalle, ctx.textoCharla)) {
+        return { ...r, avisoColocacion: AVISO_COLOCACION, instruccion: "El sistema ya le manda al cliente el aviso de COLOCACIÓN. NO lo repitas ni lo resumas vos." };
+      }
+      return r;
+    }
     if (nombre === "derivar_a_humano") return registrarDerivacion(input);
     if (nombre === "link_web") {
       const base = (NEGOCIO.web || "https://lacasadelcubreasiento.com.uy").replace(/\/$/, "");
@@ -794,6 +852,10 @@ function armarRespuesta(texto, acciones) {
     .filter((a) => a.herramienta === "descripcion_oficial" && a.resultado?.ok && a.resultado.textoOficial)
     .filter((a) => { const t = a.resultado.textoOficial; if (_lineasVistas.has(t)) return false; _lineasVistas.add(t); return true; })
     .map((a) => a.resultado.textoOficial);
+  // AVISO DE COLOCACIÓN: lo pone el CÓDIGO al cerrar la venta de un cubreasiento
+  // colocable, para que salga siempre igual. Una sola vez aunque se dispare en
+  // tomar_pedido y confirmar_transferencia en el mismo turno.
+  const avisoColocacion = acciones.some((a) => a.resultado?.avisoColocacion) ? AVISO_COLOCACION : null;
   let limpio = corregirSaludo((texto || "").trim());
   // Si el modelo igual escribió la descripción por su cuenta, evitamos duplicarla:
   // gana la oficial (se recorta la del modelo si arranca igual).
@@ -802,7 +864,18 @@ function armarRespuesta(texto, acciones) {
     const idx = limpio.indexOf(firma);
     if (idx >= 0) limpio = (limpio.slice(0, idx) + limpio.slice(idx + of_.length)).trim();
   }
-  const textoFinal = [limpio, ...oficiales].filter(Boolean).join("\n\n")
+  // Con el aviso de colocación no alcanza con comparar el texto: el modelo lo
+  // PARAFRASEA (le pedimos que no lo escriba, pero igual lo hace) y el cliente
+  // recibiría el mismo aviso dos veces. Sacamos los párrafos suyos que hablen de
+  // colocación: lo que haga falta decir ya va en el texto oficial de abajo.
+  if (avisoColocacion) {
+    limpio = limpio
+      .split(/\n\s*\n/)
+      .filter((p) => !/colocaci[oó]n|colocarlo|colocar el|coloc[aá]rtelo/i.test(p))
+      .join("\n\n")
+      .trim();
+  }
+  const textoFinal = [limpio, ...oficiales, avisoColocacion].filter(Boolean).join("\n\n")
     || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
   return { texto: textoFinal, acciones, imagenesEnviar, videosEnviar };
 }
@@ -893,6 +966,10 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
 // Devuelve { texto, acciones:[{herramienta, input, resultado}], imagenesEnviar }
 // imagenes: array de URLs o data-URIs (base64) que el cliente mandó. El modelo las "ve".
 export async function responder(textoUsuario, historialPrevio = [], imagenes = [], ctx = {}) {
+  // El aviso de COLOCACIÓN necesita saber QUÉ línea se está comprando, y el modelo
+  // no siempre la repite al llamar la herramienta (típico: confirmar_transferencia
+  // sin "detalle"). Por eso le damos a las herramientas el texto de la charla.
+  ctx = { ...ctx, textoCharla: [...(historialPrevio || []).map((m) => (typeof m.content === "string" ? m.content : m.texto || "")), textoUsuario].join(" ") };
   // Proveedor "claude" -> SDK nativo con caché de prompt (mucho más barato que el modo compat).
   if ((process.env.IA_PROVIDER || "gemini").toLowerCase() === "claude") {
     return responderAnthropic(textoUsuario, historialPrevio, imagenes, ctx);

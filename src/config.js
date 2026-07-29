@@ -114,6 +114,9 @@ Combinan protección, confort y estilo: son la opción ideal para mantener el in
     nombre: "Cubreasiento a medida en tela de tapicería capitoneada",
     precioDesde: 9500,
     precioHasta: 12500,
+    // SÍ se coloca (Pablo, 28 jul 2026). El costo va aparte y lo cotiza un vendedor.
+    colocacion: true,
+    costoColocacion: "se cotiza con un vendedor (consultar)",
     video: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/tela.mp4`,
     // Descripción OFICIAL del negocio (Pablo, 22 jul 2026): Max la envía TAL CUAL,
     // sin cambiar una palabra, cuando el cliente se interesa por esta línea.
@@ -140,6 +143,9 @@ Año del vehículo`,
     nombre: "Cubreasiento premium en cuero automotriz Sport",
     precioDesde: 18000,
     precioHasta: 22000,
+    // SÍ se coloca (Pablo, 28 jul 2026). El costo va aparte y lo cotiza un vendedor.
+    colocacion: true,
+    costoColocacion: "se cotiza con un vendedor (consultar)",
     video: `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/video.mp4`,
     // Fotos de TRABAJOS REALES instalados (camioneta JMC, jul 2026). Pablo pidió
     // (23 jul 2026) mostrar SOLO estas — las viejas cuero-1/cuero-2 no van más.
@@ -163,6 +169,19 @@ Año del vehículo`,
 Si esta opción es de su interés, por favor indíquenos la marca, modelo y año de su vehículo. Un asesor de ventas se comunicará con usted a la brevedad para brindarle el precio exacto y toda la información que necesite.`,
   },
 };
+
+// ───────────────────────────────────────────────────────────────────
+// AVISO DE COLOCACIÓN — texto EXACTO que el CÓDIGO agrega al cerrar la
+// venta de un cubreasiento COLOCABLE (capitoneado, tela y Sport; el eco
+// cuero es solo venta). Pedido de Pablo el 28 jul 2026: el cliente llegaba
+// al local sin turno confirmado. Lo manda el código, NO el modelo, para que
+// salga SIEMPRE palabra por palabra. Si Pablo cambia el texto, se edita acá.
+// ───────────────────────────────────────────────────────────────────
+export const AVISO_COLOCACION = `Importante sobre la COLOCACIÓN:
+
+• La colocación NO está incluida en el precio del cubreasiento: se cotiza y se abona aparte.
+• El día y la hora se coordinan con el equipo y quedan sujetos a disponibilidad de agenda.
+• Recién cuando el equipo te confirme la fecha y la hora podés acercarte al local. Por favor no vengas antes de tener esa confirmación, porque sin el turno confirmado no vamos a poder hacerte la colocación.`;
 
 // Link directo a WhatsApp del humano (para derivar desde Instagram).
 export const WA_LINK = `https://wa.me/${NEGOCIO.whatsappHumanoIntl}`;
