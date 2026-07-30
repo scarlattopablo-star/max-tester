@@ -6,6 +6,33 @@
 
 ---
 
+## 0. El cliente: Outlet Market
+
+**outletmarket.uy · @outletmarket.uy · Montevideo.** Vende **electrodomésticos nuevos con
+detalles estéticos mínimos** a precio de outlet. Rubros: cocina (hornos, microondas,
+lavavajillas), refrigeración (heladeras, freezers), lavado y secado, pequeños electrodomésticos,
+tecnología, y algo de construcción/herramientas.
+
+**A favor:**
+
+- **El catálogo ya existe y es consultable.** Tienda online con fichas y precios visibles; por
+  la estructura de las URLs (`/product-category/`) es casi seguro **WooCommerce**, que tiene API.
+  El escenario fácil de la pregunta más pesada del descubrimiento.
+- **Ya mandan las fotos a mano por WhatsApp** (lo dicen en su propia web). Es exactamente lo que
+  hace `enviar_foto`. Mejor entrada posible a la conversación.
+- **Venden combos** ("Combo Cocina" = heladera + lavavajillas; "Combo Mudanza" = heladera +
+  cocina + microondas + lavarropas). Detectar la intención de mudanza y ofrecer el combo sube el
+  ticket, y es configuración, no desarrollo.
+- **Ticket alto.** Recuperar dos ventas por mes paga el abono varias veces.
+
+**⚠️ El detalle técnico a levantar en la reunión:** un outlet de electrodomésticos suele tener
+**unidades únicas** (esta heladera con un golpe en la puerta, aquella con un rayón), no un SKU
+con veinte iguales. El asistente no puede prometer "tengo tres" si hay una sola con un defecto
+puntual. Hay que definir **cómo se describe el estado de cada unidad y si el stock es por unidad
+o por modelo**. Traer esta pregunta demuestra que entendiste su negocio.
+
+---
+
 ## 1. Pitch (30 segundos)
 
 No es un chatbot de botones. Es un vendedor que trabaja 24/7 en el WhatsApp del negocio:
@@ -85,25 +112,29 @@ accesos**, nunca una fecha fija en la reunión.
 
 ## 5. Costos de operación (a terceros)
 
-**Clave contraintuitiva:** desde julio 2025 Meta cobra **por mensaje**, y todo lo enviado dentro
-de la ventana de 24 h posterior al mensaje del cliente es **gratis** (los leads de anuncios
-Click-to-WhatsApp tienen ventana más larga). Solo se paga lo que **inicia el negocio**, y eso
-exige plantilla aprobada. En un asistente de *atención*, la mensajería es prácticamente cero:
-el costo real es la IA.
+**Clave contraintuitiva, con fecha de vencimiento:** desde julio 2025 Meta cobra **por mensaje**,
+y hoy todo lo enviado dentro de la ventana de 24 h posterior al mensaje del cliente es **gratis**.
+
+⚠️ **Desde el 1.º de octubre de 2026 eso se termina.** Meta vuelve a cobrar los **mensajes de
+servicio** (las respuestas libres dentro de la ventana de 24 h) a la misma tarifa que los
+utilitarios. La ventana de 24 h sigue existiendo; lo que desaparece es que sea gratis. Es un
+argumento para cerrar ahora y no en noviembre.
 
 | Componente | Mensual | Detalle |
 |---|---|---|
-| Cerebro IA (Claude API) | US$ 25 – 90 | Único costo que escala con volumen |
+| Cerebro IA (Claude API) | US$ 25 – 90 | Escala con volumen |
 | Servidor 24/7 | US$ 5 – 20 | Railway (el free de Render se duerme y corta la conexión) |
 | Base de datos | US$ 0 – 19 | Neon; el free alcanza para arrancar |
 | BSP WhatsApp (360dialog) | ≈ US$ 55 | €49/número, sin recargo sobre Meta. **Evitable**: directo a Meta = US$ 0 |
-| Mensajes de respuesta | US$ 0 | Ventana de servicio 24 h |
+| Mensajes de respuesta — hasta 30 set 2026 | US$ 0 | Ventana de servicio 24 h |
+| Mensajes de respuesta — desde 1.º oct 2026 | US$ 10 – 60 | ≈ US$ 0,01 por mensaje a tarifa de utilitario; 6–10 ¢ por conversación. Baja por volumen. |
 | Plantillas iniciadas | ≈ US$ 0,01 – 0,08 c/u | Utility baratas, marketing bastante más caro |
-| **Total** | **US$ 85 – 185** | Directo a Meta: **US$ 30 – 130** |
+| **Total** | **US$ 85 – 185**<br/>**US$ 95 – 245** desde oct | Directo a Meta: **US$ 30 – 130** (US$ 40 – 190 desde oct) |
 
-Los valores por plantilla son orden de magnitud para "resto de Latinoamérica" (donde cae
-Uruguay); Meta ajusta por país y por volumen. Verificar el rate card antes de escribirlo en una
-propuesta.
+Los valores por mensaje son orden de magnitud para "resto de Latinoamérica" (donde cae Uruguay);
+Meta ajusta por país y da descuentos por volumen en utilitarios y servicio, no en marketing.
+La página oficial de tarifas de Meta devuelve 403 desde el entorno, así que **la fila exacta de
+Uruguay queda por confirmar** — no ponerla por escrito en una propuesta sin chequearla.
 
 ### Desglose del costo de IA
 
@@ -178,6 +209,12 @@ derivados quedan resaltados sin leer.
 **"Ya tenemos un chatbot."** Tres preguntas: ¿entiende texto libre o son botones? ¿Dice el
 precio real de un producto puntual? ¿Toma un pedido y genera link de pago? Si es no, tienen un
 menú.
+
+**"Meta saca su propio asistente con IA, ¿no lo vamos a tener gratis?"** Existe, y desde agosto
+2026 Meta lo cobra por consumo (unos centavos por conversación). Pero es genérico: no conoce su
+catálogo, no sabe qué unidad tiene qué golpe, no arma un combo mudanza, no genera el link de
+pago, no avisa al vendedor ni deja el chat sin leer. Es la diferencia entre contestar y *vender*.
+Si aparece algo de Meta que convenga, se integra: la capa del canal es reemplazable.
 
 **"¿Dónde quedan nuestros datos?"** Las conversaciones en la base del proyecto; las credenciales
 de WhatsApp, catálogo y cobros son del cliente — las carga él y las revoca cuando quiera. El
