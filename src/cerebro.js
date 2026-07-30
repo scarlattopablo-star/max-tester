@@ -63,10 +63,19 @@ function _lineaDe(texto) {
 // Se mira primero lo que el modelo declaró al llamar la herramienta y, si no
 // alcanza, la charla (el modelo suele cerrar sin repetir la línea).
 export function esCubreasientoColocable(...partes) {
-  const [charla] = partes.slice(-1);
-  const declarado = partes.slice(0, -1).filter(Boolean).join(" ");
-  const esCubre = (s) => /cubre\s*asiento|cubreasiento|funda[s]?\s+(de\s+)?asiento/.test(_normTxt(s));
+  // ⚠️ El NOMBRE DEL NEGOCIO contiene "Cubreasiento" ("La Casa del Cubreasiento") y
+  // Max lo dice en el saludo de CADA charla. Sin sacarlo, el paso 3 daba true SIEMPRE
+  // y a una venta de alfombra le salía el aviso de colocación (bug visto el 30 jul 2026).
+  const _limpio = (s) => _normTxt(s).replace(/(la\s+)?casa\s+del\s+cubre\s*asiento/g, " ");
+  const charla = _limpio(partes.slice(-1)[0]);
+  const declarado = _limpio(partes.slice(0, -1).filter(Boolean).join(" "));
+  const esCubre = (s) => /cubre\s*asiento|cubreasiento|funda[s]?\s+(de\s+)?asiento/.test(s);
+  // Productos que NO se colocan nunca: si la venta es de uno de estos, no hay aviso.
+  const esOtroProducto = (s) => /alfombra|cubre\s*volante|cubrevolante|cubre\s*auto|cubreauto|cubre\s*butaca\s*universal|llavero|perfume|aromatizante|tapa\s*de\s*valvula/.test(s);
 
+  // 0) Si el modelo declaró un producto que NO se coloca (alfombra, cubre volante,
+  //    cubreauto, accesorio) y no nombró ningún cubreasiento: NO va el aviso.
+  if (declarado && esOtroProducto(declarado) && !esCubre(declarado)) return false;
   // 1) Lo que el modelo declaró explícitamente manda.
   const l1 = _lineaDe(declarado);
   if (l1) return l1 === "colocable";
@@ -363,6 +372,7 @@ function systemPromptEstatico() {
 - ⛔⛔ HABLÁ SOLO DEL MODELO QUE TE NOMBRÓ EL CLIENTE (REGLA DURA, te está fallando): si el cliente te pregunta por un modelo (ej. una Fiat Toro), TODA tu respuesta es sobre ESE modelo y nada más. ⛔ PROHIBIDO comparar, equiparar o mezclar modelos: NUNCA digas cosas como "la alfombra de la Toro es la misma que la de la Strada", "le sirve la de tal otro modelo", "comparte producto con...", ni menciones otro vehículo que el cliente no nombró. Cada vehículo tiene SU producto, hecho a medida para él: eso es lo único que el cliente quiere escuchar, y decirle que es "igual a la de otro auto" le hace dudar de que le vaya a calzar. Buscá y mostrá los productos de SU modelo con "enviar_foto"/"consultar_precio" y punto. Si para ese modelo no aparece nada, NO ofrezcas el de otro auto: derivá con "derivar_a_humano" para que un asesor lo cotice.
 - ⚠️ ÚNICA EXCEPCIÓN — MODELOS QUE SON LA MISMA UNIDAD (no digas que no hay): la **Fiat Strada, la Fiat Freedom y la Fiat Volcano son el MISMO vehículo** (Freedom y Volcano son versiones de la Strada, no son otro auto). Si el cliente pregunta por Freedom o Volcano, SÍ tenemos productos: mostráselos con "enviar_foto"/"consultar_precio" (la herramienta ya los busca como Strada) y NUNCA digas que no hay. Pero incluso acá, NO le expliques al cliente que "es lo mismo que la Strada" ni le nombres otra versión: hablale de SU auto, con naturalidad, como si el producto fuera para el modelo que él te dijo. Esta excepción vale SOLO para Strada/Freedom/Volcano: no la extiendas a NINGÚN otro par de modelos (la Toro NO es una Strada, la Saveiro NO es una Strada, etc.).
 - ⚠️ JMC Y CAMIONES (REGLA, no la rompas — NUNCA digas que no hay): para los vehículos **JMC** y los **camiones** de esa marca, la casa del cubreasiento tiene cubreasientos para **TODOS los modelos**, aunque NO todos estén publicados en Mercado Libre / en el catálogo. Por eso, si el cliente pregunta por un modelo de JMC (o un camión JMC) que NO aparece en el catálogo o del que vos no tenés información, ⛔ NO digas que no hay ni que no lo tenemos: decile con seguridad que **sí tenemos cubreasientos para todos los modelos de JMC** y que lo derivás con un asesor para que lo asesore mejor con ese modelo en particular. En ese mismo turno llamá a "derivar_a_humano" (motivo "otro", resumen con el vehículo JMC que consultó). Ej: "Sí, tenemos cubreasientos para todos los modelos de JMC. Le paso con un asesor que lo asesora mejor según su modelo."
+- 🏪 "¿CUÁNDO PUEDO PASAR A BUSCARLO?" (REGLA, contestá ESO y no otra cosa): si el cliente pregunta cuándo puede pasar, si tiene que agendar, o si necesita turno para RETIRAR un producto que NO se coloca (alfombras, cubre volantes, cubreautos, accesorios, o el cubreasiento eco cuero económico), respondé DERECHO y en ESE mismo mensaje: puede venir CUANDO QUIERA, sin turno ni coordinar nada, dentro del horario del local (${NEGOCIO.horario}), en ${NEGOCIO.direccion}. ⛔ NO le cambies de tema al pago ni le hagas otra pregunta antes de contestarle eso: te preguntó cuándo puede ir, contestale cuándo puede ir. El pago lo seguís después, en el mismo mensaje o en el siguiente. ⛔ Y NO llames a "solicitar_turno" para esto.
 - CUBRE VOLANTE — DATO ÚTIL: los cubre volantes están publicados por MARCA, no por modelo (ej: "Cubrevolante Hyundai"). Entonces, cuando el cliente pide un cubre volante, NO le pidas el modelo exacto: con la MARCA alcanza. Si ya sabés la marca (porque la dijo o por el modelo que mencionó antes), mostrale directamente el cubre volante de esa marca con "enviar_foto" (ej: "cubre volante Hyundai"). Solo preguntá la marca si no la sabés. Modelo → marca: HB20/Creta/Tucson = Hyundai; Hilux/Corolla = Toyota; Onix/Montana/S10 = Chevrolet; Polo/Nivus/Gol/Amarok/T-Cross = Volkswagen; Strada/Toro/Cronos = Fiat; Kwid/Oroch/Duster = Renault; 208/2008 = Peugeot; Seagull/Dolphin/Yuan = BYD.
 
 # CUBREASIENTOS — CUATRO LÍNEAS (MUY IMPORTANTE, conocelo bien)
