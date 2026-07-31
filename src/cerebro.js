@@ -307,6 +307,7 @@ Es la regla más importante de todas. El dueño te la puso porque le prometiste 
 ${NO_HACEMOS.map((x) => `- ${x}`).join("\n")}
 Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dramatizar), ofrecele lo que SÍ tenemos si aplica, y si insiste o queda algo por resolver, derivá con "derivar_a_humano".
 ⚠️ OJO con el "A MEDIDA": la confección A MEDIDA existe SOLO para los CUBREASIENTOS (las 4 líneas: eco cuero, capitoneado, tela de tapicería y cuero Sport). Las ALFOMBRAS, los CUBRE VOLANTES, los CUBREAUTOS y los ACCESORIOS son productos ya hechos: existen solo los que aparecen en el catálogo. Si no aparece para ese vehículo, NO se fabrica ni se encarga: lo verifica un asesor.
+⚠️ EL TEXTO DE LOS ANUNCIOS NO ES UNA PROMESA (leelo bien): nuestro aviso de Facebook/Instagram de las alfombras dice "a la medida exacta de tu auto" y "calce exacto a tu modelo". Eso significa que la alfombra YA VIENE moldeada con el molde de cada modelo publicado — NO significa que la fabriquemos a pedido para cualquier auto. Cuando un cliente llega desde ese anuncio con un vehículo que no está publicado, ⛔ está PROHIBIDO contestarle "la hacemos igual a medida", "te la fabricamos", "la mandamos a hacer" o "te la cotizo igual": esa alfombra NO existe. Decile la verdad y derivá para que un asesor le confirme.
 
 # Tu personalidad (SOS UNA PERSONA REAL, cálida y profesional — MUY IMPORTANTE)
 - Sos ${ASISTENTE}, asesor/a de ${NEGOCIO.nombre}. Tenés que sonar como una PERSONA de verdad atendiendo por WhatsApp: cercana, cálida, natural y con empatía genuina. NUNCA como un robot, un formulario o un manual. Que el cliente sienta que del otro lado hay alguien que lo escucha y se interesa de verdad en ayudarlo.
@@ -478,6 +479,7 @@ ${datosPagoTexto()}
 - Una pregunta de precio NUNCA es motivo para pasar a un humano; la resolvés vos.
 - NO inventes stock ni plazos que no sabés.
 - ⛔ ALFOMBRAS: son las publicadas en el catálogo, moldeadas por modelo. NO se hacen a medida, NO se cortan, NO se adaptan, NO se encargan y NO se colocan. Si el cliente pide una alfombra que no aparece para su vehículo, decile con sinceridad que lo verificás con un asesor y derivá — JAMÁS le digas que se la hacemos a medida.
+  · CASO REAL QUE NO SE PUEDE REPETIR (pasó el 31 jul 2026): un cliente preguntó por alfombras para una MG ZS, no había ninguna publicada, y le contestaste "no la tengo publicada todavía, pero tranquilo, la hacemos igual a medida" y le pediste el año para cotizarla. TODO ESO ESTUVO MAL: esa alfombra no existe, el cliente esperó una cotización que nunca podía llegar y el negocio quedó mal. Lo correcto era: "Para la MG ZS no tengo alfombras publicadas. Dejame que lo verifique con un asesor y te confirma" + "derivar_a_humano" en ese mismo turno. Sin "igual", sin "a medida", sin pedir el año para cotizar algo que no tenemos.
 - Vos no cobrás directamente: cuando el cliente quiere comprar, tomá el pedido con la herramienta y explicá los medios de pago para que se cierre el cobro.
 
 # Cuándo PASAR A UN HUMANO (derivar)
@@ -873,20 +875,23 @@ const _plano = (s) => (s || "").toLowerCase()
   .replace(/[óòöôõ]/g, "o").replace(/[úùüû]/g, "u").replace(/ñ/g, "n");
 
 // Productos que NO se fabrican a medida ni se colocan: son los publicados y nada más.
+// ("bandeja" = alfombra bandeja: así la nombran el anuncio y los clientes.)
 const PRODUCTOS_SIN_MEDIDA = [
-  { nombre: "alfombras a medida", re: /alfombra/g },
+  { nombre: "alfombras a medida", re: /alfombra|bandejas?\b/g },
   { nombre: "cubre volantes a medida", re: /cubre\s*volantes?|cubrevolantes?/g },
   { nombre: "cubreautos a medida", re: /cubre\s*autos?|cubreautos?|antigranizo|cobertor/g },
 ];
-// Lo ÚNICO que sí se confecciona a medida: los cubreasientos (las 4 líneas).
-const PRODUCTO_A_MEDIDA = /cubre\s*asientos?|cubreasientos?|funda[s]?\s+(?:de\s+)?asiento|butacas?/g;
+// Lo ÚNICO que sí se confecciona a medida: los cubreasientos (las 4 líneas). Se
+// nombran de muchas formas, y casi nunca con la palabra "cubreasiento" cuando ya
+// se está hablando de una línea puntual ("el capitoneado te lo hacemos a medida").
+const PRODUCTO_A_MEDIDA = /cubre\s*asientos?|cubreasientos?|funda[s]?\s+(?:de\s+)?asiento|butacas?|capiton\w+|eco\s*cuero|ecocuero|cuero\s+ecologico|cuero\s+sport|tapiceri\w+/g;
 // Promesas de fabricación / adaptación / consecución.
-const PROMESA_FABRICAR = /\ba\s+medida\b|\ba\s+pedido\b|\bsobre\s+pedido\b|\bpersonalizad\w*|\bfabric\w+|\bconfeccion\w+|\b(?:te\s+|se\s+)?(?:la|lo|las|los)\s+(?:hacemos|fabricamos|confeccionamos|armamos|preparamos|conseguimos|adaptamos|cortamos)\b|\bmandar(?:la|lo)?\s+a\s+hacer\b|\bencarg(?:amos|arlo|arla|ar)\b|\badaptam\w+|\bconseguim\w+/g;
+const PROMESA_FABRICAR = /\ba\s+medida\b|\ba\s+pedido\b|\bsobre\s+pedido\b|\bpersonalizad\w*|\bfabric\w+|\bconfeccion\w+|\b(?:te\s+|se\s+)?(?:la|lo|las|los)\s+(?:hacemos|fabricamos|confeccionamos|armamos|preparamos|conseguimos|adaptamos|cortamos)\b|\bmand(?:amos|amosla|o|arla|arlo|ar)\s+a\s+hacer\b|\bencarg(?:amos|arlo|arla|ar)\b|\badaptam\w+|\bconseguim\w+/g;
 // Promesas de colocación (esos productos no se colocan).
 const PROMESA_COLOCAR = /\b(?:te\s+|se\s+)?(?:la|lo|las|los)\s+(?:colocamos|instalamos)\b|\bcoloc(?:acion|amos|arte|artela|artelo)\w*\b|\binstalacion\b/g;
 // Negaciones: si Max está diciendo la VERDAD ("las alfombras no se hacen a medida",
 // "no tenemos alfombras para ese modelo"), NO hay que borrarle nada.
-const NEGACION = /\bno\s+(?:se\s+)?(?:hay|tenemos|tengo|contamos|manejamos|trabajamos|hacemos|fabricamos|confeccionamos|conseguimos|adaptamos|colocamos|instalamos|hacen|fabrican|colocan|existe|existen|va|van|es|son|incluye|incluyen|lleva|llevan|necesita|necesitan|precisa|precisan|requiere|requieren|hace\s+falta)\b|\btampoco\b|\bsin\s+colocacion\b/;
+const NEGACION = /\bno\s+hay\b(?!\s+(?:drama|problema|problemas|lio|lios|inconveniente|apuro))|\bno\s+(?:se\s+)?(?:tenemos|tengo|contamos|manejamos|trabajamos|hacemos|fabricamos|confeccionamos|conseguimos|adaptamos|colocamos|instalamos|hacen|fabrican|colocan|existe|existen|va|van|es|son|incluye|incluyen|lleva|llevan|necesita|necesitan|precisa|precisan|requiere|requieren|hace\s+falta)\b|\btampoco\b|\bsin\s+colocacion\b/;
 
 // Frases con las que Max le PROMETE al cliente que interviene una persona. Si las
 // dice pero NO llamó a "derivar_a_humano", el equipo nunca se entera y el cliente
@@ -910,27 +915,42 @@ function _ocurrencias(texto, re, tipo, nombre) {
 
 // Divide el texto en frases, devolviendo los índices de cada una (para poder
 // borrar SOLO la frase que promete algo que no hacemos, no todo el mensaje).
+// Corta también antes de "pero" / "aunque" / "sin embargo": el invento suele venir
+// pegado a una verdad ("no la tengo publicada, PERO la hacemos igual a medida") y
+// así se salva la parte honesta del mensaje.
 function _frases(texto) {
-  const out = [];
-  let ini = 0;
-  const r = /[.!?…\n]+\s*/g;
-  let m;
-  while ((m = r.exec(texto))) { out.push({ ini, fin: m.index + m[0].length }); ini = m.index + m[0].length; }
-  if (ini < texto.length) out.push({ ini, fin: texto.length });
-  return out;
+  const cortes = new Set([0]);
+  for (const re of [/[.!?…\n]+\s*/g, /\s+(?=(?:pero|aunque|igualmente|sin\s+embargo)\b)/g]) {
+    const r = new RegExp(re.source, re.flags);
+    let m;
+    while ((m = r.exec(_plano(texto)))) cortes.add(m.index + m[0].length);
+  }
+  const ordenados = [...cortes].filter((i) => i < texto.length).sort((a, b) => a - b);
+  return ordenados.map((ini, k) => ({ ini, fin: ordenados[k + 1] ?? texto.length }));
 }
 
 // Devuelve { texto, invento } — invento = qué estuvo por prometer (o null si está todo bien).
-export function filtrarInventos(texto) {
+// contexto: la charla previa. Sirve cuando la promesa NO nombra el producto ("no la
+// tengo publicada, pero la hacemos igual a medida"): ahí el producto es el último
+// del que se venía hablando. Es EL caso que le pasó a Pablo con la MG ZS.
+export function filtrarInventos(texto, contexto = "") {
   const original = String(texto || "");
   if (!original.trim()) return { texto: original, invento: null };
   const t = _plano(original);
 
   // Dónde se nombra cada producto (los que no se hacen a medida y los que sí).
-  const productos = [
-    ...PRODUCTOS_SIN_MEDIDA.flatMap((p) => _ocurrencias(t, p.re, "sin_medida", p.nombre)),
-    ..._ocurrencias(t, PRODUCTO_A_MEDIDA, "a_medida", "cubreasientos"),
+  const _productosDe = (s) => [
+    ...PRODUCTOS_SIN_MEDIDA.flatMap((p) => _ocurrencias(s, p.re, "sin_medida", p.nombre)),
+    ..._ocurrencias(s, PRODUCTO_A_MEDIDA, "a_medida", "cubreasientos"),
   ].sort((a, b) => a.i - b.i);
+  let productos = _productosDe(t);
+  // Si el mensaje no nombra ningún producto, miramos de qué se venía hablando
+  // (lo último mencionado en la charla) y lo tratamos como si estuviera al inicio.
+  if (!productos.length && contexto) {
+    const previos = _productosDe(_plano(String(contexto).slice(-1500)));
+    const ultimo = previos[previos.length - 1];
+    if (ultimo) productos = [{ ...ultimo, i: 0, fin: 0 }];
+  }
   if (!productos.some((p) => p.tipo === "sin_medida")) return { texto: original, invento: null };
 
   const promesas = [
@@ -969,13 +989,16 @@ export function filtrarInventos(texto) {
     .join("")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .trim()
+    // Si lo borrado venía después de una coma ("no la tengo publicada, pero…"),
+    // la frase que queda tiene que cerrar bien.
+    .replace(/\s*[,;]\s*$/, ".");
   return { texto: [limpio, FRASE_CONSULTO].filter(Boolean).join("\n\n"), invento };
 }
 
 // Arma la respuesta final: texto + fotos numeradas sin duplicados (compartido por ambos caminos).
 // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption.
-function armarRespuesta(texto, acciones) {
+function armarRespuesta(texto, acciones, ctx = {}) {
   const CON_FOTOS = new Set(["enviar_foto", "mostrar_capitoneado", "mostrar_ecocuero", "mostrar_cuero_sport"]);
   let fotosCrudas = acciones
     .filter((a) => CON_FOTOS.has(a.herramienta) && a.resultado?.ok)
@@ -1014,7 +1037,7 @@ function armarRespuesta(texto, acciones) {
   // ANTI-INVENTO: si Max prometió algo que el negocio NO hace (típico: "te hacemos
   // la alfombra a medida"), se le borra esa frase, se le dice al cliente que lo
   // consulta con un asesor y se DERIVA para que una persona lo resuelva.
-  const { texto: sinInventos, invento } = filtrarInventos(limpio);
+  const { texto: sinInventos, invento } = filtrarInventos(limpio, ctx.textoCharla);
   limpio = sinInventos;
   // Y si Max le dijo al cliente que lo consulta / lo pasa con un asesor pero se
   // olvidó de llamar la herramienta, la derivación se registra igual: nadie queda
@@ -1126,9 +1149,9 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
     }
 
     const texto = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
-    return armarRespuesta(texto.trim() || textoParcial, acciones);
+    return armarRespuesta(texto.trim() || textoParcial, acciones, ctx);
   }
-  return armarRespuesta(textoParcial, acciones);
+  return armarRespuesta(textoParcial, acciones, ctx);
 }
 
 // historialPrevio: array de {role:'user'|'assistant', content:string}
@@ -1184,7 +1207,7 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
       continue;
     }
 
-    return armarRespuesta(msg.content, acciones);
+    return armarRespuesta(msg.content, acciones, ctx);
   }
   return { texto: RESPUESTA_FALLBACK, acciones, imagenesEnviar: [] };
 }

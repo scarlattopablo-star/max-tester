@@ -17,6 +17,23 @@ test("alfombra a medida — se borra la frase y se ofrece consultar", () => {
   assert.ok(r.texto.includes(FRASE_CONSULTO));
 });
 
+// EL CASO REAL (31 jul 2026, MG ZS): la promesa no nombra el producto ("LA
+// hacemos igual a medida"), así que hay que sacarlo del contexto de la charla.
+test("caso MG ZS — 'no la tengo publicada, pero la hacemos igual a medida'", () => {
+  const charla = "Hola, quiero más información. Alfombra Bandeja Rígida 3D Antiderrame. ¿Para qué auto la necesitás? Para MG ZS 1500 nafta.";
+  const r = filtrarInventos("No tengo publicada todavía la MG ZS en el catálogo, pero tranquilo, la hacemos igual a medida.", charla);
+  assert.equal(r.invento, "alfombras a medida");
+  // La parte honesta se conserva; la promesa inventada se va.
+  assert.ok(r.texto.startsWith("No tengo publicada todavía la MG ZS en el catálogo."));
+  assert.ok(!/a medida|hacemos/i.test(r.texto));
+  assert.ok(r.texto.includes(FRASE_CONSULTO));
+});
+
+test("caso MG ZS — sin contexto de alfombras no se toca (puede ser un cubreasiento)", () => {
+  const t = "No tengo publicada todavía la MG ZS, pero tranquilo, la hacemos igual a medida.";
+  assert.deepEqual(filtrarInventos(t, "Hola, ¿tenés cubreasientos para MG ZS?"), { texto: t, invento: null });
+});
+
 test("alfombra a medida al final — la parte buena del mensaje se conserva", () => {
   const r = filtrarInventos("Tenemos alfombras de goma para tu HB20. Si no te sirven, te la fabricamos a medida.");
   assert.equal(r.invento, "alfombras a medida");
@@ -42,6 +59,15 @@ test("'no tengo publicada, pero te la fabricamos' — se borra igual", () => {
 test("'no tenemos alfombras a medida' — es la verdad, no se toca", () => {
   const t = "No tenemos alfombras a medida: son las que están publicadas.";
   assert.deepEqual(filtrarInventos(t), { texto: t, invento: null });
+});
+
+test("promesas sin nombrar el producto, con la charla hablando de alfombras", () => {
+  const charla = "¿Tenés alfombras bandeja para una MG ZS?";
+  for (const t of ["Tranquilo, igual te la conseguimos.", "No hay drama, la mandamos a hacer para tu modelo."]) {
+    const r = filtrarInventos(t, charla);
+    assert.equal(r.invento, "alfombras a medida", `debería cortarse: ${t}`);
+    assert.equal(r.texto, FRASE_CONSULTO);
+  }
 });
 
 test("cubre volante a medida — tampoco existe", () => {

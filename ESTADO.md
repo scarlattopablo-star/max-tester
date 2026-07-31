@@ -21,6 +21,15 @@ cubreasientos al resto de los productos):
      cuero). El prompt la lee sola → **para sumar un caso nuevo, agregá una línea ahí**.
    - ⚠️ El **"a medida" existe SOLO para los CUBREASIENTOS** (las 4 líneas). Alfombras, cubre
      volantes, cubreautos y accesorios: solo lo publicado en el catálogo.
+   - ⚠️ **El texto del ANUNCIO no es una promesa:** el aviso de Facebook/Instagram de las alfombras
+     dice *"a la medida exacta de tu auto"* / *"calce exacto a tu modelo"* → eso es el MOLDE de cada
+     modelo publicado, NO fabricación a pedido. De ahí salió el error. Queda explicado en el prompt.
+   - 📸 **Caso real que no se repite** (charla de la MG ZS, quedó escrito en el prompt como ejemplo):
+     cliente del anuncio pregunta por alfombras para una MG ZS → Max: *"No tengo publicada todavía la
+     MG ZS en el catálogo, pero tranquilo, la hacemos igual a medida"* + le pide el año para cotizar.
+     Todo mal: esa alfombra no existe y el cliente esperó una cotización imposible (después escribió
+     *"nunca me pasaron costo de bandejas"*). Lo correcto: decir que no hay publicada, consultarlo con
+     un asesor y derivar.
 2. **FILTRO ANTI-INVENTO por CÓDIGO** (`filtrarInventos()` en `cerebro.js`, mismo criterio que
    `corregirSaludo`): si la respuesta promete fabricar / adaptar / conseguir / colocar algo que NO se
    hace a medida (alfombra, cubre volante, cubreauto), **se le borra esa frase del mensaje**, se le
@@ -29,6 +38,10 @@ cubreasientos al resto de los productos):
    con el detalle de lo que estuvo por prometer, y el chat queda SIN LEER en la bandeja.
    - Detecta por cercanía producto↔promesa y respeta las negaciones: si Max dice la VERDAD ("las
      alfombras no se hacen a medida") no se toca nada.
+   - Si la promesa NO nombra el producto (*"la hacemos igual a medida"*, *"igual te la conseguimos"*),
+     lo saca del **contexto de la charla** (lo último de lo que se venía hablando) — es exactamente el
+     caso MG ZS. Y corta por cláusula: la parte honesta del mensaje ("no la tengo publicada") se
+     conserva, se borra solo lo que va después del "pero".
    - **`prometioAsesor()`**: si Max le dice al cliente "lo consulto con un asesor" / "te paso con un
      asesor" / "un asesor se comunicará" pero se olvidó de llamar la herramienta, **la derivación se
      registra igual por código**. Nadie queda esperando una respuesta que el equipo nunca vio.
