@@ -81,6 +81,50 @@ en frío ~50 s).
 Las cuatro `mostrar_*` son del rubro cubreasientos; para otro cliente se reemplazan por las de
 su catálogo. Mismo motor, otras herramientas.
 
+### Caso puntual: stock desde un Excel en OneDrive
+
+**Sí se puede**, y para un outlet probablemente sea mejor fuente que la web. Funciona para
+productos publicados y **también para los que nunca se subieron a la tienda**: si está en el
+Excel, se puede cotizar.
+
+Encaja sin fricción con lo que ya existe: `catalogo_vivo.js` mantiene el catálogo en memoria y
+expone `actualizarCatalogo(productos, fuente)`; `sync_ml.js` es solo *un* adaptador que lo llama
+en un intervalo. Un `sync_excel.js` es un adaptador hermano que escribe en el mismo lugar.
+**El cerebro no cambia.**
+
+| Camino | Qué piden ellos | Contras |
+|---|---|---|
+| Link de solo lectura | Un vínculo "cualquiera con el link puede ver". 5 minutos. | Quien tenga el link tiene el archivo; si lo regeneran, el sync se corta |
+| Power Automate | Flujo "al modificarse el archivo → POST a esta URL". Sin Azure. | Depende de su licencia M365 |
+| Microsoft Graph | App registrada por su admin, permiso de lectura acotado al archivo | Pasa por su área de sistemas — ahí se va el calendario |
+
+Con Graph se leen las **celdas directamente como JSON** (Workbook API, `usedRange`), sin bajar ni
+parsear el archivo. El link de solo lectura alcanza para arrancar y se migra después.
+
+**Latencia real:** guardar + sincronizar OneDrive, detectar el cambio, recargar en memoria (esto
+último es instantáneo). En la práctica **1 a 5 minutos**. No prometer "instantáneo". Si alguna
+vez necesitan segundos, el Excel deja de ser la herramienta.
+
+**Por qué acá el Excel no es un parche:** una tienda online piensa en modelos con cantidad; un
+outlet piensa en **unidades** (esta heladera con un golpe, aquella con un rayón, cada una con su
+precio). Una planilla con **una fila por unidad física** — código, modelo, precio, defecto,
+ubicación, vendida S/N — representa eso mejor que una ficha de producto.
+
+**Cuatro cosas a acordar antes:**
+
+1. **Columnas fijas** + validación + aviso cuando algo no cuadra. Mismo patrón de guarda que ya
+   tiene el sync de ML (si el resultado viene raro, no reemplaza). Sin eso falla en silencio y el
+   asistente cotiza stock viejo.
+2. **Una sola persona escribe** (si no, OneDrive genera copias en conflicto).
+3. **Guardar y cerrar** — un Excel abierto con cambios sin guardar deja la nube vieja.
+4. **La ventana entre la venta en el local y el tachado en la planilla.** Único riesgo real. Se
+   cubre con que el asistente diga *"te lo reservo, un asesor te confirma"* en vez de *"sí, lo
+   tengo"*. Es decisión de proceso de ellos, no técnica.
+
+**Esfuerzo:** lectura + sync, un par de días. El calendario depende del camino de acceso.
+
+---
+
 **Recorrido de un mensaje:** cliente → Cloud API → webhook → servidor (agrupa + presencia) →
 cerebro (reglas + historial) → ¿tool? (catálogo / link de pago / derivación) → respuesta con
 fotos y videos → API → cliente. En paralelo, todo se persiste en la base.
