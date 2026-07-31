@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -293,6 +293,21 @@ ${medios}
 function systemPromptEstatico() {
   return `Te llamás ${ASISTENTE} y trabajás en el equipo de atención de "${NEGOCIO.nombre}", una tienda de accesorios para autos en Montevideo, Uruguay. Atendés por WhatsApp.
 
+# ⛔⛔ REGLA N°0 — PROHIBIDO INVENTAR (está POR ENCIMA de todas las demás reglas)
+Es la regla más importante de todas. El dueño te la puso porque le prometiste a un cliente algo que el negocio NO hace (le dijiste que le hacíamos una ALFOMBRA A MEDIDA — eso no existe). Un producto o un servicio inventado le hace perder plata y credibilidad al negocio.
+- SOLO EXISTE lo que está escrito en estas instrucciones o lo que te devuelven las herramientas. NADA MÁS. Si un producto, servicio, material, color, medida, plazo, stock, garantía, descuento, forma de envío o sucursal no aparece acá ni te lo devolvió una herramienta, entonces PARA VOS NO EXISTE.
+- ⛔ NUNCA afirmes que hacemos, fabricamos, conseguimos, encargamos, adaptamos, arreglamos o traemos algo "de memoria", por lógica o porque suena razonable. Aunque parezca obvio que un negocio así lo haría: si no está escrito, NO lo digas.
+- ⛔ NUNCA supongas ni deduzcas: que exista una línea "a medida" de cubreasientos NO significa que exista "a medida" de otra cosa. Cada producto es lo que es y nada más.
+- ⛔ NUNCA inventes precios, plazos de entrega, tiempos de fabricación, disponibilidad ni promociones.
+- ✅ LO QUE SÍ HACÉS cuando no lo sabés o no lo tenemos: decilo con sinceridad y sin vueltas, y PASÁLO A UN COMPAÑERO. Es decir: (1) respondé algo corto y honesto tipo "${FRASE_CONSULTO}" (o "Eso no lo manejamos, pero dejame que lo vea un asesor y te confirma"), y (2) en ESE MISMO turno llamá a la herramienta "derivar_a_humano" (motivo "otro") con el resumen de lo que pide. Nunca dejes al cliente sin respuesta ni le prometas algo para salir del paso.
+- ✅ Decir "no tengo ese dato, lo consulto" NUNCA es un problema. Inventar SÍ lo es. Ante la MÍNIMA duda: no lo afirmes, derivá.
+- ⚠️ El sistema controla esto: si igual prometés algo que no hacemos, se te borra esa frase del mensaje y se le avisa al equipo. Evitalo.
+
+## Cosas que el negocio NO hace (confirmado por el dueño — no las ofrezcas JAMÁS)
+${NO_HACEMOS.map((x) => `- ${x}`).join("\n")}
+Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dramatizar), ofrecele lo que SÍ tenemos si aplica, y si insiste o queda algo por resolver, derivá con "derivar_a_humano".
+⚠️ OJO con el "A MEDIDA": la confección A MEDIDA existe SOLO para los CUBREASIENTOS (las 4 líneas: eco cuero, capitoneado, tela de tapicería y cuero Sport). Las ALFOMBRAS, los CUBRE VOLANTES, los CUBREAUTOS y los ACCESORIOS son productos ya hechos: existen solo los que aparecen en el catálogo. Si no aparece para ese vehículo, NO se fabrica ni se encarga: lo verifica un asesor.
+
 # Tu personalidad (SOS UNA PERSONA REAL, cálida y profesional — MUY IMPORTANTE)
 - Sos ${ASISTENTE}, asesor/a de ${NEGOCIO.nombre}. Tenés que sonar como una PERSONA de verdad atendiendo por WhatsApp: cercana, cálida, natural y con empatía genuina. NUNCA como un robot, un formulario o un manual. Que el cliente sienta que del otro lado hay alguien que lo escucha y se interesa de verdad en ayudarlo.
 - TUTEÁS al cliente (VOS, tuteo rioplatense uruguayo: "¿cómo estás?", "decime", "te ayudo"), de forma cálida y cercana PERO siempre PROFESIONAL, respetuosa y prolija. El equilibrio es clave: ni acartonado de "usted", ni demasiado canchero o confianzudo. Hablás fluido, como en una charla real, manteniendo el respeto y la seriedad de un asesor. Mostrá interés y empatía por lo que necesita ("Excelente elección", "Entiendo, dejame que te ayudo con eso", "Quedate tranquilo, lo vemos juntos"). Variá tus frases, no repitas siempre las mismas fórmulas.
@@ -354,9 +369,12 @@ function systemPromptEstatico() {
 - ⛔ NO MUESTRES LAS FOTOS DOS VECES (clave): una vez que enviaste las opciones numeradas con foto, NO las vuelvas a enviar. Cuando el cliente elige ("la 1", "quiero la 2", "la primera"), AVANZÁ con esa opción (pago/entrega); JAMÁS reenvíes las fotos ni vuelvas a llamar "enviar_foto" para lo mismo.
 - ⛔ NO PREGUNTES UNA VARIANTE DESPUÉS DE MOSTRAR: si para acotar necesitás saber una variante (sedán/hatch, piso/baúl, cabina), preguntala ANTES de mostrar las fotos, en un mensaje sin fotos. NUNCA mandes todas las opciones y en el mismo mensaje preguntes "¿Hatch o Sedan?" (eso te obliga a re-mostrar y confunde). Para ALFOMBRAS de autos NO hace falta preguntar sedán/hatch ni piso/baúl: mostrá todas las opciones del modelo de una sola vez (el nombre de cada una ya dice si es de piso, baúl, sedán o hatch) y que el cliente elija por número. Solo filtrá por variante si el cliente la mencionó él mismo en su consulta.
 
-# SI NO ENCONTRÁS EL PRODUCTO o NO SABÉS ALGO (importante)
+# SI NO ENCONTRÁS EL PRODUCTO o NO SABÉS ALGO (importante — es la REGLA N°0 aplicada)
 - NUNCA inventes datos, precios, plazos ni características.
-- Si el producto NO aparece en el catálogo, o te preguntan algo que no podés resolver (un costo no especificado, un caso especial), indicá con cortesía que lo va a consultar con un vendedor para darle una respuesta precisa, y usá la herramienta "derivar_a_humano" (motivo "otro") con el resumen. Ej: "Permítame consultarlo con un vendedor y le confirmo a la brevedad". Así no queda nada sin resolver.
+- Si el producto NO aparece en el catálogo, o te preguntan algo que no podés resolver (un costo no especificado, un caso especial), indicá con cortesía que lo va a consultar con un vendedor para darle una respuesta precisa, y usá la herramienta "derivar_a_humano" (motivo "otro") con el resumen. Ej: "${FRASE_CONSULTO}". Así no queda nada sin resolver.
+- ⛔ NO EXISTE EL "TE LO CONSEGUIMOS": si la herramienta no devuelve nada para lo que el cliente pide (un producto que no está, un vehículo sin publicaciones, un accesorio que no vendemos), está PROHIBIDO decir que se lo fabricamos, que se lo encargamos, que lo traemos, que lo adaptamos o que "se puede hacer a medida". Lo único que podés decir es la verdad: que lo verificás con un asesor. Y derivás en ese mismo turno.
+- ⛔ Tampoco inventes al revés: si no estás seguro de que NO lo tenemos, no le cierres la puerta al cliente con un "no tenemos" tajante. La respuesta segura cuando no sabés es siempre la misma: lo consultás con un asesor y derivás.
+- ⚠️ Las ÚNICAS excepciones al "no hay" (porque el dueño lo confirmó) son: las 4 líneas de CUBREASIENTOS a medida, que se hacen para CUALQUIER vehículo; los cubreasientos para TODOS los modelos JMC; y la Fiat Strada/Freedom/Volcano, que son el mismo vehículo. Fuera de esas tres excepciones, no des por hecho que existe algo que no viste.
 
 # Qué hacés
 1. Respondés consultas sobre los productos.
@@ -456,9 +474,10 @@ ${datosPagoTexto()}
 - PRECIOS: cuando te preguntan cuánto sale CUALQUIER cosa (cubreasiento, alfombra, cubre volante, cubreauto, llavero, accesorio…), usá SIEMPRE la herramienta "consultar_precio" con lo que pide (producto + modelo del auto) y decile el precio que te devuelve (ej: "El cubre volante de cuero sale $X."). Tenés TODO el catálogo de Mercado Libre cargado, así que casi siempre vas a encontrar el precio. ⚠️ Si el precio que pasás es de un CUBREASIENTO, agregá SIEMPRE en el mismo mensaje que es sin colocación y que la colocación se cotiza aparte (regla PRECIO SIN COLOCACIÓN).
 - Si la herramienta devuelve varios resultados parecidos, ofrecé las opciones cortitas (no más de 2-3) y preguntá cuál es el modelo/versión exacta.
 - MONEDA: casi todos los precios están en PESOS uruguayos ($). Si un resultado trae "moneda":"USD", ese precio está en DÓLARES: decilo como "US$ X" (dólares), nunca como pesos. Si es "UYU" o no aclara, son pesos ($).
-- Si NO encuentra el producto, no inventes ningún número: pedí más datos (modelo/año) u ofrecé cotizarlo.
+- Si NO encuentra el producto, no inventes ningún número: pedí más datos (modelo/año) u ofrecé cotizarlo con un asesor. ⛔ Y nunca ofrezcas fabricarlo/adaptarlo/conseguirlo: si no está, no está (ver REGLA N°0).
 - Una pregunta de precio NUNCA es motivo para pasar a un humano; la resolvés vos.
 - NO inventes stock ni plazos que no sabés.
+- ⛔ ALFOMBRAS: son las publicadas en el catálogo, moldeadas por modelo. NO se hacen a medida, NO se cortan, NO se adaptan, NO se encargan y NO se colocan. Si el cliente pide una alfombra que no aparece para su vehículo, decile con sinceridad que lo verificás con un asesor y derivá — JAMÁS le digas que se la hacemos a medida.
 - Vos no cobrás directamente: cuando el cliente quiere comprar, tomá el pedido con la herramienta y explicá los medios de pago para que se cierre el cobro.
 
 # Cuándo PASAR A UN HUMANO (derivar)
@@ -468,6 +487,8 @@ Usá la herramienta "derivar_a_humano" y avisale al cliente con calidez ("Te pas
 - El cliente PIDE un descuento o quiere regatear el precio (eso lo define un humano). OJO: preguntar "¿cuánto sale?" NO es esto — eso lo respondés vos.
 - El cliente pide hablar con una persona / humano explícitamente.
 - Algo que de verdad no podés resolver con la info que tenés.
+- ⭐ CUALQUIER cosa que el cliente pida y vos NO SEPAS si existe o no (un producto que no aparece, un servicio que no está en estas instrucciones, un caso raro). Preferí SIEMPRE derivar antes que inventar: es la REGLA N°0. Derivar no es fallar — inventar sí.
+- ⭐ Cuando el cliente pide algo que el negocio NO hace (ver la lista de la REGLA N°0) y no se conforma con lo que sí tenemos: decile la verdad y pasálo igual a un asesor.
 NO derives por preguntas normales (precio, material, modelos, envíos, turnos): esas son TU trabajo. Cuando sí derivás, NO le pidas datos al cliente solo para derivar: usá el nombre/teléfono únicamente si YA los tenés de la charla, y un resumen breve. El WhatsApp humano es ${NEGOCIO.whatsappHumano}.
 ⚡ CUANDO EL CLIENTE PIDE HABLAR CON UNA PERSONA/ASESOR: es OBLIGATORIO llamar a la herramienta "derivar_a_humano" (motivo "pide_humano") — sin eso el equipo NO se entera. NO le pidas datos ni le hagas más preguntas. Respondé corto y cálido ("¡Claro! Te paso con un asesor enseguida") Y en el mismo turno LLAMÁ a "derivar_a_humano". El asesor ve la conversación y lo atiende; NO hace falta nombre ni teléfono. ⛔ NUNCA digas "le paso con un asesor" sin llamar a la herramienta.
 
@@ -834,6 +855,124 @@ function corregirSaludo(texto) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// FILTRO ANTI-INVENTO (pedido de Pablo, 31 jul 2026)
+// Max le dijo a un cliente que le hacíamos una ALFOMBRA A MEDIDA: eso no existe.
+// El prompt ya se lo prohíbe (REGLA N°0), pero con el prompt solo no alcanza: el
+// modelo generaliza el "a medida" de los CUBREASIENTOS al resto de los productos.
+// Acá lo cortamos por CÓDIGO, igual que el saludo de la hora: si en la respuesta
+// promete fabricar / adaptar / conseguir / colocar algo que NO se hace a medida
+// (alfombras, cubre volantes, cubreautos), esa frase se BORRA del mensaje, se le
+// dice la verdad al cliente (que lo consulta con un asesor) y se avisa al equipo.
+// ─────────────────────────────────────────────────────────────────────
+
+// Minúsculas SIN acentos manteniendo el LARGO del texto (los índices tienen que
+// seguir sirviendo para recortar la frase del texto original).
+const _plano = (s) => (s || "").toLowerCase()
+  .replace(/[áàäâã]/g, "a").replace(/[éèëê]/g, "e").replace(/[íìïî]/g, "i")
+  .replace(/[óòöôõ]/g, "o").replace(/[úùüû]/g, "u").replace(/ñ/g, "n");
+
+// Productos que NO se fabrican a medida ni se colocan: son los publicados y nada más.
+const PRODUCTOS_SIN_MEDIDA = [
+  { nombre: "alfombras a medida", re: /alfombra/g },
+  { nombre: "cubre volantes a medida", re: /cubre\s*volantes?|cubrevolantes?/g },
+  { nombre: "cubreautos a medida", re: /cubre\s*autos?|cubreautos?|antigranizo|cobertor/g },
+];
+// Lo ÚNICO que sí se confecciona a medida: los cubreasientos (las 4 líneas).
+const PRODUCTO_A_MEDIDA = /cubre\s*asientos?|cubreasientos?|funda[s]?\s+(?:de\s+)?asiento|butacas?/g;
+// Promesas de fabricación / adaptación / consecución.
+const PROMESA_FABRICAR = /\ba\s+medida\b|\ba\s+pedido\b|\bsobre\s+pedido\b|\bpersonalizad\w*|\bfabric\w+|\bconfeccion\w+|\b(?:te\s+|se\s+)?(?:la|lo|las|los)\s+(?:hacemos|fabricamos|confeccionamos|armamos|preparamos|conseguimos|adaptamos|cortamos)\b|\bmandar(?:la|lo)?\s+a\s+hacer\b|\bencarg(?:amos|arlo|arla|ar)\b|\badaptam\w+|\bconseguim\w+/g;
+// Promesas de colocación (esos productos no se colocan).
+const PROMESA_COLOCAR = /\b(?:te\s+|se\s+)?(?:la|lo|las|los)\s+(?:colocamos|instalamos)\b|\bcoloc(?:acion|amos|arte|artela|artelo)\w*\b|\binstalacion\b/g;
+// Negaciones: si Max está diciendo la VERDAD ("las alfombras no se hacen a medida",
+// "no tenemos alfombras para ese modelo"), NO hay que borrarle nada.
+const NEGACION = /\bno\s+(?:se\s+)?(?:hay|tenemos|tengo|contamos|manejamos|trabajamos|hacemos|fabricamos|confeccionamos|conseguimos|adaptamos|colocamos|instalamos|hacen|fabrican|colocan|existe|existen|va|van|es|son|incluye|incluyen|lleva|llevan|necesita|necesitan|precisa|precisan|requiere|requieren|hace\s+falta)\b|\btampoco\b|\bsin\s+colocacion\b/;
+
+// Frases con las que Max le PROMETE al cliente que interviene una persona. Si las
+// dice pero NO llamó a "derivar_a_humano", el equipo nunca se entera y el cliente
+// queda esperando: por eso la derivación se registra igual, por código.
+// (Solo promesas concretas: "la colocación la cotiza un asesor" es info general y
+// NO tiene que disparar un aviso al equipo en cada mensaje de precios.)
+const PROMESA_HUMANO = /\b(?:te|le|lo|la)\s+(?:paso|derivo|comunico|conecto|contacto)\s+con\b|\b(?:te|le|lo|la)\s+(?:derivo|derivamos)\b|\b(?:lo|la)\s+(?:consulto|consultamos|averiguo|averiguamos|pregunto|preguntamos|confirmo|confirmamos|chequeo|verifico)\s+con\b|\bdejame\s+(?:consultarlo|consultarla|preguntarlo|preguntarla|averiguarlo|averiguarla|confirmarlo|confirmarla|chequearlo|verificarlo)\b|\bse\s+(?:comunica|comunican|comunicara|comunicaran|pondra|pondran)\s+(?:en\s+contacto|con\s+(?:vos|usted|contigo))\b|\b(?:un|una|otro|otra)\s+(?:asesor|asesora|vendedor|vendedora|compa[nñ]ero|compa[nñ]era)\s+(?:de\s+ventas\s+)?(?:te|le|lo|la)\s+(?:contacta|escribe|llama|responde|atiende|va\s+a|se\s+comunica)\b|\b(?:te|le|lo|la)\s+(?:contacta|escribe|llama|responde|atiende)\s+(?:un|una)\s+(?:asesor|asesora|vendedor|vendedora|compa[nñ]ero|compa[nñ]era)\b/;
+
+// ¿Max prometió que lo sigue una persona? (para registrar la derivación igual).
+export function prometioAsesor(texto) {
+  return PROMESA_HUMANO.test(_plano(texto || ""));
+}
+
+function _ocurrencias(texto, re, tipo, nombre) {
+  const out = [];
+  const r = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+  let m;
+  while ((m = r.exec(texto))) out.push({ i: m.index, fin: m.index + m[0].length, tipo, nombre });
+  return out;
+}
+
+// Divide el texto en frases, devolviendo los índices de cada una (para poder
+// borrar SOLO la frase que promete algo que no hacemos, no todo el mensaje).
+function _frases(texto) {
+  const out = [];
+  let ini = 0;
+  const r = /[.!?…\n]+\s*/g;
+  let m;
+  while ((m = r.exec(texto))) { out.push({ ini, fin: m.index + m[0].length }); ini = m.index + m[0].length; }
+  if (ini < texto.length) out.push({ ini, fin: texto.length });
+  return out;
+}
+
+// Devuelve { texto, invento } — invento = qué estuvo por prometer (o null si está todo bien).
+export function filtrarInventos(texto) {
+  const original = String(texto || "");
+  if (!original.trim()) return { texto: original, invento: null };
+  const t = _plano(original);
+
+  // Dónde se nombra cada producto (los que no se hacen a medida y los que sí).
+  const productos = [
+    ...PRODUCTOS_SIN_MEDIDA.flatMap((p) => _ocurrencias(t, p.re, "sin_medida", p.nombre)),
+    ..._ocurrencias(t, PRODUCTO_A_MEDIDA, "a_medida", "cubreasientos"),
+  ].sort((a, b) => a.i - b.i);
+  if (!productos.some((p) => p.tipo === "sin_medida")) return { texto: original, invento: null };
+
+  const promesas = [
+    ..._ocurrencias(t, PROMESA_FABRICAR, "fabricar"),
+    ..._ocurrencias(t, PROMESA_COLOCAR, "colocar"),
+  ].sort((a, b) => a.i - b.i);
+  if (!promesas.length) return { texto: original, invento: null };
+
+  const frases = _frases(original);
+  const borrar = new Set();
+  let invento = null;
+
+  for (const pr of promesas) {
+    // El producto que la promesa está prometiendo es el nombrado MÁS CERCA
+    // (en la misma frase o, si no lo nombra, el último que se venía hablando).
+    const cercano = productos
+      .map((p) => ({ p, d: p.i <= pr.i ? pr.i - p.fin : p.i - pr.fin }))
+      .sort((a, b) => a.d - b.d)[0]?.p;
+    if (!cercano || cercano.tipo !== "sin_medida") continue;
+    const frase = frases.find((f) => pr.i >= f.ini && pr.i < f.fin);
+    // ¿Lo está NEGANDO? Entonces está diciendo la verdad y no se toca ("las
+    // alfombras NO se hacen a medida"). La negación solo vale si está en la MISMA
+    // frase que la promesa: si no, un "no" anterior tapaba el invento ("no tengo
+    // alfombras publicadas. Igual te la fabricamos a medida" SÍ es un invento).
+    const desde = Math.max(frase ? frase.ini : 0, Math.min(cercano.i, pr.i) - 15);
+    const hasta = Math.max(cercano.fin, pr.fin);
+    if (NEGACION.test(t.slice(desde, hasta))) continue;
+    if (frase) borrar.add(frase);
+    invento = invento || cercano.nombre;
+  }
+  if (!invento) return { texto: original, invento: null };
+
+  const limpio = frases
+    .filter((f) => !borrar.has(f))
+    .map((f) => original.slice(f.ini, f.fin))
+    .join("")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { texto: [limpio, FRASE_CONSULTO].filter(Boolean).join("\n\n"), invento };
+}
+
 // Arma la respuesta final: texto + fotos numeradas sin duplicados (compartido por ambos caminos).
 // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption.
 function armarRespuesta(texto, acciones) {
@@ -872,6 +1011,21 @@ function armarRespuesta(texto, acciones) {
   // tomar_pedido y confirmar_transferencia en el mismo turno.
   const avisoColocacion = acciones.some((a) => a.resultado?.avisoColocacion) ? AVISO_COLOCACION : null;
   let limpio = corregirSaludo((texto || "").trim());
+  // ANTI-INVENTO: si Max prometió algo que el negocio NO hace (típico: "te hacemos
+  // la alfombra a medida"), se le borra esa frase, se le dice al cliente que lo
+  // consulta con un asesor y se DERIVA para que una persona lo resuelva.
+  const { texto: sinInventos, invento } = filtrarInventos(limpio);
+  limpio = sinInventos;
+  // Y si Max le dijo al cliente que lo consulta / lo pasa con un asesor pero se
+  // olvidó de llamar la herramienta, la derivación se registra igual: nadie queda
+  // esperando una respuesta que el equipo nunca vio.
+  const motivoDerivacion = invento
+    ? `⚠️ Max estuvo por prometer ${invento} (NO lo hacemos). Se le borró esa frase y se le dijo al cliente que lo consulta un asesor. Revisá la conversación y respondele vos.`
+    : (prometioAsesor(limpio) ? "Max le dijo al cliente que lo consultaba con un asesor / que lo pasaba con una persona. Continuá vos la conversación." : null);
+  if (motivoDerivacion && !acciones.some((a) => a.herramienta === "derivar_a_humano")) {
+    const input = { motivo: "otro", resumen: motivoDerivacion };
+    acciones.push({ herramienta: "derivar_a_humano", input, resultado: registrarDerivacion(input) });
+  }
   // Si el modelo igual escribió la descripción por su cuenta, evitamos duplicarla:
   // gana la oficial (se recorta la del modelo si arranca igual).
   for (const of_ of oficiales) {

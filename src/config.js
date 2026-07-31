@@ -183,6 +183,26 @@ export const AVISO_COLOCACION = `Importante sobre la COLOCACIÓN:
 • El día y la hora se coordinan con el equipo y quedan sujetos a disponibilidad de agenda.
 • Recién cuando el equipo te confirme la fecha y la hora podés acercarte al local. Por favor no vengas antes de tener esa confirmación, porque sin el turno confirmado no vamos a poder hacerte la colocación.`;
 
+// ───────────────────────────────────────────────────────────────────
+// LO QUE **NO** HACEMOS — pedido de Pablo (31 jul 2026): "Max no puede inventar".
+// Max le dijo a un cliente que le podíamos hacer una ALFOMBRA A MEDIDA. Eso NO
+// existe: La Casa del Cubreasiento no fabrica alfombras a pedido. Todo lo que
+// esté en esta lista, Max lo dice con sinceridad (no lo ofrece nunca) y, si el
+// cliente igual lo necesita, deriva a un asesor.
+// ⚠️ Esta lista es de cosas CONFIRMADAS que no hacemos. Lo que NO figura acá ni
+// en el prompt ni lo devuelven las herramientas, Max NO lo afirma ni lo niega:
+// lo consulta con un asesor (regla "PROHIBIDO INVENTAR" en cerebro.js).
+// Para sumar un caso nuevo: agregá una línea acá (la lee el prompt solo).
+// ───────────────────────────────────────────────────────────────────
+export const NO_HACEMOS = [
+  "ALFOMBRAS a medida, a pedido, cortadas o adaptadas: NO existen. Las alfombras son ÚNICAMENTE las que están publicadas en el catálogo (vienen moldeadas por modelo de vehículo). Si para el vehículo del cliente no aparece ninguna, no hay: lo verifica un asesor.",
+  "CUBRE VOLANTES a medida: no se fabrican a pedido. Vienen por MARCA, en las medidas ya definidas.",
+  "COLOCACIÓN de alfombras, cubre volantes, cubreautos, accesorios y del cubreasiento eco cuero económico: esos productos NO se colocan (solo se venden).",
+];
+
+// Frase para cuando Max no puede resolver algo o no está seguro: la dice y deriva.
+export const FRASE_CONSULTO = "Dejame consultarlo con un asesor así te confirmo bien; enseguida se comunican con vos.";
+
 // Link directo a WhatsApp del humano (para derivar desde Instagram).
 export const WA_LINK = `https://wa.me/${NEGOCIO.whatsappHumanoIntl}`;
 

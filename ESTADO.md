@@ -2,6 +2,39 @@
 
 Bot de WhatsApp para La Casa del Cubreasiento. Asistente **Max** (antes Vale). Carpeta: `agente_ia/`.
 
+## 🚫🚫 SESIÓN 31 jul — MAX NO INVENTA (LO MÁS NUEVO, RETOMAR ACÁ)
+
+**Pedido de Pablo:** *"Max no puede inventar. Hoy mandó un mensaje diciendo que le podían hacer la
+alfombra a medida, y eso no existe. Y en el caso de no poder resolver, que lo derive a un trabajador."*
+
+Se atacó en DOS capas (el prompt solo no alcanza: el modelo generaliza el "a medida" de los
+cubreasientos al resto de los productos):
+
+1. **REGLA N°0 del prompt** (`cerebro.js`, arriba de todo, antes que la personalidad): *solo existe
+   lo que está escrito en el prompt o lo que devuelven las herramientas*. Prohibido afirmar de
+   memoria/por lógica que fabricamos, conseguimos, encargamos, adaptamos o arreglamos algo. Ante la
+   mínima duda: decirlo con sinceridad + **`derivar_a_humano`**. Se reforzaron además las secciones
+   "SI NO ENCONTRÁS EL PRODUCTO" (nada de "te lo conseguimos"), "REGLAS DE ORO" (alfombras) y
+   "Cuándo PASAR A UN HUMANO".
+   - Lista editable **`NO_HACEMOS`** en `config.js` (cosas confirmadas que NO hacemos: alfombras a
+     medida, cubre volantes a medida, colocación de alfombras/cubre volante/cubreauto/accesorios/eco
+     cuero). El prompt la lee sola → **para sumar un caso nuevo, agregá una línea ahí**.
+   - ⚠️ El **"a medida" existe SOLO para los CUBREASIENTOS** (las 4 líneas). Alfombras, cubre
+     volantes, cubreautos y accesorios: solo lo publicado en el catálogo.
+2. **FILTRO ANTI-INVENTO por CÓDIGO** (`filtrarInventos()` en `cerebro.js`, mismo criterio que
+   `corregirSaludo`): si la respuesta promete fabricar / adaptar / conseguir / colocar algo que NO se
+   hace a medida (alfombra, cubre volante, cubreauto), **se le borra esa frase del mensaje**, se le
+   dice al cliente la verdad (`FRASE_CONSULTO` de config.js: "Dejame consultarlo con un asesor…") y
+   se registra una **derivación automática** → el equipo recibe el aviso "❓ MAX NO PUDO RESOLVER"
+   con el detalle de lo que estuvo por prometer, y el chat queda SIN LEER en la bandeja.
+   - Detecta por cercanía producto↔promesa y respeta las negaciones: si Max dice la VERDAD ("las
+     alfombras no se hacen a medida") no se toca nada.
+   - **`prometioAsesor()`**: si Max le dice al cliente "lo consulto con un asesor" / "te paso con un
+     asesor" / "un asesor se comunicará" pero se olvidó de llamar la herramienta, **la derivación se
+     registra igual por código**. Nadie queda esperando una respuesta que el equipo nunca vio.
+3. **Tests:** `node src/no_inventar.test.mjs` (15 casos: inventos que se cortan, verdades que no se
+   tocan, y qué frases derivan y cuáles no).
+
 ## 🟢🟢 SESIÓN 22 jul (tarde) — AVISOS AL EQUIPO + "SIN LEER" EN HANDOFF + LÍNEAS TELA Y CUERO SPORT (LO MÁS NUEVO)
 
 **Contexto: desde el 22 jul Max corre en la Cloud API vía 360dialog Coexistence** (`WA_PROVIDER=meta` + `D360_API_KEY`; Baileys = legado). Esta sesión arregló los avisos al equipo y sumó 2 líneas de producto:
