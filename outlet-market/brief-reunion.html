@@ -1,0 +1,1119 @@
+<title>Reunión Outlet Market — Orquesta IA</title>
+
+<style>
+  :root {
+    --ink:        #1A1714;
+    --ink-2:      #34302B;
+    --paper:      #F3F2EF;
+    --paper-2:    #E7E5E0;
+    --paper-3:    #FAFAF8;
+    --muted:      #6B655D;
+    --hair:       #D6D2CA;
+    --brass:      #8A6415;
+    --brass-lit:  #B08428;
+    --copper:     #2F6B5E;
+    --patch:      #A63A32;
+
+    --bg:         var(--paper);
+    --surface:    var(--paper-3);
+    --surface-2:  var(--paper-2);
+    --fg:         var(--ink);
+    --fg-2:       var(--ink-2);
+    --fg-muted:   var(--muted);
+    --rule:       var(--hair);
+    --accent:     var(--brass);
+    --good:       var(--copper);
+    --warn:       var(--patch);
+
+    --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-body:    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono:    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+    --measure: 68ch;
+    --pad: clamp(1.1rem, 4vw, 2.5rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #14120F;
+      --surface:   #1C1915;
+      --surface-2: #26221D;
+      --fg:        #EDEAE4;
+      --fg-2:      #D2CDC4;
+      --fg-muted:  #9A9287;
+      --rule:      #38332C;
+      --accent:    #D3A343;
+      --good:      #63B39F;
+      --warn:      #E08078;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg:        #14120F;
+    --surface:   #1C1915;
+    --surface-2: #26221D;
+    --fg:        #EDEAE4;
+    --fg-2:      #D2CDC4;
+    --fg-muted:  #9A9287;
+    --rule:      #38332C;
+    --accent:    #D3A343;
+    --good:      #63B39F;
+    --warn:      #E08078;
+  }
+
+  :root[data-theme="light"] {
+    --bg:        var(--paper);
+    --surface:   var(--paper-3);
+    --surface-2: var(--paper-2);
+    --fg:        var(--ink);
+    --fg-2:      var(--ink-2);
+    --fg-muted:  var(--muted);
+    --rule:      var(--hair);
+    --accent:    var(--brass);
+    --good:      var(--copper);
+    --warn:      var(--patch);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .wrap {
+    max-width: 78ch;
+    margin: 0 auto;
+    padding: 0 var(--pad) 5rem;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    padding: clamp(2.2rem, 7vw, 3.6rem) 0 1.6rem;
+    border-bottom: 2px solid var(--accent);
+  }
+
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 0.9rem;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    line-height: 1.04;
+    font-size: clamp(2rem, 7.5vw, 3.1rem);
+    margin: 0 0 0.7rem;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: clamp(1rem, 2.6vw, 1.12rem);
+    color: var(--fg-2);
+    margin: 0;
+    max-width: var(--measure);
+  }
+
+  .meta-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.1rem;
+    margin-top: 1.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    color: var(--fg-muted);
+  }
+
+  /* ---------- jump nav ---------- */
+
+  .jump {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--rule);
+    margin: 0 calc(-1 * var(--pad));
+    padding: 0.55rem var(--pad);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .jump-row {
+    display: flex;
+    gap: 0.4rem;
+    width: max-content;
+  }
+
+  .jump a {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: var(--fg-2);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0.3rem 0.55rem;
+    white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  .jump a:hover,
+  .jump a:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* ---------- sections ---------- */
+
+  .sec {
+    padding-top: 2.9rem;
+  }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.8rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 0.8rem;
+    margin-bottom: 1.4rem;
+  }
+
+  .sec-head .tag {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    flex: none;
+    padding-top: 0.35rem;
+  }
+
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.12;
+    font-size: clamp(1.35rem, 4.4vw, 1.85rem);
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    font-size: 1.04rem;
+    margin: 2rem 0 0.6rem;
+  }
+
+  p, li { max-width: var(--measure); }
+  p { margin: 0 0 1rem; }
+
+  strong { font-weight: 700; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ---------- pull quote / thesis ---------- */
+
+  .thesis {
+    border-left: 3px solid var(--accent);
+    padding: 0.2rem 0 0.2rem 1.1rem;
+    margin: 0 0 1.6rem;
+    font-size: clamp(1.05rem, 3vw, 1.22rem);
+    line-height: 1.45;
+    font-weight: 500;
+    color: var(--fg);
+    max-width: var(--measure);
+  }
+
+  /* ---------- lists ---------- */
+
+  ul.plain {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+
+  ul.plain > li {
+    padding-left: 1.15rem;
+    position: relative;
+  }
+
+  ul.plain > li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.72em;
+    width: 6px;
+    height: 6px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+  }
+
+  ol.steps {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    padding-left: 2.5rem;
+    position: relative;
+  }
+
+  ol.steps > li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 0.1em;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--accent);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0.05rem 0.3rem;
+  }
+
+  .q {
+    font-weight: 600;
+    color: var(--fg);
+  }
+
+  .why {
+    display: block;
+    color: var(--fg-muted);
+    font-size: 0.93rem;
+  }
+
+  /* ---------- tables ---------- */
+
+  .scroller {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 0 0.8rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--surface);
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 33rem;
+    font-size: 0.92rem;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 0.62rem 0.85rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+
+  thead th {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    font-weight: 600;
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  td.num, th.num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-size: 0.87rem;
+  }
+
+  .money { color: var(--accent); font-weight: 600; }
+  .free  { color: var(--good);   font-weight: 600; }
+
+  tr.total td {
+    background: var(--surface-2);
+    font-weight: 700;
+    border-top: 2px solid var(--accent);
+  }
+
+  .note {
+    font-family: var(--font-mono);
+    font-size: 0.73rem;
+    line-height: 1.5;
+    color: var(--fg-muted);
+    max-width: var(--measure);
+    margin: 0 0 1.4rem;
+  }
+
+  /* ---------- cards ---------- */
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 0.8rem;
+    margin: 0 0 1.2rem;
+  }
+
+  .card {
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--accent);
+    border-radius: 3px;
+    background: var(--surface);
+    padding: 1rem 1.05rem 1.15rem;
+  }
+
+  .card h4 {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    margin: 0 0 0.55rem;
+    font-weight: 600;
+  }
+
+  .card .big {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1.55rem;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    display: block;
+    margin-bottom: 0.4rem;
+  }
+
+  .card p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--fg-2);
+    max-width: none;
+  }
+
+  /* ---------- layers ---------- */
+
+  .layers {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 0 0 1.2rem;
+    background: var(--surface);
+  }
+
+  .layer {
+    display: grid;
+    grid-template-columns: 3.6rem 1fr;
+    gap: 0 0.9rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .layer:last-child { border-bottom: none; }
+
+  .layer .lnum {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding-top: 0.28em;
+  }
+
+  .layer .lname {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1rem;
+    margin: 0 0 0.2rem;
+  }
+
+  .layer .ldesc {
+    margin: 0;
+    font-size: 0.92rem;
+    color: var(--fg-2);
+    max-width: none;
+  }
+
+  .layer .lstack {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    margin: 0.35rem 0 0;
+    max-width: none;
+  }
+
+  /* ---------- callouts ---------- */
+
+  .callout {
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--good);
+    border-radius: 3px;
+    background: var(--surface);
+    padding: 0.95rem 1.1rem;
+    margin: 0 0 1.4rem;
+  }
+
+  .callout.risk { border-left-color: var(--warn); }
+
+  .callout .clabel {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--good);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.35rem;
+  }
+
+  .callout.risk .clabel { color: var(--warn); }
+
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* ---------- objections ---------- */
+
+  .obj {
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+    margin: 0;
+  }
+
+  .obj > div {
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 1.15rem;
+  }
+
+  .obj > div:last-child { border-bottom: none; padding-bottom: 0; }
+
+  .obj .said {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--fg);
+    margin: 0 0 0.4rem;
+    max-width: var(--measure);
+  }
+
+  .obj .said::before { content: "“"; color: var(--accent); }
+  .obj .said::after  { content: "”"; color: var(--accent); }
+
+  .obj p { margin: 0; }
+
+  /* ---------- tools chips ---------- */
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0 0 1.2rem;
+    padding: 0;
+    list-style: none;
+  }
+
+  .chips li {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0.22rem 0.45rem;
+    color: var(--fg-2);
+    background: var(--surface);
+    max-width: none;
+  }
+
+  /* ---------- diagram ---------- */
+
+  .mermaid {
+    margin: 0 0 1rem;
+    padding: 0.6rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--surface);
+    overflow-x: auto;
+  }
+
+  /* ---------- footer ---------- */
+
+  .foot {
+    margin-top: 3.4rem;
+    padding-top: 1rem;
+    border-top: 2px solid var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.73rem;
+    color: var(--fg-muted);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="kicker">Brief de reunión · 30 jul 2026</p>
+    <h1>Orquesta IA para Outlet Market</h1>
+    <p class="standfirst">Todo lo que tenés que tener claro antes de entrar: qué vendés exactamente, qué les preguntás, cómo se conecta cada pieza, qué cuesta operarlo y a cuánto conviene cobrarlo.</p>
+    <div class="meta-line">
+      <span>Cliente: Outlet Market</span>
+      <span>Producto: asistente IA de atención</span>
+      <span>Referencias vivas: Max · Sofi · Juli</span>
+    </div>
+  </header>
+
+  <nav class="jump" aria-label="Secciones">
+    <div class="jump-row">
+      <a href="#cliente">Cliente</a>
+      <a href="#pitch">Pitch</a>
+      <a href="#preguntas">Preguntas</a>
+      <a href="#stack">Stack</a>
+      <a href="#excel">Excel</a>
+      <a href="#flujo">Flujo</a>
+      <a href="#conectar">Conectar</a>
+      <a href="#costos">Costos</a>
+      <a href="#precio">Tu precio</a>
+      <a href="#limites">Límites</a>
+      <a href="#objeciones">Objeciones</a>
+      <a href="#cierre">Cierre</a>
+    </div>
+  </nav>
+
+  <!-- ================= CLIENTE ================= -->
+  <section class="sec" id="cliente">
+    <div class="sec-head">
+      <span class="tag">00 · El cliente</span>
+      <h2>Con quién te vas a sentar</h2>
+    </div>
+
+    <p><strong>Outlet Market</strong> (outletmarket.uy · @outletmarket.uy) vende <strong>electrodomésticos nuevos con detalles estéticos mínimos</strong> a precio de outlet. Rubros: cocina (hornos, microondas, lavavajillas), refrigeración (heladeras, freezers), lavado y secado, pequeños electrodomésticos, tecnología y algo de construcción y herramientas. Están en Montevideo.</p>
+
+    <p class="thesis">Ya tienen tienda online con precios publicados, y en la web dicen que <strong>las fotos de los productos las mandan por WhatsApp</strong>. Eso último es literalmente la herramienta que ya está construida y andando.</p>
+
+    <h3>Lo que esto te da a favor</h3>
+
+    <ul class="plain">
+      <li><strong>El catálogo ya existe y es consultable.</strong> Tienen tienda con fichas de producto y precios visibles — por la estructura de las direcciones es casi seguro WooCommerce, que tiene API. No hay que ordenar datos desde cero: es el escenario fácil de la pregunta más pesada del descubrimiento.</li>
+      <li><strong>Ya mandan fotos a mano por WhatsApp.</strong> No les tenés que explicar el problema, lo están viviendo. `enviar_foto` hace exactamente eso, solo, con precio y nombre al pie. Es tu mejor entrada a la conversación.</li>
+      <li><strong>Venden combos.</strong> Vi "Combo Cocina" (heladera + lavavajillas) y "Combo Mudanza" (heladera + cocina + microondas + lavarropas). Un asistente que detecta que alguien se está mudando y ofrece el combo en vez del producto suelto sube el ticket — y eso es una regla de negocio, o sea configuración, no desarrollo.</li>
+      <li><strong>Rubro de ticket alto.</strong> Una heladera no es un cubreasiento. Con tickets así, recuperar dos ventas por mes paga el abono varias veces. Usá eso cuando hablen de precio.</li>
+    </ul>
+
+    <h3>El detalle técnico que te conviene levantar vos</h3>
+
+    <div class="callout risk">
+      <span class="clabel">Preguntalo en la reunión</span>
+      <p>Un outlet de electrodomésticos suele tener <strong>unidades únicas</strong>: esta heladera tiene un golpe en la puerta izquierda, aquella otra un rayón al costado. No es un SKU con veinte iguales en depósito.</p>
+      <p>Eso cambia el diseño: el asistente no puede prometer "tengo tres" si en realidad hay una sola con un defecto puntual. Hay que definir con ellos <strong>cómo se describe el estado de cada unidad y si el stock es por unidad o por modelo</strong>. Traer esta pregunta a la mesa te va a posicionar mejor que cualquier parte del pitch: demuestra que entendiste su negocio y no les estás vendiendo una plantilla.</p>
+    </div>
+  </section>
+
+  <!-- ================= PITCH ================= -->
+  <section class="sec" id="pitch">
+    <div class="sec-head">
+      <span class="tag">01 · Posición</span>
+      <h2>El pitch, en treinta segundos</h2>
+    </div>
+
+    <p class="thesis">No es un chatbot de botones. Es un vendedor que trabaja 24/7 en el WhatsApp del negocio: entiende lo que le escriben, cotiza con los precios reales del catálogo, manda las fotos y videos del producto, toma el pedido, genera el link de pago, agenda y le pasa la conversación a una persona cuando hace falta.</p>
+
+    <p>La prueba está andando: <strong>tres asistentes en producción</strong> — Max (La Casa del Cubreasiento), Sofi (Buda Accesorios) y Juli. Mismo motor, personalidad y reglas distintas según el negocio. No es una demo: Max atiende clientes reales sobre un catálogo de cientos de publicaciones sincronizadas de Mercado Libre.</p>
+
+    <p>Lo que compran no es "un bot". Compran que <strong>ningún mensaje quede sin responder</strong> — a las once de la noche, un domingo, o cuando entran veinte consultas juntas después de un anuncio.</p>
+
+    <div class="callout">
+      <span class="clabel">Llevá la demo abierta</span>
+      <p>El chat de prueba con el cerebro real está en <strong>max-tester.onrender.com</strong>. Abrilo <em>diez minutos antes</em> de la reunión: el plan gratuito de Render duerme el servidor y el arranque en frío tarda casi un minuto. Si lo abrís delante de ellos y queda cargando, perdés el momento.</p>
+    </div>
+  </section>
+
+  <!-- ================= PREGUNTAS ================= -->
+  <section class="sec" id="preguntas">
+    <div class="sec-head">
+      <span class="tag">02 · Descubrimiento</span>
+      <h2>Lo que les tenés que preguntar antes de dar un número</h2>
+    </div>
+
+    <p>Sin estas respuestas cualquier precio es un tiro al aire: el costo de la IA escala con el volumen de mensajes, y el 80&nbsp;% del trabajo de implementación son las reglas del negocio, no el código.</p>
+
+    <p class="note">De la investigación de la sección 00 ya salen dos respuestas: el catálogo vive en su tienda online con precios visibles, y hoy mandan las fotos a mano. Las que siguen abiertas y más pesan: <strong>consultas por día</strong>, <strong>quién atiende y desde dónde</strong>, y <strong>si hacen anuncios a WhatsApp</strong>.</p>
+
+    <ul class="plain">
+      <li><span class="q">¿Cuántas consultas por WhatsApp reciben por día?</span><span class="why">Es la variable que define el costo mensual de la IA. Pediles que abran el teléfono y cuenten los chats de ayer.</span></li>
+      <li><span class="q">¿Qué número quieren usar y está en la app de WhatsApp Business?</span><span class="why">Con Coexistence el número sigue funcionando en el celular y se importan hasta 6 meses de historial. Si está en el WhatsApp común, hay que pasarlo a Business primero.</span></li>
+      <li><span class="q">¿Dónde viven los precios y el stock, y cuántos productos son?</span><span class="why">Mercado Libre, web, ERP, un Excel, o la cabeza del dueño. Si hay API, el catálogo se sincroniza solo; si no, hay trabajo previo de ordenar datos.</span></li>
+      <li><span class="q">¿El asistente cierra la venta o deriva?</span><span class="why">Cobrar con link de Mercado Pago es otro alcance (y necesita el token de producción de su cuenta). Atender y cotizar es el piloto barato.</span></li>
+      <li><span class="q">¿Quién atiende hoy, y cómo van a tomar el control cuando el asistente derive?</span><span class="why">Tres caminos: la app del celular, la bandeja de Meta Business Suite, o un panel web propio. Esta decisión cambia el precio y ya hizo fracasar una migración antes.</span></li>
+      <li><span class="q">¿Hacen publicidad que lleva a WhatsApp?</span><span class="why">Si hacen Click-to-WhatsApp, la API oficial de Meta deja de ser opcional. Es la única forma de responder el 100&nbsp;% de los leads de anuncios.</span></li>
+      <li><span class="q">¿Quién es admin de Meta Business y el negocio está verificado?</span><span class="why">La verificación tarda de horas a tres días y la tiene que hacer el dueño de la cuenta. Es la causa número uno de que una fecha de salida se corra.</span></li>
+      <li><span class="q">¿Instagram también, o solo WhatsApp?</span><span class="why">Los DM de Instagram se automatizan con la misma app de Meta, pero es alcance aparte. El camino gratis es derivar de Instagram a WhatsApp.</span></li>
+      <li><span class="q">Reglas del negocio: horarios, envíos, garantías, medios de pago, qué cotiza un humano.</span><span class="why">Acá está el laburo real. Pediles media hora con quien más sabe vender de su equipo.</span></li>
+    </ul>
+  </section>
+
+  <!-- ================= STACK ================= -->
+  <section class="sec" id="stack">
+    <div class="sec-head">
+      <span class="tag">03 · Arquitectura</span>
+      <h2>El stack, en cinco capas</h2>
+    </div>
+
+    <p>Explicalo así, de arriba hacia abajo. Cada capa es reemplazable sin tocar las otras — eso es lo que les tenés que transmitir: no quedan atados a nada.</p>
+
+    <div class="layers">
+      <div class="layer">
+        <span class="lnum">Capa 1</span>
+        <div>
+          <p class="lname">Canal — por dónde entra el mensaje</p>
+          <p class="ldesc">La API oficial de WhatsApp de Meta (Cloud API). Se puede conectar directo a Meta, o a través de un proveedor autorizado que simplifica el alta y el manejo de plantillas. El número queda al mismo tiempo en el celular y en la API.</p>
+          <p class="lstack">WhatsApp Cloud API · 360dialog (BSP) · Coexistence · webhook</p>
+        </div>
+      </div>
+      <div class="layer">
+        <span class="lnum">Capa 2</span>
+        <div>
+          <p class="lname">Servidor — el que recibe y contesta</p>
+          <p class="ldesc">Un servicio Node.js prendido 24/7. Recibe el mensaje, lo junta si el cliente manda varios seguidos, muestra "escribiendo…", y manda la respuesta con sus fotos y videos.</p>
+          <p class="lstack">Node.js · Express · Railway o Render</p>
+        </div>
+      </div>
+      <div class="layer">
+        <span class="lnum">Capa 3</span>
+        <div>
+          <p class="lname">Cerebro — el que decide qué contestar</p>
+          <p class="ldesc">Claude, con un prompt que contiene todas las reglas del negocio y un juego de herramientas que puede ejecutar. Ve las fotos que manda el cliente y reconoce el modelo del producto.</p>
+          <p class="lstack">Claude Sonnet 5 · herramientas (tools) · caché de prompt</p>
+        </div>
+      </div>
+      <div class="layer">
+        <span class="lnum">Capa 4</span>
+        <div>
+          <p class="lname">Memoria — lo que no se pierde</p>
+          <p class="ldesc">Base de datos con el historial de cada conversación, los pedidos, los avisos de transferencia, las métricas de atención y las lecciones que el asistente destila cada día de sus propias charlas. Sobrevive a cada actualización del código.</p>
+          <p class="lstack">Postgres (Neon) · sesión, pedidos, métricas, aprendizaje</p>
+        </div>
+      </div>
+      <div class="layer">
+        <span class="lnum">Capa 5</span>
+        <div>
+          <p class="lname">Integraciones — lo que lo hace útil</p>
+          <p class="ldesc">Catálogo sincronizado automáticamente cada seis horas, links de pago, aviso al equipo por plantilla aprobada cuando hay una venta o una derivación, y un panel web para ver y tomar conversaciones.</p>
+          <p class="lstack">API del catálogo (Mercado Libre en Max · WooCommerce en Outlet Market) · Mercado Pago Checkout Pro · plantillas Meta · panel /equipo</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Las herramientas que ya existen y funcionan</h3>
+    <p>Esta lista es tu mejor prueba de que no es un chatbot. Son las trece acciones que Max puede ejecutar solo, en medio de una conversación:</p>
+
+    <ul class="chips">
+      <li>consultar_precio</li>
+      <li>enviar_foto</li>
+      <li>link_web</li>
+      <li>solicitar_turno</li>
+      <li>tomar_pedido</li>
+      <li>crear_link_pago</li>
+      <li>confirmar_transferencia</li>
+      <li>descripcion_oficial</li>
+      <li>mostrar_capitoneado</li>
+      <li>mostrar_ecocuero</li>
+      <li>mostrar_tela</li>
+      <li>mostrar_cuero_sport</li>
+      <li>derivar_a_humano</li>
+    </ul>
+
+    <p class="note">Las cuatro "mostrar_" son específicas del rubro cubreasientos. Para Outlet Market se reemplazan por las de su catálogo: mismo motor, otras herramientas. Eso es exactamente lo que se configura en la implementación.</p>
+  </section>
+
+  <!-- ================= EXCEL ================= -->
+  <section class="sec" id="excel">
+    <div class="sec-head">
+      <span class="tag">03b · Caso puntual</span>
+      <h2>Si quieren manejar el stock desde un Excel en OneDrive</h2>
+    </div>
+
+    <p><strong>Sí, se puede, y para un outlet probablemente sea mejor que la web.</strong> El asistente lee la planilla cada pocos minutos y queda al día solo. Y funciona <em>tanto para productos publicados como para los que nunca subieron a la tienda</em>: si está en el Excel, lo puede cotizar.</p>
+
+    <p>Encaja sin pelear con lo que ya existe: el catálogo vive en un solo lugar en memoria y hoy se alimenta de la API de la tienda. Sumar el Excel es <strong>agregar una segunda fuente que escribe en el mismo lugar</strong>. El cerebro no se entera del cambio.</p>
+
+    <h3>Tres formas de leer el archivo, de menor a mayor prolijidad</h3>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th>Camino</th>
+            <th>Qué necesitan dar</th>
+            <th>Contras</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Link de solo lectura</strong></td>
+            <td>Un vínculo de "cualquiera con el link puede ver" sobre ese archivo. Cinco minutos, sin informática de por medio.</td>
+            <td>Quien tenga el link tiene el archivo. Si alguien lo regenera, el sync se corta y hay que avisar.</td>
+          </tr>
+          <tr>
+            <td><strong>Power Automate</strong></td>
+            <td>Un flujo "cuando se modifica este archivo → avisar a esta dirección". No requiere programar ni permisos de Azure.</td>
+            <td>Depende de que su licencia de Microsoft 365 lo incluya.</td>
+          </tr>
+          <tr>
+            <td><strong>Microsoft Graph</strong><br/><em>lo correcto a futuro</em></td>
+            <td>Una aplicación registrada por su administrador de Microsoft 365, con permiso de lectura acotado a ese archivo.</td>
+            <td>Pasa por su área de sistemas — ahí se va el tiempo de calendario, no en el código.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note">Con Graph ni siquiera hace falta bajar y abrir el archivo: se pueden leer las celdas directamente como datos. Es el camino más limpio, pero el de solo lectura alcanza perfectamente para arrancar y se migra después sin tocar el resto.</p>
+
+    <h3>Qué tan "inmediato" es, en serio</h3>
+
+    <p>Se apilan tres tiempos: que ellos <strong>guarden</strong> y OneDrive suba el archivo, que nosotros <strong>detectemos</strong> el cambio, y que se recargue en memoria — lo último es instantáneo. En la práctica, <strong>uno a cinco minutos</strong> desde que tocan la planilla hasta que el asistente lo sabe.</p>
+
+    <p>No prometas "instantáneo". Prometé "a los pocos minutos", que igual es infinitamente mejor que hoy. Si en algún momento necesitan segundos, el Excel deja de ser la herramienta y el stock tiene que vivir en un sistema.</p>
+
+    <h3>Por qué acá el Excel no es un parche</h3>
+
+    <div class="callout">
+      <span class="clabel">Se conecta con el problema de las unidades únicas</span>
+      <p>Una tienda online piensa en modelos con cantidad: "heladera X, quedan 4". Un outlet piensa en <em>unidades</em>: esta heladera con un golpe en la puerta, aquella con un rayón al costado, cada una con su precio.</p>
+      <p>Una planilla con <strong>una fila por unidad física</strong> — código, modelo, precio, defecto, ubicación, vendida sí/no — representa eso mucho mejor que una ficha de producto. Planteáselo así y el Excel deja de sonar a improvisación: es la herramienta adecuada para cómo funciona su negocio.</p>
+    </div>
+
+    <h3>Las cuatro cosas que hay que acordar antes</h3>
+
+    <ul class="plain">
+      <li><strong>Columnas fijas.</strong> Se define una vez qué columna es qué y no se toca. El día que alguien renombra "Precio" a "Precio final" o escribe "2 unidades" donde va un número, el sync falla. Va con validación y con un aviso cuando algo no cuadra, para que no falle en silencio y el asistente cotice stock viejo.</li>
+      <li><strong>Una sola persona escribe.</strong> Si dos editan el mismo archivo, OneDrive genera copias en conflicto y podemos terminar leyendo la equivocada.</li>
+      <li><strong>Guardar y cerrar.</strong> Si alguien deja el Excel abierto con cambios sin guardar, la versión en la nube está vieja. No es una falla nuestra, pero la van a percibir así — decilo de entrada.</li>
+      <li><strong>Qué pasa entre que se vende en el local y alguien lo tacha en la planilla.</strong> Es el único riesgo real. La forma prolija de cubrirlo es que el asistente diga "te lo reservo y un asesor te confirma" en vez de "sí, lo tengo". Es una decisión de proceso de ellos, no técnica.</li>
+    </ul>
+
+    <p class="note">Trabajo del lado nuestro: la lectura y el sync son chicos, un par de días. El tiempo de calendario depende de por dónde vayan para el acceso al archivo.</p>
+  </section>
+
+  <!-- ================= FLUJO ================= -->
+  <section class="sec" id="flujo">
+    <div class="sec-head">
+      <span class="tag">04 · Recorrido</span>
+      <h2>Qué pasa entre que el cliente escribe y le llega la respuesta</h2>
+    </div>
+
+    <p>Si te piden que expliques "cómo funciona", dibujales esto. Son cuatro segundos de recorrido:</p>
+
+    <pre class="mermaid">
+flowchart TD
+    A["Cliente escribe por WhatsApp"] --> B["Meta Cloud API"]
+    B -->|webhook| C["Servidor Node 24/7"]
+    C --> D["Junta mensajes seguidos<br/>y muestra 'escribiendo...'"]
+    D --> E["Cerebro Claude<br/>reglas del negocio + historial"]
+    E --> F{"¿Necesita datos<br/>o accion?"}
+    F -->|precio, foto| G["Catalogo sincronizado"]
+    F -->|cobrar| H["Link de Mercado Pago"]
+    F -->|no sabe / piden humano| I["Aviso al equipo<br/>y chat sin leer"]
+    F -->|solo responder| J["Respuesta"]
+    G --> J
+    H --> J
+    I --> J
+    J --> K["Sale por la API<br/>texto + fotos + videos"]
+    K --> L["Cliente"]
+    E --> M["Memoria en base de datos"]
+    </pre>
+
+    <p>Dos detalles que conviene subrayar porque son los que generan confianza:</p>
+
+    <ul class="plain">
+      <li>Cuando el asistente <strong>no sabe algo, no inventa</strong>: avisa que lo consulta y dispara la derivación. El equipo recibe el aviso y ese chat queda resaltado sin leer en la bandeja.</li>
+      <li>Cuando <strong>un humano contesta a mano</strong>, el asistente se calla en esa conversación. No hay dos voces hablando encima.</li>
+    </ul>
+  </section>
+
+  <!-- ================= CONECTAR ================= -->
+  <section class="sec" id="conectar">
+    <div class="sec-head">
+      <span class="tag">05 · Puesta en marcha</span>
+      <h2>Cómo se conecta y qué te tienen que dar ellos</h2>
+    </div>
+
+    <p>Este es el orden real, y es una secuencia: cada paso depende del anterior. Mostráselo como lo que es — un checklist de accesos, no magia.</p>
+
+    <ol class="steps">
+      <li><strong>Elegir el número y pasarlo a WhatsApp Business.</strong> Gratis, conserva los chats. Con Coexistence el número sigue andando en el celular mientras el asistente atiende por la API.</li>
+      <li><strong>Verificar el negocio en Meta Business.</strong> Lo hace el admin de la cuenta con los datos de la empresa (razón social, dirección, y a veces un documento). De horas a tres días. Se puede avanzar con el resto mientras tanto.</li>
+      <li><strong>Dar de alta el número en la API</strong> y escanear un QR desde el celular. De acá salen los tres datos técnicos: identificador del número, token permanente y palabra secreta del webhook. Nunca van al código: se cargan como variables de entorno en el servidor.</li>
+      <li><strong>Conectar el catálogo.</strong> Credenciales de la API de su tienda, o un export de precios y stock. Es lo que le permite cotizar con números reales en vez de decir "consultá".</li>
+      <li><strong>Cargar los datos de cobro</strong> si el asistente va a cobrar: token de producción de Mercado Pago o los datos de la cuenta bancaria. Los pega el cliente, nunca nosotros.</li>
+      <li><strong>Escribir las reglas del negocio.</strong> Horarios, zonas de envío, garantías, medios de pago y descuentos, qué tiene que cotizar una persona. Es la sesión de trabajo más importante de todo el proyecto.</li>
+      <li><strong>Definir a qué número van los avisos.</strong> Tiene que ser un número distinto del asistente — la API no puede escribirse a sí misma. Y necesita una plantilla aprobada por Meta para que el aviso llegue siempre.</li>
+      <li><strong>Probar con el equipo presente y salir al aire.</strong> El corte con Coexistence son minutos y el celular no deja de funcionar en ningún momento.</li>
+    </ol>
+
+    <div class="callout risk">
+      <span class="clabel">No prometas una fecha en la reunión</span>
+      <p>Los pasos 2 y 7 dependen de que Meta apruebe (verificación del negocio y plantillas). Decí "dos a cuatro semanas desde que tengamos los accesos", no "el lunes que viene".</p>
+    </div>
+  </section>
+
+  <!-- ================= COSTOS ================= -->
+  <section class="sec" id="costos">
+    <div class="sec-head">
+      <span class="tag">06 · Costos de operación</span>
+      <h2>Lo que cuesta tener esto prendido</h2>
+    </div>
+
+    <p>Primero lo más importante, porque es contraintuitivo y desarma la objeción del precio antes de que aparezca:</p>
+
+    <div class="callout risk">
+      <span class="clabel">Ojo: esto cambia el 1.º de octubre de 2026</span>
+      <p><strong>Hoy</strong> responder es gratis. Desde julio de 2025 Meta cobra por mensaje y todo lo enviado dentro de la ventana de 24 horas posterior al mensaje del cliente no se cobra.</p>
+      <p><strong>Desde el 1.º de octubre de 2026 eso se termina:</strong> Meta vuelve a cobrar los mensajes de servicio — las respuestas libres dentro de la ventana de 24 h — a la misma tarifa que ya cobra los utilitarios. La ventana de 24 h sigue existiendo, lo que desaparece es que sea gratis.</p>
+      <p>Traducción para la reunión: hoy la mensajería es casi cero y el costo real es la IA. En dos meses se le suma un costo por mensaje respondido — chico, pero que escala con el volumen. <strong>Está contemplado en la tabla de abajo</strong>, y es un argumento para cerrar ahora en vez de en noviembre.</p>
+    </div>
+
+    <h3>Costos fijos mensuales, pagados a terceros</h3>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th>Componente</th>
+            <th class="num">Mensual</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cerebro IA (Claude API)</td>
+            <td class="num money">US$ 25 – 90</td>
+            <td>Único costo que escala con el volumen. Ver desglose abajo.</td>
+          </tr>
+          <tr>
+            <td>Servidor 24/7</td>
+            <td class="num money">US$ 5 – 20</td>
+            <td>Railway. El plan gratis de Render se duerme y corta la conexión.</td>
+          </tr>
+          <tr>
+            <td>Base de datos</td>
+            <td class="num money">US$ 0 – 19</td>
+            <td>Neon. El plan gratis alcanza para arrancar.</td>
+          </tr>
+          <tr>
+            <td>Proveedor WhatsApp (BSP)</td>
+            <td class="num money">≈ US$ 55</td>
+            <td>360dialog, €49 por número, sin recargo sobre los mensajes de Meta. <strong>Evitable</strong>: conectando directo a Meta es US$&nbsp;0.</td>
+          </tr>
+          <tr>
+            <td>Mensajes de respuesta<br/><em>hasta el 30 set 2026</em></td>
+            <td class="num free">US$ 0</td>
+            <td>Ventana de servicio de 24 h. Gratis.</td>
+          </tr>
+          <tr>
+            <td>Mensajes de respuesta<br/><em>desde el 1.º oct 2026</em></td>
+            <td class="num money">US$ 10 – 60</td>
+            <td>≈ US$ 0,01 por mensaje respondido, a tarifa de utilitario. Unos 6 a 10 centavos por conversación. Baja por volumen.</td>
+          </tr>
+          <tr>
+            <td>Plantillas iniciadas por el negocio</td>
+            <td class="num money">≈ US$ 0,01 – 0,08</td>
+            <td>Por mensaje. Utilitarias (avisos) baratas, marketing bastante más caro.</td>
+          </tr>
+          <tr class="total">
+            <td>Total con BSP</td>
+            <td class="num">US$ 85 – 185<br/>US$ 95 – 245 <em>desde oct</em></td>
+            <td>Directo a Meta: US$ 30 – 130 (US$ 40 – 190 desde octubre)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note">Los valores por mensaje son de orden de magnitud para "resto de Latinoamérica" (donde cae Uruguay); Meta los ajusta por país y aplica descuentos por volumen en utilitarios y servicio, no en marketing. La página oficial de tarifas de Meta no se deja leer desde acá, así que <strong>la fila exacta de Uruguay queda por confirmar</strong> — no la pongas por escrito en una propuesta sin chequearla. El resto de la tabla son precios de lista vigentes.</p>
+
+    <h3>De dónde sale el costo de la IA</h3>
+
+    <p>Este es el número que te van a discutir, así que conviene tenerlo desarmado. Con Claude Sonnet 5 a US$&nbsp;3 por millón de tokens de entrada y US$&nbsp;15 de salida, y con la parte fija del prompt en caché (que la abarata diez veces), cada mensaje respondido sale alrededor de <strong>dos a tres centavos de dólar</strong>. Una conversación de venta completa, unos quince mensajes, ronda los <strong>35 centavos</strong>.</p>
+
+    <div class="cards">
+      <div class="card">
+        <h4>Volumen bajo</h4>
+        <span class="big">US$ 35</span>
+        <p>100 conversaciones al mes con Sonnet 5. Con Haiku 4.5, unos US$&nbsp;12.</p>
+      </div>
+      <div class="card">
+        <h4>Volumen medio</h4>
+        <span class="big">US$ 105</span>
+        <p>300 conversaciones al mes. Con Haiku 4.5, unos US$&nbsp;36.</p>
+      </div>
+      <div class="card">
+        <h4>Volumen alto</h4>
+        <span class="big">US$ 210</span>
+        <p>600 conversaciones al mes. Con Haiku 4.5, unos US$&nbsp;70.</p>
+      </div>
+    </div>
+
+    <p>La palanca es el modelo: <strong>Haiku 4.5 cuesta un tercio de Sonnet 5</strong> (US$&nbsp;1 y US$&nbsp;5 por millón). Se arranca en Sonnet por calidad de conversación y, si el volumen se dispara, se baja a Haiku. Es un cambio de una línea de configuración, sin tocar nada más — y es exactamente el camino que ya recorrió Max, en los dos sentidos.</p>
+  </section>
+
+  <!-- ================= PRECIO ================= -->
+  <section class="sec" id="precio">
+    <div class="sec-head">
+      <span class="tag">07 · Tu precio</span>
+      <h2>A cuánto conviene cobrarlo</h2>
+    </div>
+
+    <p>Esto es decisión tuya; van rangos de referencia armados sobre dos datos duros: lo que cuesta operarlo (arriba) y lo que cobra el mercado por mucho menos.</p>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th>Concepto</th>
+            <th class="num">Rango</th>
+            <th>Qué incluye</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Implementación</strong><br/>pago único</td>
+            <td class="num money">US$ 900 – 1.500</td>
+            <td>Alta en Meta, carga del catálogo, escritura de las reglas del negocio, herramientas propias del rubro, pruebas y capacitación del equipo. Dos a cuatro semanas de trabajo.</td>
+          </tr>
+          <tr>
+            <td><strong>Abono mensual</strong><br/>hasta un tope de conversaciones</td>
+            <td class="num money">US$ 350 – 500</td>
+            <td>Infraestructura, IA, monitoreo, soporte y ajustes de las reglas. Todos los costos de la tabla anterior van adentro.</td>
+          </tr>
+          <tr>
+            <td><strong>Excedente</strong></td>
+            <td class="num money">US$ 0,50 – 1</td>
+            <td>Por conversación arriba del tope, o salto a la banda siguiente.</td>
+          </tr>
+          <tr>
+            <td><strong>Piloto</strong><br/>si dudan</td>
+            <td class="num money">US$ 250 / mes</td>
+            <td>Alcance recortado: atiende, asesora y cotiza, pero no cobra. Un mes, sin pago de implementación, para que vean números antes de comprometerse.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Con un abono de US$&nbsp;400 y una infraestructura de US$&nbsp;120, el margen queda cerca de <strong>US$&nbsp;280 por mes por cliente</strong>. El abono es lo que hace sostenible el negocio: la implementación apenas paga el trabajo inicial.</p>
+
+    <div class="callout">
+      <span class="clabel">El anclaje que te conviene usar</span>
+      <p>Wati cuesta unos US$&nbsp;49 por mes y Respond.io unos US$&nbsp;79 — y son <strong>solamente una bandeja de entrada compartida</strong>. Sin IA, sin catálogo, sin cotizar, sin cobrar, y varios encima suman un recargo sobre cada mensaje. Vos no estás vendiendo una bandeja: estás vendiendo a alguien que atiende.</p>
+      <p>El otro anclaje, el que de verdad cierra: <strong>medio sueldo de una persona atendiendo WhatsApp</strong>, que además no trabaja de noche ni los domingos.</p>
+    </div>
+  </section>
+
+  <!-- ================= LIMITES ================= -->
+  <section class="sec" id="limites">
+    <div class="sec-head">
+      <span class="tag">08 · Honestidad</span>
+      <h2>Los límites — decilos vos, antes de que los descubran</h2>
+    </div>
+
+    <p>Cada uno de estos ya pasó en producción. Decirlos en la reunión te compra credibilidad y te ahorra un reclamo en el mes tres.</p>
+
+    <ul class="plain">
+      <li><strong>La IA se puede equivocar.</strong> Por eso existen la derivación a humano, los avisos al equipo y el panel para tomar el control. El diseño asume el error; no lo niega.</li>
+      <li><strong>La vía gratis tiene un precio escondido.</strong> Conectarse sin la API oficial (con una librería no oficial de WhatsApp Web) sale cero pesos, pero hay riesgo de que Meta bane el número y hay una limitación conocida que retiene el primer mensaje de los leads de anuncios hasta que alguien responde a mano. Si hacen publicidad, la API oficial no es opcional.</li>
+      <li><strong>Fuera de las 24 horas no se puede escribir libremente.</strong> Para reengancharse hace falta una plantilla aprobada por Meta, y la aprobación tarda. Los mensajes fuera de la ventana sin plantilla, Meta los acepta y los descarta en silencio.</li>
+      <li><strong>Sin catálogo consultable no hay cotización.</strong> Si los precios no están en ningún sistema, primero hay un trabajo de ordenar datos que conviene cotizar aparte.</li>
+      <li><strong>El equipo tiene que querer usarlo.</strong> En un caso real se revirtió una migración entera porque a los asesores no les gustó el panel y volvieron al celular. Preguntá desde el día uno dónde quieren atender ellos.</li>
+      <li><strong>Instagram es otro alcance.</strong> Automatizar los DM se puede con la misma app de Meta, pero no lo metas en el mismo precio.</li>
+    </ul>
+  </section>
+
+  <!-- ================= OBJECIONES ================= -->
+  <section class="sec" id="objeciones">
+    <div class="sec-head">
+      <span class="tag">09 · Respuestas</span>
+      <h2>Las objeciones que te van a hacer</h2>
+    </div>
+
+    <div class="obj">
+      <div>
+        <p class="said">Es caro.</p>
+        <p>Compará contra lo correcto: no contra cero, sino contra medio sueldo de alguien atendiendo, y contra las ventas que hoy se pierden a las once de la noche y los domingos. Preguntales cuánto vale un ticket promedio: si el asistente recupera dos ventas por mes, ya se pagó.</p>
+      </div>
+      <div>
+        <p class="said">El cliente se va a dar cuenta de que es un bot.</p>
+        <p>Habla rioplatense, saluda según la hora real, se toma su tiempo antes de responder, manda fotos reales del producto y llama al cliente por su nombre. Y cuando no sabe, dice que lo consulta y pasa a una persona. Abrí la demo y que escriban ellos.</p>
+      </div>
+      <div>
+        <p class="said">¿Le saca el trabajo a nuestro equipo?</p>
+        <p>Al contrario: filtra y prepara. El asistente hace las cien preguntas repetidas de precio, medida y disponibilidad, y le entrega al vendedor la conversación caliente ya con los datos. Los chats derivados quedan resaltados sin leer para que nadie los pierda.</p>
+      </div>
+      <div>
+        <p class="said">Ya tenemos un chatbot.</p>
+        <p>Tres preguntas alcanzan para separar las cosas: ¿entiende texto libre o son botones? ¿Dice el precio real de un producto puntual? ¿Puede tomar un pedido y generar un link de pago? Si la respuesta es no, tienen un menú, no un asistente.</p>
+      </div>
+      <div>
+        <p class="said">Meta está sacando su propio asistente con IA. ¿No lo vamos a tener gratis?</p>
+        <p>Es cierto que existe y que desde agosto de 2026 Meta lo cobra por consumo, unos centavos por conversación. Pero es un asistente genérico: no conoce su catálogo, no sabe qué unidad tiene qué golpe, no arma un combo mudanza, no genera el link de pago, no avisa al vendedor ni le deja el chat marcado sin leer. Es la diferencia entre alguien que contesta y alguien que <em>vende</em>. Si aparece algo de Meta que convenga, se integra: la capa del canal es reemplazable sin tocar el resto.</p>
+      </div>
+      <div>
+        <p class="said">¿Dónde quedan nuestros datos?</p>
+        <p>Las conversaciones viven en una base de datos del proyecto, y las credenciales de la cuenta de WhatsApp, del catálogo y de los cobros son suyas: las cargan ellos y las pueden revocar cuando quieran. El número también es suyo y sigue en su celular.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= CIERRE ================= -->
+  <section class="sec" id="cierre">
+    <div class="sec-head">
+      <span class="tag">10 · Cierre</span>
+      <h2>Con qué te tenés que ir de la reunión</h2>
+    </div>
+
+    <p>No salgas con "lo vamos a pensar". Salí con una de estas tres cosas, en orden de preferencia:</p>
+
+    <ol class="steps">
+      <li><strong>Una fecha de demo con su catálogo cargado.</strong> Es el cierre más potente: verlo cotizando <em>sus</em> productos convierte mucho más que cualquier presentación. Y en este caso es fácil, porque el catálogo ya está publicado en su tienda — pediles el acceso a la API o un export y andá con la demo lista.</li>
+      <li><strong>El alcance del piloto definido</strong> — atención y cotización, o venta completa con cobro — más los accesos de los puntos 1 y 4 del checklist.</li>
+      <li><strong>El nombre del admin de Meta Business</strong> y que arranquen la verificación del negocio esta semana. Es lo único que no podés acelerar después, así que empujá para que empiece hoy.</li>
+    </ol>
+
+    <p class="note">Anotá durante la reunión: consultas por día · dónde viven los precios · quién atiende y desde dónde · si hacen anuncios a WhatsApp. Con esos cuatro datos cotizás firme el mismo día.</p>
+  </section>
+
+  <p class="foot">Brief interno · Orquesta IA · preparado a partir del código y la operación reales de Max, Sofi y Juli, más investigación pública sobre Outlet Market. Los precios de terceros son de lista vigente a julio 2026 e incluyen el cambio de Meta del 1.º de octubre de 2026; la tarifa exacta por mensaje para Uruguay queda por confirmar. Los rangos de venta son de referencia y la decisión comercial es tuya.</p>
+
+</div>

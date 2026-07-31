@@ -1,0 +1,263 @@
+<title>Presupuesto — Orquesta IA · Outlet Market</title>
+
+<style>
+  :root {
+    --bg: #F6F5F2; --surface: #FCFCFB; --surface-2: #ECEAE5;
+    --fg: #16181C; --fg-2: #3A3F47; --fg-muted: #6E727A;
+    --rule: #D8D5CE; --accent: #0E6E5E;
+    --f-d: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --f-m: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121316; --surface:#1A1C20; --surface-2:#23262B; --fg:#ECEDEF;
+            --fg-2:#C9CCD1; --fg-muted:#91959C; --rule:#33373D; --accent:#4FB8A2; }
+  }
+  :root[data-theme="dark"] { --bg:#121316; --surface:#1A1C20; --surface-2:#23262B;
+    --fg:#ECEDEF; --fg-2:#C9CCD1; --fg-muted:#91959C; --rule:#33373D; --accent:#4FB8A2; }
+  :root[data-theme="light"] { --bg:#F6F5F2; --surface:#FCFCFB; --surface-2:#ECEAE5;
+    --fg:#16181C; --fg-2:#3A3F47; --fg-muted:#6E727A; --rule:#D8D5CE; --accent:#0E6E5E; }
+
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:var(--f-d);
+         font-size:15px; line-height:1.5; -webkit-text-size-adjust:100%; }
+  .sheet { max-width: 62rem; margin:0 auto; padding: clamp(1.1rem,4vw,2rem) clamp(1.1rem,4vw,2.2rem) 3rem; }
+
+  /* header */
+  .top { border-bottom:3px solid var(--accent); padding-bottom:0.7rem; }
+  .brand { font-family:var(--f-m); font-size:0.68rem; letter-spacing:0.17em;
+           text-transform:uppercase; color:var(--accent); margin:0 0 0.7rem; }
+  h1 { font-family:var(--f-d); font-weight:800; letter-spacing:-0.025em; line-height:1.08;
+       font-size:clamp(1.35rem,4.2vw,1.85rem); margin:0 0 0.35rem; text-wrap:balance; }
+  .lede { margin:0; color:var(--fg-2); font-size:0.95rem; max-width:62ch; }
+  .meta { display:flex; flex-wrap:wrap; gap:0.3rem 1.5rem; margin-top:0.8rem;
+          font-family:var(--f-m); font-size:0.7rem; color:var(--fg-muted); }
+  .meta b { color:var(--fg); font-weight:600; }
+  .todo { color:#9C4221; }
+  @media (prefers-color-scheme: dark) { .todo { color:#E0865C; } }
+
+  /* columns */
+  .cols { display:grid; grid-template-columns:1fr; gap:0 2rem; margin-top:1.1rem; }
+  @media (min-width:56rem) { .cols { grid-template-columns:1fr 1fr; } }
+
+  h2 { font-family:var(--f-m); font-size:0.68rem; letter-spacing:0.13em; text-transform:uppercase;
+       color:var(--accent); font-weight:700; margin:1.15rem 0 0.45rem;
+       border-top:1px solid var(--rule); padding-top:0.5rem; }
+  .cols > div > h2:first-child { margin-top:0; border-top:none; padding-top:0; }
+
+  ul { list-style:none; padding:0; margin:0 0 0.6rem;
+       display:flex; flex-direction:column; gap:0.28rem; }
+  li { padding-left:0.95rem; position:relative; font-size:0.9rem; }
+  li::before { content:""; position:absolute; left:0; top:0.55em; width:0.34rem; height:0.34rem;
+               background:var(--accent); border-radius:50%; }
+  ul.dash li::before { background:var(--fg-muted); border-radius:0; height:1.5px; width:0.42rem; top:0.72em; }
+
+  p { margin:0 0 0.6rem; font-size:0.9rem; }
+
+  /* price */
+  .duo { display:grid; grid-template-columns:1fr 1fr; gap:0.55rem; margin:0 0 0.7rem; }
+  .pbox { border:1px solid var(--rule); border-top:3px solid var(--accent); border-radius:3px;
+          background:var(--surface); padding:0.6rem 0.7rem 0.7rem; }
+  .pbox .k { font-family:var(--f-m); font-size:0.62rem; letter-spacing:0.1em; text-transform:uppercase;
+             color:var(--fg-muted); font-weight:600; display:block; margin-bottom:0.25rem; }
+  .pbox .v { font-family:var(--f-d); font-weight:800; font-size:1.5rem; letter-spacing:-0.03em;
+             font-variant-numeric:tabular-nums; display:block; line-height:1.05; }
+  .pbox .u { font-family:var(--f-m); font-size:0.66rem; color:var(--fg-muted); }
+
+  /* tables */
+  table { border-collapse:collapse; width:100%; font-size:0.83rem; }
+  .tw { border:1px solid var(--rule); border-radius:3px; background:var(--surface);
+        overflow:hidden; margin:0 0 0.6rem; }
+  th, td { text-align:left; padding:0.3rem 0.5rem; border-bottom:1px solid var(--rule); }
+  thead th { font-family:var(--f-m); font-size:0.6rem; letter-spacing:0.09em; text-transform:uppercase;
+             color:var(--fg-muted); background:var(--surface-2); font-weight:600; }
+  tbody tr:last-child td { border-bottom:none; }
+  td.n, th.n { font-family:var(--f-m); font-variant-numeric:tabular-nums; text-align:right;
+               white-space:nowrap; font-size:0.8rem; }
+  tr.tot td { background:var(--surface-2); font-weight:700; border-top:2px solid var(--accent); }
+  .who { color:var(--fg-muted); font-size:0.78rem; }
+
+  /* callout */
+  .cal { border:1px solid var(--rule); border-left:3px solid var(--accent); border-radius:3px;
+         background:var(--surface); padding:0.55rem 0.7rem; margin:0 0 0.65rem; }
+  .cal .k { font-family:var(--f-m); font-size:0.61rem; letter-spacing:0.1em; text-transform:uppercase;
+            color:var(--accent); font-weight:700; display:block; margin-bottom:0.2rem; }
+  .cal p { margin:0; font-size:0.86rem; }
+  .cal p + p { margin-top:0.3rem; }
+
+  .fine { font-family:var(--f-m); font-size:0.66rem; line-height:1.5; color:var(--fg-muted); margin:0 0 0.5rem; }
+
+  /* signature */
+  .sig { margin-top:1.2rem; border-top:3px solid var(--accent); padding-top:0.9rem;
+         display:grid; grid-template-columns:1fr 1fr; gap:2rem; }
+  .sig .ln { border-top:1px solid var(--fg-muted); margin-top:2.2rem; padding-top:0.3rem;
+             font-family:var(--f-m); font-size:0.66rem; color:var(--fg-muted); }
+  .foot { margin-top:0.9rem; font-family:var(--f-m); font-size:0.62rem; line-height:1.5; color:var(--fg-muted); }
+
+  @media print {
+    :root { --bg:#fff; --surface:#fff; --surface-2:#f5f5f3; --fg:#000; --fg-2:#1c1c1c;
+            --fg-muted:#585858; --rule:#b4b4b4; }
+    @page { size:A4; margin:13mm 13mm; }
+    body { font-size:8.6pt; line-height:1.44; }
+    .sheet { max-width:none; padding:0; }
+    .top { padding-bottom:0.6rem; border-bottom-width:2.5pt; }
+    .brand { margin-bottom:0.5rem; font-size:0.64rem; }
+    h1 { font-size:15.5pt; margin-bottom:0.25rem; }
+    .lede { font-size:8.8pt; max-width:none; }
+    .meta { margin-top:0.6rem; gap:0.25rem 1.3rem; font-size:0.64rem; }
+    .cols { grid-template-columns:1fr 1fr; gap:0 1.6rem; margin-top:0.85rem; }
+    h2 { font-size:0.64rem; margin:0.95rem 0 0.4rem; padding-top:0.42rem; }
+    li, p, .cal p { font-size:8.5pt; }
+    ul { gap:0.24rem; margin-bottom:0.55rem; }
+    li { padding-left:0.85rem; }
+    p { margin-bottom:0.5rem; }
+    .duo { gap:0.5rem; margin-bottom:0.6rem; }
+    .pbox { padding:0.55rem 0.65rem 0.6rem; }
+    .pbox .v { font-size:17pt; }
+    table { font-size:7.9pt; }
+    th, td { padding:0.26rem 0.45rem; }
+    td.n, th.n { font-size:7.8pt; }
+    .who { font-size:7.3pt; }
+    .tw { margin-bottom:0.55rem; }
+    .cal { padding:0.5rem 0.65rem; margin-bottom:0.55rem; }
+    .fine { font-size:7pt; margin-bottom:0.5rem; }
+    .sig { margin-top:0.9rem; padding-top:0.7rem; gap:2rem; }
+    .sig .ln { margin-top:2rem; font-size:7pt; }
+    .foot { margin-top:0.7rem; font-size:6.6pt; }
+    .tw, .cal, .pbox, .duo { break-inside:avoid; }
+  }
+</style>
+
+<div class="sheet">
+
+  <header class="top">
+    <p class="brand">Orquesta IA &nbsp;·&nbsp; Presupuesto comercial</p>
+    <h1>Asistente de atención al cliente con inteligencia artificial para WhatsApp</h1>
+    <p class="lede">Atiende, asesora y cotiza las 24 horas sobre el WhatsApp de Outlet Market, con los precios y el stock reales de la tienda online, y deriva al equipo cuando corresponde.</p>
+    <div class="meta">
+      <span>Cliente: <b>Outlet Market</b></span>
+      <span>Fecha: <b>30 · 07 · 2026</b></span>
+      <span>Validez: <b>30 días</b></span>
+      <span>Contacto: <b>Pablo Scarlatto</b> · <b>097 336 318</b> · <b>pabloscarlatto@orquestaia.com</b></span>
+    </div>
+  </header>
+
+  <div class="cols">
+
+    <!-- ============ COLUMNA IZQUIERDA ============ -->
+    <div>
+      <h2>Qué incluye</h2>
+      <ul>
+        <li>Responde consultas escritas con palabras propias, no un menú de botones.</li>
+        <li>Cotiza con <b>precios reales</b> tomados automáticamente de la tienda online.</li>
+        <li>Envía las <b>fotos del producto</b> con nombre y precio, sin intervención humana.</li>
+        <li>Consulta disponibilidad y toma el pedido.</li>
+        <li><b>Cobra dentro de la conversación</b>: genera un link de pago de Mercado Pago por el monto exacto, y si el cliente transfiere, registra el aviso y el comprobante y alerta al equipo para que lo verifique.</li>
+        <li><b>Deriva a una persona</b> cuando el cliente lo pide o ante una duda: nunca inventa. El equipo recibe aviso y el chat queda sin leer.</li>
+        <li>Se silencia solo si un vendedor entra a responder a mano.</li>
+        <li>Reconoce las fotos que envía el cliente.</li>
+        <li>Panel web de conversaciones y métricas de atención.</li>
+      </ul>
+
+      <h2>Sobre qué corre</h2>
+      <ul>
+        <li><b>API oficial de WhatsApp</b> de Meta, en modalidad de convivencia: el número sigue funcionando en el celular del local, no se pierde ningún chat y se importa el historial.</li>
+        <li><b>Claude Haiku 4.5</b> como motor de inteligencia artificial.</li>
+        <li><b>Sincronización automática</b> con la tienda: precios, stock, fotos, altas y bajas.</li>
+        <li>Servidor dedicado encendido las 24 horas y base de datos con el historial.</li>
+      </ul>
+
+      <h2>Plazo de implementación</h2>
+      <p>De <b>dos a cuatro semanas</b> desde la aceptación y la entrega de accesos. El rango depende de la verificación del negocio ante Meta, que es un trámite de Outlet Market. El número atiende con normalidad durante todo el proceso.</p>
+
+      <h2>Necesitamos de Outlet Market</h2>
+      <ul>
+        <li>El número elegido, en la aplicación WhatsApp Business.</li>
+        <li>Un administrador de Meta Business que inicie la verificación.</li>
+        <li>Acceso de solo lectura al catálogo de la tienda.</li>
+        <li>Un segundo número, de un vendedor, para los avisos.</li>
+        <li>Credenciales de producción de su cuenta de Mercado Pago y los datos bancarios para transferencias.</li>
+        <li>Tarjeta con compras internacionales habilitadas.</li>
+        <li>Las reglas de atención: horarios, envíos, garantías y medios de pago.</li>
+      </ul>
+
+      <h2>No incluido — se cotiza aparte</h2>
+      <ul class="dash">
+        <li>Atención automática de Instagram (sí se incluye la derivación a WhatsApp).</li>
+        <li>Stock desde planilla en la nube, con una fila por unidad física.</li>
+        <li>Campañas de mensajes salientes y agenda de visitas.</li>
+      </ul>
+    </div>
+
+    <!-- ============ COLUMNA DERECHA ============ -->
+    <div>
+      <h2>Inversión — se le paga a Orquesta IA</h2>
+      <div class="duo">
+        <div class="pbox">
+          <span class="k">Implementación</span>
+          <span class="v">US$ 1.500</span>
+          <span class="u">pago único</span>
+        </div>
+        <div class="pbox">
+          <span class="k">Mantenimiento</span>
+          <span class="v">US$ 200</span>
+          <span class="u">por mes</span>
+        </div>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Forma de pago</th><th class="n">Importe</th></tr></thead>
+          <tbody>
+            <tr><td>A la aceptación del presupuesto</td><td class="n">US$ 750</td></tr>
+            <tr><td>A la salida al aire</td><td class="n">US$ 750</td></tr>
+            <tr><td>Mantenimiento, desde el mes siguiente</td><td class="n">US$ 200 / mes</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Costos mensuales de Outlet Market</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Concepto</th><th>Se le paga a</th><th class="n">Mensual</th></tr></thead>
+          <tbody>
+            <tr><td><b>Mantenimiento</b></td><td class="who">Orquesta IA</td><td class="n">US$ 200</td></tr>
+            <tr><td>Inteligencia artificial <i>(por uso)</i></td><td class="who">Anthropic</td><td class="n">US$ 8 – 15</td></tr>
+            <tr><td>Plataforma de WhatsApp</td><td class="who">360dialog</td><td class="n">≈ US$ 55</td></tr>
+            <tr><td>Servidor 24/7</td><td class="who">Railway</td><td class="n">US$ 5 – 10</td></tr>
+            <tr><td>Base de datos</td><td class="who">Neon</td><td class="n">US$ 0</td></tr>
+            <tr><td>Mensajes <i>(desde 01/10/2026)</i></td><td class="who">Meta</td><td class="n">US$ 6 – 15</td></tr>
+            <tr class="tot"><td>Total mensual</td><td class="who">—</td><td class="n">US$ 275 – 295</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="fine">Solo el primer renglón lo factura Orquesta IA. Los cinco restantes los cobra cada proveedor directamente a Outlet Market, con su tarjeta y sin recargo nuestro: las cuentas, las claves y los datos quedan del lado de ustedes. Estimado para <b>20 a 50 mensajes diarios</b>; la inteligencia artificial y la mensajería se pagan por uso y acompañan el volumen. Hasta el 30/09/2026 los mensajes no tienen costo, por lo que el total es de US$ 268 a 280. Mercado Pago cobra su comisión sobre cada venta cobrada por ese medio: es un costo por operación, no una cuota mensual, y no figura en este cuadro.</p>
+
+      <div class="cal">
+        <span class="k">Qué significa por día</span>
+        <p>Sumando todo —implementación, mantenimiento y servicios técnicos— el <b>primer año cuesta unos US$ 13,50 por día</b>. Desde el segundo, <b>US$ 9,50 por día</b>.</p>
+        <p>Sobre el volumen informado son <b>entre 19 y 47 centavos de dólar por consulta atendida</b>, las veinticuatro horas, sábados y domingos incluidos.</p>
+      </div>
+
+      <h2>Qué cubre el mantenimiento</h2>
+      <p>No es una garantía pasiva: el asistente depende de plataformas de terceros —Meta, la tienda, el proveedor de inteligencia artificial— que cambian sus reglas sin aviso, y de un negocio que también cambia.</p>
+      <ul>
+        <li><b>Monitoreo</b> del servicio y de la conexión con WhatsApp.</li>
+        <li><b>Adaptación</b> a los cambios de las plataformas, que rompen partes del sistema sin previo aviso.</li>
+        <li><b>Control del consumo y del saldo</b> de las cuentas, con aviso anticipado si el volumen sube.</li>
+        <li><b>Ajustes de las reglas del negocio</b>: precios, promociones, horarios, envíos, líneas nuevas.</li>
+        <li><b>Revisión de conversaciones reales</b> y corrección de respuestas flojas u oportunidades perdidas.</li>
+        <li><b>Plantillas y cumplimiento</b> ante Meta, y cuidado de la calidad del número.</li>
+        <li><b>Soporte</b> con respuesta dentro del día hábil y <b>4 horas mensuales</b> de mejoras incluidas.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="sig">
+    <div><div class="ln">Por Orquesta IA · Pablo Scarlatto</div></div>
+    <div><div class="ln">Por Outlet Market · aclaración y fecha</div></div>
+  </div>
+
+  <p class="foot">Presupuesto emitido por Orquesta IA, válido por 30 días desde su fecha. Valores en dólares estadounidenses, no incluyen impuestos. Los costos operativos son estimaciones basadas en el volumen informado por el cliente y en las tarifas vigentes de cada proveedor a julio de 2026; los factura cada proveedor directamente a Outlet Market y varían según el uso real. El mantenimiento no se modifica dentro del rango de volumen informado; ante un crecimiento sostenido muy superior se revisa de común acuerdo entre las partes.</p>
+
+</div>
