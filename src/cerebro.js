@@ -92,6 +92,24 @@ export function esCubreasientoColocable(...partes) {
 // cubreauto) para NO mezclar tipos: si pide "alfombra para Saveiro", solo alfombras de Saveiro.
 // Devuelve una función que valida el nombre del producto, o null si la consulta no nombra un tipo.
 // El ORDEN importa: "cubre volante" contiene "cubre", por eso volante va primero.
+// Nombre de la categoría que pidió el cliente, para no dejar que Max le cambie el
+// tema cuando no la tenemos ("no hay alfombra… pero cubreasientos sí, ¿te muestro?").
+// El dueño lo pidió expresamente: si vino por una alfombra, se le habla de alfombras.
+const CATEGORIAS = {
+  volante: /volante/,
+  alfombra: /alfombra/,
+  cubreauto: /(cubre ?auto|cubreauto|antigranizo|cobertor)/,
+  cubreasiento: /(cubre ?asiento|cubreasiento|funda|butaca|tapizado)/,
+};
+function nombreCategoria(consulta) {
+  const q = _normTxt(consulta);
+  if (CATEGORIAS.volante.test(q)) return "volante";
+  if (CATEGORIAS.alfombra.test(q)) return "alfombra";
+  if (CATEGORIAS.cubreauto.test(q)) return "cubreauto";
+  if (CATEGORIAS.cubreasiento.test(q)) return "cubreasiento";
+  return null;
+}
+
 function categoriaDe(consulta) {
   const q = _normTxt(consulta);
   if (/(cubre ?volante|volante)/.test(q)) return (n) => /volante/.test(n);
@@ -234,6 +252,10 @@ export function sinStockOInexistente(consulta) {
   return {
     encontrado: false,
     agotado: false,
+    // Si el cliente vino por una categoría concreta, el código se encarga de que Max
+    // no le ofrezca otra (ver armarRespuesta). Los cubreasientos quedan afuera: esos
+    // sí se hacen a medida para cualquier vehículo y corresponde ofrecerlos.
+    categoriaPedida: nombreCategoria(consulta) === "cubreasiento" ? null : nombreCategoria(consulta),
     mensaje: "No tenemos eso para ese vehículo. Si es ALFOMBRA, CUBREAUTO o ACCESORIO: decíselo como un vendedor (\"eso está agotado\", \"de eso no tenemos por ahora\") — ⛔ NUNCA con palabras del sistema como \"no está publicado\" o \"no figura en el catálogo\". ⛔ SEGUÍ HABLANDO DE ESE PRODUCTO: no le ofrezcas otra cosa que no pidió. ⛔ NO ofrezcas avisarle cuando llegue (no hay nada a lo que seguirle el rastro). ⛔ NO derives por tu cuenta: asesoralo bien primero y, si hace falta una persona, OFRECÉSELO y derivá SOLO si dice que sí. Si es un CUBREASIENTO o el vehículo es JMC: seguí como siempre (ofrecé las líneas y derivá).",
   };
 }
@@ -985,20 +1007,29 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       // está PREGUNTANDO al cliente si quiere el asesor, entonces el cliente no lo
       // pidió, y marcar el motivo como "pide_humano" no puede servir de atajo.
       const ofreceAsesor = /[¿?][^?]*\b(quer[eé]s|quiere|te parece|quer[ií]a)\b[^?]*\b(pas[eoa]r?|pase|paso|derive|derivar|consulta|asesor|compa[ñn]ero|vendedor)\b[^?]*\?/i;
-      if (ofreceAsesor.test(turno.texto || "")) {
+      // Se recuerda para TODO el turno: si no, Max reintenta la derivación en la
+      // vuelta siguiente (esa vez sin texto) y se colaba igual.
+      if (ofreceAsesor.test(turno.texto || "")) turno.ofrecioAsesor = true;
+      if (turno.ofrecioAsesor) {
         return {
           ok: false,
-          mensaje: "En este mismo mensaje le estás PREGUNTANDO al cliente si quiere que lo pases con un asesor. Entonces no lo derives todavía: mandá solo la pregunta y esperá la respuesta. Si te dice que sí, ahí llamás a \"derivar_a_humano\".",
+          mensaje: "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) Le estás PREGUNTANDO si quiere que lo pases con un asesor, así que todavía no lo derives: mandale solo esa pregunta, tal como la escribiste, y esperá la respuesta. Si te dice que sí, en ESE turno llamás a \"derivar_a_humano\".",
         };
       }
       if (!turno.busco && !DERIVACION_DIRECTA.has(motivo)) {
         return {
           ok: false,
           mensaje:
-            "Todavía no buscaste el producto, así que no podés derivar por él. Buscalo primero con \"enviar_foto\" (o \"consultar_precio\"): si lo tenemos se lo vendés, si está agotado le ofrecés avisarle cuando llegue, y si no lo tenemos se lo decís vos. Después de eso, derivá SOLO si el cliente muestra interés y ACEPTA que lo pases con un asesor.",
+            "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) Todavía no buscaste el producto, así que no podés derivar por él. Buscalo primero con \"enviar_foto\" (o \"consultar_precio\"): si lo tenemos se lo vendés, si está agotado le ofrecés avisarle cuando llegue, y si no lo tenemos se lo decís vos. Después de eso, derivá SOLO si el cliente muestra interés y ACEPTA que lo pases con un asesor.",
         };
       }
-      return registrarDerivacion(input);
+      // La derivación queda PENDIENTE hasta el final del turno: recién ahí se conoce
+      // el mensaje completo que va a leer el cliente. Si Max termina preguntándole
+      // "¿querés que te pase con un asesor?", la derivación se descarta y se espera
+      // la respuesta. Los guards de arriba solo ven el texto escrito HASTA ese punto,
+      // y Max a veces llama a la herramienta ANTES de escribir la pregunta.
+      turno.derivacionPendiente = input;
+      return { ok: true, pendiente: true, mensaje: "Anotado. Si en tu mensaje le estás preguntando al cliente si quiere el asesor, no se deriva todavía: se espera su respuesta." };
     }
     if (nombre === "link_web") {
       const base = (NEGOCIO.web || "https://lacasadelcubreasiento.com.uy").replace(/\/$/, "");
@@ -1265,7 +1296,16 @@ function armarRespuesta(texto, acciones, ctx = {}) {
   // Y como el modelo igual lo parafrasea, le sacamos sus propios párrafos que hablen
   // de stock o del aviso: si no, el cliente lee dos veces lo mismo y encima la
   // pregunta "¿te aviso?" le queda repetida.
-  const avisoAgotado = acciones.find((a) => a.resultado?.textoAgotado)?.resultado?.textoAgotado || null;
+  // ⚠️ Si en este mismo turno el cliente YA aceptó y la espera quedó anotada, el
+  // aviso NO va: Max vuelve a buscar el producto para sacar el id, la herramienta
+  // devuelve otra vez el textoAgotado, y sin esto el cliente recibía el mismo
+  // mensaje dos veces —con la pregunta "¿te aviso?" repetida— en lugar del "listo,
+  // quedás anotado". Pasó en producción apenas se prendió.
+  // Alcanza con que se haya INTENTADO anotar: si Max llamó a esa herramienta es
+  // porque el cliente ya dijo que sí, y volver a preguntarle "¿te aviso?" está mal
+  // aunque el alta haya fallado (si falló, lo que corresponde es otra respuesta).
+  const anotoEspera = acciones.some((a) => a.herramienta === "avisar_cuando_llegue");
+  const avisoAgotado = anotoEspera ? null : (acciones.find((a) => a.resultado?.textoAgotado)?.resultado?.textoAgotado || null);
   if (avisoAgotado) {
     limpio = limpio
       .split(/\n\s*\n/)
@@ -1273,8 +1313,36 @@ function armarRespuesta(texto, acciones, ctx = {}) {
       .join("\n\n")
       .trim();
   }
+  // NO CAMBIARLE EL PRODUCTO AL CLIENTE: si preguntó por una alfombra y no la
+  // tenemos, Max se le iba a ofrecer cubreasientos ("...pero cubreasientos sí
+  // tenemos, ¿te muestro?"). El dueño lo pidió dos veces y el prompt no alcanzaba,
+  // así que se le sacan por código las oraciones que se van a otra categoría.
+  const categoriaPedida = acciones.find((a) => a.resultado?.categoriaPedida)?.resultado?.categoriaPedida;
+  if (categoriaPedida && limpio) {
+    const otras = Object.entries(CATEGORIAS).filter(([k]) => k !== categoriaPedida).map(([, re]) => re);
+    limpio = limpio
+      .split(/(?<=[.!?])\s+/)
+      .filter((oracion) => !otras.some((re) => re.test(_normTxt(oracion))))
+      .join(" ")
+      .trim();
+  }
   const textoFinal = [limpio, ...oficiales, avisoColocacion, avisoAgotado].filter(Boolean).join("\n\n")
     || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
+  // Acá se resuelve la derivación que quedó pendiente, con el mensaje final a la
+  // vista: si Max terminó PREGUNTÁNDOLE al cliente si quiere el asesor, no se deriva
+  // (se espera el sí). Si no, se registra y el equipo se entera.
+  const pend = ctx._turno?.derivacionPendiente;
+  if (pend) {
+    const pregunta = /[¿?][^?]*\b(quer[eé]s|quiere|te parece|quer[ií]a)\b[^?]*\b(pas[eoa]r?|pase|paso|derive|derivar|consulta|asesor|compa[ñn]ero|vendedor)\b[^?]*\?/i.test(textoFinal);
+    const accion = acciones.find((a) => a.herramienta === "derivar_a_humano");
+    if (pregunta) {
+      if (accion) accion.resultado = { ok: false, motivo: "solo_ofrecida" };
+    } else {
+      const r = registrarDerivacion(pend);
+      if (accion) accion.resultado = r;
+    }
+    ctx._turno.derivacionPendiente = null;
+  }
   return { texto: textoFinal, acciones, imagenesEnviar, videosEnviar };
 }
 
@@ -1349,8 +1417,9 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
       if (acompanante) textoParcial = acompanante;
       // Lo que Max le está escribiendo al cliente en ESTE turno: lo mira el guard de
       // derivación para no dejarlo preguntar "¿te paso con un asesor?" y derivar al
-      // mismo tiempo.
-      ctx._turno.texto = acompanante || "";
+      // mismo tiempo. ⚠️ Solo se pisa si hay texto nuevo: una vuelta sin texto no
+      // puede borrar la pregunta que ya escribió (ahí se colaba la derivación).
+      if (acompanante) ctx._turno.texto = acompanante;
       messages.push({ role: "assistant", content: resp.content });
       const resultados = [];
       for (const tu of toolUses) {

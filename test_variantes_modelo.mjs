@@ -49,10 +49,24 @@ caso("no le nombra el Yuan PLUS al cliente", !/plus/i.test(resp + " " + captions
 
 // El mensaje de agotado lo pone el CÓDIGO (AVISO_AGOTADO), así sale siempre igual:
 // tiene que aparecer TAL CUAL y una sola vez.
-const { AVISO_AGOTADO } = await import("./src/config.js");
+const { AVISO_AGOTADO } = await import("./src/config.js"); // texto oficial del dueño
 caso("manda el aviso oficial de agotado, palabra por palabra", resp.includes(AVISO_AGOTADO), resp.slice(0, 200));
 caso("no lo manda dos veces", resp.split("¿Querés que te avise apenas llegue?").length === 2, resp.slice(0, 250));
 caso("no inventa plazos", !/(en \d+ d[ií]as?|la semana que viene|el (lunes|martes|mi[eé]rcoles|jueves|viernes)|ma[ñn]ana)/i.test(resp), resp.slice(0, 200));
+
+// ── 3) Cuando el cliente ACEPTA, se anota y NO se le repite el aviso ──────
+// (pasó en producción: Max vuelve a buscar el producto para sacar el id, la
+// herramienta devuelve otra vez el texto de agotado y el cliente lo leía dos veces.)
+const r2 = await responder("si dale, avisame", [...saludo,
+  { role: "user", content: "hola, tenés alfombras para el byd yuan pro?" },
+  { role: "assistant", content: AVISO_AGOTADO },
+], [], { canal: "test", chatId: "test-var2-" + Math.random() });
+const resp2 = r2.texto || "";
+const anoto = (r2.acciones || []).some((a) => a.herramienta === "avisar_cuando_llegue");
+console.log(`\n--- El cliente acepta ---\nCliente: si dale, avisame\nMax: ${resp2}`);
+caso("llamó a avisar_cuando_llegue", anoto, (r2.acciones || []).map((a) => a.herramienta).join(", "));
+caso("NO le repite el aviso de agotado", !resp2.includes("¿Querés que te avise apenas llegue?"), resp2.slice(0, 200));
+caso("le confirma que quedó anotado", /(anotad|listo|te escribo|te aviso)/i.test(resp2), resp2.slice(0, 200));
 
 console.log(`\n${mal === 0 ? "✅ TODO OK" : "❌ HAY FALLAS"} — ${ok} pasaron, ${mal} fallaron`);
 process.exit(mal === 0 ? 0 : 1);

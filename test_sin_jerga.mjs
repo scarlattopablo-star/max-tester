@@ -49,7 +49,10 @@ await caso(
   "me interesa igual, la necesito, se puede encargar?",
   ({ resp, herramientas }) => {
     const derivo = herramientas.includes("derivar_a_humano");
-    const ofrece = /(quer[eé]s que|te parece si|si quer[eé]s)[^.?!]{0,80}(asesor|compañero|vendedor|equipo)/i.test(resp);
+    // Mismo patrón que usa el guard de cerebro.js: lo que importa es que HAYA una
+    // pregunta ofreciendo pasar la consulta, aunque la palabra "asesor" esté en la
+    // oración anterior ("...que un asesor lo revise. ¿Querés que lo derive?").
+    const ofrece = /[¿?][^?]*\b(quer[eé]s|quiere|te parece|quer[ií]a)\b[^?]*\b(pas[eoa]r?|pase|paso|derive|derivar|consulta|asesor|compa[ñn]ero|vendedor)\b[^?]*\?/i.test(resp);
     const pasa = ofrece && !derivo;
     return { pasa, detalle: pasa ? "ofreció pasarlo con un asesor sin derivar todavía" : `ofreció=${ofrece} derivóSolo=${derivo}` };
   },
