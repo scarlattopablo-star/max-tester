@@ -73,7 +73,23 @@ cargar. Se aprueban en **WhatsApp Manager → Plantillas de mensajes → Crear p
 - **Activarla:** una vez APROBADA, cargar en Render `PLANTILLA_AVISO=aviso_equipo` y
   redeployar. Con eso los avisos dejan de depender de la ventana de 24 h.
 
-## Plantilla 5 — Volvió el stock (MARKETING) ⚠️ FALTA CREARLA — código listo 2 ago 2026
+## Plantilla 5 — Volvió el stock (MARKETING) — ✅ CREADA 2 ago 2026, esperando aprobación de Meta
+> **Estado:** creada por la API de 360dialog (`POST /v1/configs/templates`) con nombre
+> **`volvio_stock_max`**, categoría MARKETING, idioma `es`, `allow_category_change: true`.
+> Quedó en **pending** hasta que Meta la apruebe. El código ya la usa por defecto.
+> ✅ **El encoding con acentos ANDA** si se crea desde **Node** (`fetch` + `JSON.stringify`),
+> no desde curl: se verificó con una plantilla descartable antes de crear esta, y los
+> acentos volvieron intactos al releerla. Por eso el cuerpo va en español correcto y no
+> en ASCII pelado como `aviso_equipo_max`.
+> - Cuerpo real: `¡Hola {{1}}! Volvió a estar disponible {{2}} en La Casa del Cubreasiento.
+>   Nos habías pedido que te avisáramos cuando llegara. ¿Seguís interesado/a? Escribinos y
+>   te pasamos precio y todos los detalles.`
+> - Pie: `Respondé BAJA si no querés recibir más avisos.` → lo cumple el código: un mensaje
+>   que ES la baja ("BAJA", "STOP", "no quiero más avisos") marca `opt_in = false` en
+>   `handler.js` **sin pasar por la IA**, y `esperas.js` no le manda avisos a quien se dio
+>   de baja. Probado en `test_baja_avisos.mjs`.
+
+### Ficha original (referencia)
 > **Para qué:** cuando un cliente pregunta por un producto que está **pausado o sin stock**
 > en Mercado Libre, Max ya no lo deriva a un asesor: le dice que se agotó y le ofrece
 > avisarle cuando llegue. Si acepta, queda anotado en la tabla `esperas` (Neon). Cada vez

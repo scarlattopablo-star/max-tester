@@ -137,13 +137,16 @@ async function avisarA(telefono, nombre, titulo) {
   }
 }
 
-// Nombre del cliente, si lo tenemos en la agenda. Nunca rompe el aviso.
-async function nombreDe(telefono) {
+// Nombre del cliente y si acepta que le escribamos. Si pidió la BAJA (opt_in=false,
+// lo que hace el pie de la plantilla), NO se le manda el aviso: se lo prometimos.
+// Ante cualquier falla de la base asumimos que sí, que es como venía funcionando.
+async function datosCliente(telefono) {
   try {
-    const filas = await sql`select nombre from clientes where telefono = ${telefono} limit 1`;
-    return filas[0]?.nombre || "";
+    const filas = await sql`select nombre, opt_in from clientes where telefono = ${telefono} limit 1`;
+    if (!filas.length) return { nombre: "", optIn: true };
+    return { nombre: filas[0].nombre || "", optIn: filas[0].opt_in !== false };
   } catch {
-    return "";
+    return { nombre: "", optIn: true };
   }
 }
 
@@ -168,8 +171,15 @@ export async function revisarReposiciones() {
   }
 
   let avisados = 0;
+  let dadosDeBaja = 0;
   for (const esp of volvieron) {
-    const nombre = await nombreDe(esp.telefono);
+    const { nombre, optIn } = await datosCliente(esp.telefono);
+    if (!optIn) {
+      // Pidió la baja: cerramos la espera sin escribirle.
+      await sql`update esperas set estado = 'vencida' where telefono = ${esp.telefono} and item_id = ${esp.item_id}`;
+      dadosDeBaja++;
+      continue;
+    }
     const salio = await avisarA(esp.telefono, nombre, esp.titulo || "el producto que esperabas");
     if (salio) {
       await sql`update esperas set estado = 'avisada', avisada_en = now() where telefono = ${esp.telefono} and item_id = ${esp.item_id}`;
@@ -178,5 +188,6 @@ export async function revisarReposiciones() {
     await dormir(250); // un respiro entre envíos, como el broadcast de promos
   }
   if (avisados) console.log(`📦 Avisé a ${avisados} cliente(s) que su producto volvió a estar disponible.`);
-  return { revisadas: pendientes.length, avisados, vencidas };
+  if (dadosDeBaja) console.log(`🔕 ${dadosDeBaja} espera(s) cerradas sin avisar: el cliente pidió la baja.`);
+  return { revisadas: pendientes.length, avisados, vencidas, dadosDeBaja };
 }

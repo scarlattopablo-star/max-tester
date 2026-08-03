@@ -4,6 +4,14 @@ import { responder } from "./cerebro.js";
 import { historial, agregar } from "./memoria.js";
 import { respuestaInstagram } from "./instagram.js";
 import { guardarComprobanteDataUri } from "./comprobantes.js";
+import { setOptIn } from "./clientes.js";
+
+// El pie de la plantilla "volvio_stock_max" le promete al cliente que respondiendo
+// BAJA deja de recibir avisos. Esto es lo que cumple esa promesa (y es lo que Meta
+// espera de un mensaje de marketing). Solo dispara si el mensaje ES la baja: un
+// "dame de baja el pedido" en medio de una charla no cuenta.
+const PEDIDO_DE_BAJA = /^\s*(baja|stop|unsubscribe|cancelar|no quiero (mas|más) (avisos|mensajes)|dejen de (escribirme|mandarme)|no me escriban (mas|más))\s*[.!]?\s*$/i;
+const RESPUESTA_BAJA = "Listo, no te mandamos más avisos 👍 Si en algún momento querés volver a saber de nosotros, escribinos cuando quieras.";
 
 // canal: 'whatsapp' | 'simulador' | 'instagram' | 'web'
 // imagenes: array de URLs/data-URIs que mandó el cliente (opcional)
@@ -15,6 +23,20 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
     const respuesta = respuestaInstagram(previos);
     agregar(chatId, "assistant", respuesta);
     return { texto: respuesta, acciones: [] };
+  }
+
+  // Baja de avisos: se resuelve por código, sin pasar por la IA (una respuesta
+  // improvisada acá no sirve: hay que dejar registrado el opt-out de verdad).
+  if (PEDIDO_DE_BAJA.test(String(texto || ""))) {
+    const tel = contacto?.tel || String(chatId || "").split("@")[0];
+    try {
+      await setOptIn(tel, false);
+    } catch (e) {
+      console.error("⚠ No pude registrar la baja de avisos:", e.message);
+    }
+    agregar(chatId, "user", texto);
+    agregar(chatId, "assistant", RESPUESTA_BAJA);
+    return { texto: RESPUESTA_BAJA, acciones: [{ herramienta: "baja_avisos" }] };
   }
 
   // WhatsApp / simulador / web: agente completo con IA.
