@@ -129,6 +129,18 @@ function _matchCarroceria(nombre, carr) {
   return true;
 }
 
+// VARIANTES de un mismo modelo. Son autos DISTINTOS aunque compartan el nombre base:
+// el Yuan Pro no es el Yuan Plus, y sus productos NO son intercambiables. Caso real
+// del 3 ago 2026: le pidieron alfombra para un Yuan PRO, no había, y Max le ofreció
+// una bandeja del Yuan PLUS.
+// ⚠️ "max" queda AFUERA a propósito: es el nombre del asistente y aparece en todas
+// las charlas ("te habla Max"), así que como marcador de variante daría falsos.
+const VARIANTES = ["pro", "plus", "gt", "turbo", "hybrid", "sport"];
+function variantesEn(texto) {
+  const t = _normTxt(texto);
+  return new Set(VARIANTES.filter((v) => new RegExp(`\\b${v}\\b`).test(t)));
+}
+
 // Modelos que son el MISMO vehículo (mismos productos a medida) → se buscan como
 // el nombre que sí está en el catálogo. La Freedom y la Volcano son versiones de
 // la Fiat Strada: comparten cubreasientos/alfombras/etc.
@@ -149,7 +161,18 @@ export function buscarPrecio(consulta, lista = null) {
   const cab = cabinaDe(consulta); // filtro suave por cabina simple/doble
   const carr = carroceriaDe(consulta); // filtro suave por sedán/hatch
   const base0 = lista || productosML();
-  const pool = catFiltro ? base0.filter((item) => catFiltro(_normTxt(item.n))) : base0;
+  let pool = catFiltro ? base0.filter((item) => catFiltro(_normTxt(item.n))) : base0;
+  // Filtro DURO por variante: si el cliente nombró una (Yuan PRO), sacamos del pozo
+  // todo lo que sea de OTRA (Yuan PLUS). A diferencia de los filtros de cabina o
+  // carrocería, este NO se afloja cuando no quedan resultados: preferimos decirle
+  // que no hay antes que ofrecerle el producto de otro auto.
+  const varQ = variantesEn(consulta);
+  if (varQ.size) {
+    pool = pool.filter((item) => {
+      for (const v of variantesEn(item.n)) if (!varQ.has(v)) return false;
+      return true;
+    });
+  }
   // Aplica los filtros suaves (cabina, carrocería) SOLO si quedan resultados; si no, no descarta
   // (mejor ofrecer lo del modelo y, si hace falta, preguntar la variante).
   const aplicarCab = (lista) => {
@@ -204,7 +227,7 @@ export function sinStockOInexistente(consulta) {
       agotado: true,
       producto_id: ago.id,
       producto: ago.nombre,
-      mensaje: `"${ago.nombre}" existe pero está AGOTADO. ⛔ NO derives a un asesor y NO des precio. Decile que ahora no hay pero que está por llegar, y ofrecele avisarle apenas entre. Si acepta, llamá a "avisar_cuando_llegue" con producto_id="${ago.id}". ⛔ No prometas fecha.`,
+      mensaje: `"${ago.nombre}" existe pero está AGOTADO. ⛔ NO derives a un asesor y NO des precio. Decíselo en ESTE orden: (1) que ahora está agotada, (2) que nos llegan nuevas en los próximos días, (3) y ahí ofrecele avisarle apenas entre. Si acepta, llamá a "avisar_cuando_llegue" con producto_id="${ago.id}". ⛔ Sin fecha concreta: "en los próximos días" y nada más.`,
     };
   }
   return {
@@ -420,9 +443,12 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 ⛔ Están TERMINANTEMENTE PROHIBIDAS las palabras **publicado / publicada / publicadas**, **catálogo**, **sistema**, **lista** y **base de datos** en cualquier mensaje al cliente. Son palabras nuestras, de adentro: al cliente le suenan a excusa de robot y no le dicen nada. Él solo quiere saber si hay o no hay.
 Cuando "consultar_precio" o "enviar_foto" no encuentran nada, la herramienta te dice cuál de los DOS casos es. No son lo mismo y se responden distinto:
 ⚠️ ORDEN DE PRIORIDAD (no lo inviertas): si la herramienta dice **agotado: true**, ESO MANDA SIEMPRE y vas al CASO 1 — aunque el vehículo sea JMC, aunque sea un cubreasiento, aunque sea una Strada. Las excepciones de más abajo son SOLO para el CASO 2. Un producto agotado es un producto que existe: ofrecele el aviso, no lo mandes al asesor.
-- 📦 CASO 1 — te devuelve **agotado: true** (con producto y producto_id): esa publicación EXISTE pero se quedó sin stock. ⛔ PROHIBIDO derivar y PROHIBIDO dar precio. Decile con naturalidad que ese se agotó y que estamos esperando la reposición, y OFRECELE avisarle apenas llegue. Ej: "Justo ese se nos agotó, estamos esperando que lleguen. ¿Querés que te avise apenas entren?".
+- 📦 CASO 1 — te devuelve **agotado: true** (con producto y producto_id): esa publicación EXISTE pero se quedó sin stock. ⛔ PROHIBIDO derivar y PROHIBIDO dar precio. Van SIEMPRE los tres pasos, EN ESTE ORDEN (no te saltees el del medio, es el que retiene al cliente):
+  1. que ahora no hay → "Justo esa la tenemos agotada";
+  2. **que nos llegan nuevas en los próximos días** → "pero nos están llegando nuevas en estos días";
+  3. recién ahí, ofrecerle el aviso → "¿Querés que te avise apenas entren?".
   · Si el cliente dice que SÍ, llamá a "avisar_cuando_llegue" con el producto_id EXACTO que te dio la herramienta, y confirmale corto ("Listo, quedás anotado: te escribo apenas entre"). Si dice que no, seguí la charla normal.
-  · ⛔ NUNCA le prometas una fecha de llegada: no la sabemos. "Estamos esperando la llegada" y nada más.
+  · ⛔ "En los próximos días" es lo único que podés decir del plazo. NUNCA des una fecha, un día concreto ni una cantidad de días ("el martes", "en 3 días", "la semana que viene"): eso no lo sabemos y el cliente te lo va a reclamar.
 - 🚫 CASO 2 — te devuelve **agotado: false**: no tenemos eso para ese vehículo. Para ALFOMBRAS, CUBREAUTOS y ACCESORIOS decíselo como se lo diría un vendedor en el mostrador: **que ese producto está agotado / no lo tenemos por ahora**. Ej: "De alfombras para ese modelo estamos sin stock por ahora".
   · ⛔ SEGUÍ HABLANDO DEL PRODUCTO QUE TE PIDIÓ (regla dura, te está fallando): si te preguntó por ALFOMBRAS, tu respuesta es sobre alfombras y nada más. ⛔ PROHIBIDO saltar a ofrecerle otra cosa que no pidió ("pero cubreasientos sí tenemos, ¿te muestro?"): el cliente vino por una alfombra y cambiarle el tema le suena a que le querés vender cualquier cosa. Si él después pregunta por otro producto, ahí sí se lo mostrás.
   · ⛔ En este caso NO le ofrezcas avisarle cuando llegue: no hay publicación a la cual seguirle el rastro, así que sería una promesa que el sistema no puede cumplir.
@@ -796,6 +822,18 @@ const TOOLS = [
 // no de un producto, así que no hay nada que buscar antes.
 const DERIVACION_DIRECTA = new Set(["pide_humano", "reclamo", "mayorista", "alto_valor", "negociacion"]);
 
+// Si el CLIENTE nombró una variante (Yuan "Pro") y la búsqueda que armó Max la
+// perdió por el camino, se la devolvemos. Es exactamente lo que pasó el 3 ago 2026:
+// el cliente pidió alfombra para el Yuan PRO, Max buscó "alfombra yuan" a secas y el
+// catálogo le contestó con una del Yuan PLUS.
+function conVarianteDelCliente(consulta, textoCliente) {
+  const varCliente = variantesEn(textoCliente || "");
+  if (!varCliente.size) return consulta;
+  const varConsulta = variantesEn(consulta);
+  const faltantes = [...varCliente].filter((v) => !varConsulta.has(v));
+  return faltantes.length ? `${consulta} ${faltantes.join(" ")}`.trim() : consulta;
+}
+
 async function ejecutarHerramienta(nombre, input, ctx = {}) {
   // Estado del TURNO (se reinicia en cada mensaje del cliente, lo crea responder()).
   const turno = ctx._turno || (ctx._turno = { busco: false });
@@ -871,7 +909,7 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       return { ok: true, link: r.link, monto: r.monto, instruccion: "Pasale este link al cliente para que pague directo. Es por el monto exacto de su compra." };
     }
     if (nombre === "consultar_precio") {
-      const consulta = input.modelo || input.producto || "";
+      const consulta = conVarianteDelCliente(input.modelo || input.producto || "", ctx._ultimoUsuario);
       turno.busco = true;
       const encontrados = buscarPrecio(consulta);
       if (!encontrados.length) return { ...sinStockOInexistente(consulta) };
@@ -889,7 +927,7 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       return { ok: true, producto: prod.n, instruccion: "Ya quedó anotado. Confirmáselo corto y cálido (ej: 'Listo, quedás anotado: te escribo apenas entre'). NO le prometas fecha de llegada." };
     }
     if (nombre === "enviar_foto") {
-      const consulta = input.producto || input.modelo || "";
+      const consulta = conVarianteDelCliente(input.producto || input.modelo || "", ctx._ultimoUsuario);
       turno.busco = true;
       const hallados = buscarPrecio(consulta);
       // Solo cuando NO hay nada del producto miramos si está agotado o si no lo
@@ -926,6 +964,15 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       // Los motivos que no son de producto (reclamo, mayorista, pide hablar con
       // alguien…) pasan derecho: ahí no hay nada que buscar.
       const motivo = String(input?.motivo || "otro");
+      // ⛔ No se puede PREGUNTAR y DERIVAR en el mismo mensaje. Si Max le está
+      // ofreciendo el asesor al cliente, tiene que esperar el sí: derivar igual
+      // convierte la pregunta en puro adorno y el cliente queda sin decidir nada.
+      if (!DERIVACION_DIRECTA.has(motivo) && /(quer[eé]s|te parece|si quer[eé]s|quiere)[^.?!]{0,70}(asesor|compañero|vendedor|equipo)/i.test(turno.texto || "")) {
+        return {
+          ok: false,
+          mensaje: "En este mismo mensaje le estás PREGUNTANDO al cliente si quiere que lo pases con un asesor. Entonces no lo derives todavía: mandá solo la pregunta y esperá la respuesta. Si te dice que sí, ahí llamás a \"derivar_a_humano\".",
+        };
+      }
       if (!turno.busco && !DERIVACION_DIRECTA.has(motivo)) {
         return {
           ok: false,
@@ -1109,6 +1156,21 @@ export function filtrarInventos(texto, contexto = "") {
   return { texto: [limpio, FRASE_CONSULTO].filter(Boolean).join("\n\n"), invento };
 }
 
+// Saca las palabras de ADENTRO que se le escapan a Max. Al cliente no le dice nada
+// que algo esté "publicado" o que "figure en el catálogo": eso es de nuestro sistema
+// y suena a excusa. El prompt se lo prohíbe, pero se le escapa igual, así que se
+// limpia por código antes de que salga. Solo dos reemplazos, bien acotados, para no
+// tocar frases legítimas: "publicado" pasa a "disponible" (queda natural en la misma
+// oración) y se borra el complemento "en el catálogo / sistema / lista".
+export function limpiarJerga(texto) {
+  return String(texto || "")
+    .replace(/\bpublicad([oa])\b/gi, (m, g) => (g === g.toUpperCase() ? "DISPONIBLE" : "disponible"))
+    .replace(/\bpublicad([oa])s\b/gi, (m, g) => (g === g.toUpperCase() ? "DISPONIBLES" : "disponibles"))
+    .replace(/\s+en (?:el|la|nuestro|nuestra|mi) (?:cat[aá]logo|sistema|lista|base de datos)\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1");
+}
+
 // Arma la respuesta final: texto + fotos numeradas sin duplicados (compartido por ambos caminos).
 // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption.
 function armarRespuesta(texto, acciones, ctx = {}) {
@@ -1146,7 +1208,7 @@ function armarRespuesta(texto, acciones, ctx = {}) {
   // colocable, para que salga siempre igual. Una sola vez aunque se dispare en
   // tomar_pedido y confirmar_transferencia en el mismo turno.
   const avisoColocacion = acciones.some((a) => a.resultado?.avisoColocacion) ? AVISO_COLOCACION : null;
-  let limpio = corregirSaludo((texto || "").trim());
+  let limpio = limpiarJerga(corregirSaludo((texto || "").trim()));
   // ANTI-INVENTO: si Max prometió algo que el negocio NO hace (típico: "te hacemos
   // la alfombra a medida"), se le borra esa frase, se le dice al cliente que lo
   // consulta con un asesor y se DERIVA para que una persona lo resuelva.
@@ -1228,8 +1290,10 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
   const messages = [...previos, { role: "user", content: userContent }];
   const acciones = [];
   // Estado del turno: sirve para exigir que Max BUSQUE el producto antes de derivar
-  // por él. Se reinicia con cada mensaje del cliente.
+  // por él, y para no perder la variante del modelo que nombró el cliente (Yuan Pro
+  // vs Yuan Plus). Se reinicia con cada mensaje del cliente.
   ctx._turno = { busco: false };
+  ctx._ultimoUsuario = textoUsuario || "";
   // Texto que el modelo escribió JUNTO con un tool_use: se guarda como respaldo.
   // Sin esto, si la vuelta final viene vacía caía al fallback "¿Me lo decís de
   // nuevo?" — pésimo justo después de que el cliente manda un comprobante.
@@ -1252,6 +1316,10 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
     if (toolUses.length) {
       const acompanante = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
       if (acompanante) textoParcial = acompanante;
+      // Lo que Max le está escribiendo al cliente en ESTE turno: lo mira el guard de
+      // derivación para no dejarlo preguntar "¿te paso con un asesor?" y derivar al
+      // mismo tiempo.
+      ctx._turno.texto = acompanante || "";
       messages.push({ role: "assistant", content: resp.content });
       const resultados = [];
       for (const tu of toolUses) {
@@ -1299,6 +1367,7 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
   ];
   const acciones = [];
   ctx._turno = { busco: false }; // igual que en el camino de Anthropic (ver arriba)
+  ctx._ultimoUsuario = textoUsuario || "";
 
   for (let vuelta = 0; vuelta < 6; vuelta++) {
     const resp = await client().chat.completions.create({
