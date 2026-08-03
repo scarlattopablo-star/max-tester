@@ -46,9 +46,13 @@ console.log(`\n--- Conversación ---\nCliente: hola, tenés alfombras para el by
 if (captions) console.log(`Fotos: ${captions}`);
 
 caso("no le nombra el Yuan PLUS al cliente", !/plus/i.test(resp + " " + captions), (resp + " " + captions).slice(0, 200));
-caso("le dice que está agotada", /(agot|sin stock|no (nos )?qued|no hay)/i.test(resp), resp.slice(0, 160));
-caso("le avisa que llegan en los próximos días", /(pr[oó]ximos d[ií]as|en estos d[ií]as|est[aá]n llegando|nos (est[aá]n )?lleg)/i.test(resp), resp.slice(0, 160));
-caso("le ofrece avisarle", /(avis\w*|te escribo)[^.?!]{0,60}(lleg|entr|repon|stock|dispon)/i.test(resp), resp.slice(0, 160));
+
+// El mensaje de agotado lo pone el CÓDIGO (AVISO_AGOTADO), así sale siempre igual:
+// tiene que aparecer TAL CUAL y una sola vez.
+const { AVISO_AGOTADO } = await import("./src/config.js");
+caso("manda el aviso oficial de agotado, palabra por palabra", resp.includes(AVISO_AGOTADO), resp.slice(0, 200));
+caso("no lo manda dos veces", resp.split("¿Querés que te avise apenas llegue?").length === 2, resp.slice(0, 250));
+caso("no inventa plazos", !/(en \d+ d[ií]as?|la semana que viene|el (lunes|martes|mi[eé]rcoles|jueves|viernes)|ma[ñn]ana)/i.test(resp), resp.slice(0, 200));
 
 console.log(`\n${mal === 0 ? "✅ TODO OK" : "❌ HAY FALLAS"} — ${ok} pasaron, ${mal} fallaron`);
 process.exit(mal === 0 ? 0 : 1);

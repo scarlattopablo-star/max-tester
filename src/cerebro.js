@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_AGOTADO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -227,7 +227,8 @@ export function sinStockOInexistente(consulta) {
       agotado: true,
       producto_id: ago.id,
       producto: ago.nombre,
-      mensaje: `"${ago.nombre}" existe pero está AGOTADO. ⛔ NO derives a un asesor y NO des precio. Decíselo en ESTE orden: (1) que ahora está agotada, (2) que nos llegan nuevas en los próximos días, (3) y ahí ofrecele avisarle apenas entre. Si acepta, llamá a "avisar_cuando_llegue" con producto_id="${ago.id}". ⛔ Sin fecha concreta: "en los próximos días" y nada más.`,
+      textoAgotado: AVISO_AGOTADO,
+      mensaje: `"${ago.nombre}" existe pero está AGOTADO. ⛔ NO derives a un asesor y NO des precio. El sistema YA le manda al cliente el aviso de agotado tal cual lo escribió el dueño (el campo textoAgotado, que termina preguntándole si quiere que le avisemos). ⛔ NO lo repitas ni lo reescribas: como mucho, una frase corta y cálida ANTES, nombrando el producto (ej: "Justo la alfombra bandeja 3D para tu Yuan Pro..."). ⛔ NO le agregues fechas ni plazos. Cuando el cliente acepte, llamá a "avisar_cuando_llegue" con producto_id="${ago.id}".`,
     };
   }
   return {
@@ -443,18 +444,17 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 ⛔ Están TERMINANTEMENTE PROHIBIDAS las palabras **publicado / publicada / publicadas**, **catálogo**, **sistema**, **lista** y **base de datos** en cualquier mensaje al cliente. Son palabras nuestras, de adentro: al cliente le suenan a excusa de robot y no le dicen nada. Él solo quiere saber si hay o no hay.
 Cuando "consultar_precio" o "enviar_foto" no encuentran nada, la herramienta te dice cuál de los DOS casos es. No son lo mismo y se responden distinto:
 ⚠️ ORDEN DE PRIORIDAD (no lo inviertas): si la herramienta dice **agotado: true**, ESO MANDA SIEMPRE y vas al CASO 1 — aunque el vehículo sea JMC, aunque sea un cubreasiento, aunque sea una Strada. Las excepciones de más abajo son SOLO para el CASO 2. Un producto agotado es un producto que existe: ofrecele el aviso, no lo mandes al asesor.
-- 📦 CASO 1 — te devuelve **agotado: true** (con producto y producto_id): esa publicación EXISTE pero se quedó sin stock. ⛔ PROHIBIDO derivar y PROHIBIDO dar precio. Van SIEMPRE los tres pasos, EN ESTE ORDEN (no te saltees el del medio, es el que retiene al cliente):
-  1. que ahora no hay → "Justo esa la tenemos agotada";
-  2. **que nos llegan nuevas en los próximos días** → "pero nos están llegando nuevas en estos días";
-  3. recién ahí, ofrecerle el aviso → "¿Querés que te avise apenas entren?".
-  · Si el cliente dice que SÍ, llamá a "avisar_cuando_llegue" con el producto_id EXACTO que te dio la herramienta, y confirmale corto ("Listo, quedás anotado: te escribo apenas entre"). Si dice que no, seguí la charla normal.
-  · ⛔ "En los próximos días" es lo único que podés decir del plazo. NUNCA des una fecha, un día concreto ni una cantidad de días ("el martes", "en 3 días", "la semana que viene"): eso no lo sabemos y el cliente te lo va a reclamar.
+- 📦 CASO 1 — te devuelve **agotado: true** (con producto y producto_id): esa publicación EXISTE pero se quedó sin stock. ⛔ PROHIBIDO derivar y PROHIBIDO dar precio.
+  · El aviso de agotado lo manda EL SISTEMA, con el texto exacto del dueño, y termina preguntándole al cliente si quiere que le avisemos. ⛔ NO lo escribas vos, NO lo repitas y NO lo reformules: si lo hacés, el cliente lee dos veces lo mismo. Vos como mucho ponés UNA frase corta ANTES, nombrando el producto ("Justo la alfombra bandeja 3D para tu Yuan Pro..."). Podés no escribir nada y está perfecto.
+  · Cuando el cliente conteste que SÍ, llamá a "avisar_cuando_llegue" con el producto_id EXACTO que te dio la herramienta y confirmale corto ("Listo, quedás anotado: te escribo apenas entre"). Si dice que no, seguí la charla normal.
+  · ⛔ NUNCA agregues plazos ni fechas ("en 3 días", "la semana que viene", "el martes"): no los sabemos y el cliente te los reclama.
 - 🚫 CASO 2 — te devuelve **agotado: false**: no tenemos eso para ese vehículo. Para ALFOMBRAS, CUBREAUTOS y ACCESORIOS decíselo como se lo diría un vendedor en el mostrador: **que ese producto está agotado / no lo tenemos por ahora**. Ej: "De alfombras para ese modelo estamos sin stock por ahora".
   · ⛔ SEGUÍ HABLANDO DEL PRODUCTO QUE TE PIDIÓ (regla dura, te está fallando): si te preguntó por ALFOMBRAS, tu respuesta es sobre alfombras y nada más. ⛔ PROHIBIDO saltar a ofrecerle otra cosa que no pidió ("pero cubreasientos sí tenemos, ¿te muestro?"): el cliente vino por una alfombra y cambiarle el tema le suena a que le querés vender cualquier cosa. Si él después pregunta por otro producto, ahí sí se lo mostrás.
   · ⛔ En este caso NO le ofrezcas avisarle cuando llegue: no hay publicación a la cual seguirle el rastro, así que sería una promesa que el sistema no puede cumplir.
   · ⛔ NO DERIVES SOLO PORQUE NO LO TENEMOS, y NO derives sin avisar. Primero ASESORALO BIEN sobre lo que preguntó (respondele con claridad, contale lo que sepas del producto, sacale las dudas). Recién si hace falta que lo siga una persona —porque el cliente muestra interés igual, insiste, quiere encargarlo o pide que le avisen— OFRECÉSELO y esperá su respuesta: "¿Querés que le pase tu consulta a un asesor para que lo vea?". ⛔ Llamás a "derivar_a_humano" SOLO cuando el cliente te dice que sí. (La única excepción sigue siendo cuando el cliente PIDE hablar con alguien: eso se deriva en el acto, sin preguntar.)
   · ⛔ NO LE PREGUNTES QUÉ TIPO O VARIANTE BUSCA PARA "CONFIRMARLE" (de goma, bandeja rígida, con logo…): la herramienta YA buscó todo lo de ese vehículo. Repreguntar lo deja esperando una respuesta que no va a cambiar. Decíselo derecho y seguí.
-  · ⚠️ LAS EXCEPCIONES SON SOLO DE CUBREASIENTOS, no de cualquier producto: (a) los CUBREASIENTOS se hacen A MEDIDA para cualquier vehículo, así que aunque no haya publicación SÍ tenemos; (b) los CUBREASIENTOS para JMC y camiones JMC los tenemos para TODOS los modelos. En esos dos casos ofrecés y derivás, nunca decís que no. ⛔ OJO: la excepción NO se estira a las alfombras, cubreautos ni accesorios de esos vehículos. Una alfombra de un JMC que no tenemos es CASO 2 normal: se lo decís y no derivás.
+  · ⚠️ LAS EXCEPCIONES SON SOLO DE CUBREASIENTOS, y SOLO si el cliente preguntó por cubreasientos: (a) los CUBREASIENTOS se hacen A MEDIDA para cualquier vehículo, así que aunque no haya publicación SÍ tenemos; (b) los CUBREASIENTOS para JMC y camiones JMC los tenemos para TODOS los modelos. En esos dos casos ofrecés y derivás, nunca decís que no.
+  · ⛔⛔ ESA EXCEPCIÓN NO ES UNA EXCUSA PARA CAMBIARLE EL TEMA (te está fallando): si el cliente preguntó por una ALFOMBRA de un JMC, le contestás por la alfombra y PUNTO. Que tengamos cubreasientos para todos los JMC NO te habilita a ofrecerle cubreasientos a alguien que vino por una alfombra. Una alfombra de un JMC que no tenemos es CASO 2 normal: se lo decís, no derivás y no le ofrecés otra cosa.
   · 🚗 EL "NO LO TRABAJAMOS" ES POR PRODUCTO, NO POR AUTO. Nunca le digas al cliente que no trabajamos SU VEHÍCULO: lo único que podés decirle es que ESE PRODUCTO puntual no lo tenemos para ese modelo, y ofrecerle lo otro que sí haya para su auto. Ej. correcto: "Alfombra para la Freedom no estamos trabajando, pero cubreasientos sí tenemos, ¿te muestro?".
   · 🚗 FIAT STRADA / FREEDOM / VOLCANO son EL MISMO vehículo con tres nombres, y esa familia SÍ la trabajamos. La herramienta ya busca los tres como Strada, así que la respuesta para una Freedom es EXACTAMENTE la que darías para una Strada. ⛔ PROHIBIDO tratarla como un vehículo desconocido ("no conozco ese modelo", "¿qué auto es?"), ⛔ prohibido decirle que no trabajamos su auto, y ⛔ prohibido nombrarle la Strada al cliente.
 
@@ -834,9 +834,19 @@ function conVarianteDelCliente(consulta, textoCliente) {
   return faltantes.length ? `${consulta} ${faltantes.join(" ")}`.trim() : consulta;
 }
 
+// Herramientas con las que Max MIRA el producto. Alcanza cualquiera de ellas para
+// habilitar la derivación: lo que no se permite es derivar a ciegas. Las líneas a
+// medida (capitoneado, eco cuero, Sport) entran acá porque su flujo NORMAL es
+// mostrar el material y después derivar para que un asesor cotice.
+const HERRAMIENTAS_DE_PRODUCTO = new Set([
+  "consultar_precio", "enviar_foto", "mostrar_capitoneado", "mostrar_ecocuero",
+  "mostrar_cuero_sport", "descripcion_oficial",
+]);
+
 async function ejecutarHerramienta(nombre, input, ctx = {}) {
   // Estado del TURNO (se reinicia en cada mensaje del cliente, lo crea responder()).
   const turno = ctx._turno || (ctx._turno = { busco: false });
+  if (HERRAMIENTAS_DE_PRODUCTO.has(nombre)) turno.busco = true;
   try {
     if (nombre === "mostrar_capitoneado") {
       const m = CUBREASIENTOS.capitoneado.muestras || {};
@@ -967,7 +977,15 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       // ⛔ No se puede PREGUNTAR y DERIVAR en el mismo mensaje. Si Max le está
       // ofreciendo el asesor al cliente, tiene que esperar el sí: derivar igual
       // convierte la pregunta en puro adorno y el cliente queda sin decidir nada.
-      if (!DERIVACION_DIRECTA.has(motivo) && /(quer[eé]s|te parece|si quer[eé]s|quiere)[^.?!]{0,70}(asesor|compañero|vendedor|equipo)/i.test(turno.texto || "")) {
+      // Detecta la PREGUNTA de ofrecimiento, no la palabra "asesor" suelta: Max suele
+      // nombrar al asesor antes y preguntar después ("...que un asesor lo revise.
+      // ¿Querés que le pase tu consulta?"), así que se busca una pregunta que hable
+      // de pasar/derivar la consulta.
+      // ⚠️ Este guard corre para TODOS los motivos, incluso "pide_humano": si Max le
+      // está PREGUNTANDO al cliente si quiere el asesor, entonces el cliente no lo
+      // pidió, y marcar el motivo como "pide_humano" no puede servir de atajo.
+      const ofreceAsesor = /[¿?][^?]*\b(quer[eé]s|quiere|te parece|quer[ií]a)\b[^?]*\b(pas[eoa]r?|pase|paso|derive|derivar|consulta|asesor|compa[ñn]ero|vendedor)\b[^?]*\?/i;
+      if (ofreceAsesor.test(turno.texto || "")) {
         return {
           ok: false,
           mensaje: "En este mismo mensaje le estás PREGUNTANDO al cliente si quiere que lo pases con un asesor. Entonces no lo derives todavía: mandá solo la pregunta y esperá la respuesta. Si te dice que sí, ahí llamás a \"derivar_a_humano\".",
@@ -1242,7 +1260,20 @@ function armarRespuesta(texto, acciones, ctx = {}) {
       .join("\n\n")
       .trim();
   }
-  const textoFinal = [limpio, ...oficiales, avisoColocacion].filter(Boolean).join("\n\n")
+  // PRODUCTO AGOTADO: el texto lo pone el CÓDIGO (AVISO_AGOTADO de config.js), igual
+  // que el de colocación, para que SIEMPRE salga igual — es lo que pidió el dueño.
+  // Y como el modelo igual lo parafrasea, le sacamos sus propios párrafos que hablen
+  // de stock o del aviso: si no, el cliente lee dos veces lo mismo y encima la
+  // pregunta "¿te aviso?" le queda repetida.
+  const avisoAgotado = acciones.find((a) => a.resultado?.textoAgotado)?.resultado?.textoAgotado || null;
+  if (avisoAgotado) {
+    limpio = limpio
+      .split(/\n\s*\n/)
+      .filter((p) => !/(agotad|sin stock|no (nos )?qued|reingres|repon|stock|avis\w*|te escribo)/i.test(p))
+      .join("\n\n")
+      .trim();
+  }
+  const textoFinal = [limpio, ...oficiales, avisoColocacion, avisoAgotado].filter(Boolean).join("\n\n")
     || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
   return { texto: textoFinal, acciones, imagenesEnviar, videosEnviar };
 }

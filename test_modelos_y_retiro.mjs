@@ -62,10 +62,15 @@ await caso(
   "Tenés alfombras para la Fiat Freedom?",
   ({ resp }) => {
     const niega = /(no ten|no hay|no contamos|no manejamos|no disponemos|no (la|lo|las|los)? ?trabajamos|no estamos trabajando)/i.test(resp);
+    // Desde el 3 ago el texto oficial de AGOTADO dice "no tenemos en stock" y termina
+    // ofreciendo el aviso. Eso NO es negarle el producto al cliente: es la respuesta
+    // correcta para algo pausado. Solo cuenta como negación si NO ofrece el aviso.
+    const ofreceAviso = /(avis\w*|te escribo)[^.?!]{0,60}(lleg|entr|repon|stock|dispon)/i.test(resp);
     const nombraStrada = /strada/i.test(resp);
+    const niegaDeVerdad = niega && !ofreceAviso;
     return {
-      pasa: !niega && !nombraStrada,
-      detalle: niega ? "dijo que NO hay para Freedom" : nombraStrada ? "le nombró la Strada al cliente" : "ofreció sin negar y sin nombrar la Strada",
+      pasa: !niegaDeVerdad && !nombraStrada,
+      detalle: niegaDeVerdad ? "dijo que NO hay para Freedom sin ofrecerle el aviso" : nombraStrada ? "le nombró la Strada al cliente" : "no le cerró la puerta y no le nombró la Strada",
     };
   }
 );

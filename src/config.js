@@ -184,6 +184,18 @@ export const AVISO_COLOCACION = `Importante sobre la COLOCACIÓN:
 • Recién cuando el equipo te confirme la fecha y la hora podés acercarte al local. Por favor no vengas antes de tener esa confirmación, porque sin el turno confirmado no vamos a poder hacerte la colocación.`;
 
 // ───────────────────────────────────────────────────────────────────
+// PRODUCTO AGOTADO — pedido de Pablo (3 ago 2026): "es importante que sea algo así
+// el mensaje SIEMPRE". Cuando la publicación existe en Mercado Libre pero está
+// pausada o sin stock, Max manda ESTE texto, palabra por palabra, y después espera
+// la respuesta del cliente. Si el cliente dice que sí, se anota la espera y cuando
+// el producto vuelve el sistema le escribe solo.
+// ✏️ Para cambiar cómo se lo dice a los clientes, se edita ACÁ y nada más.
+// ⛔ Sin fechas ni plazos concretos: no los sabemos y el cliente los reclama.
+export const AVISO_AGOTADO = `Actualmente está agotado, no tenemos en stock. Estamos esperando que reingrese stock.
+
+¿Querés que te avise apenas llegue?`;
+
+// ───────────────────────────────────────────────────────────────────
 // LO QUE **NO** HACEMOS — pedido de Pablo (31 jul 2026): "Max no puede inventar".
 // Max le dijo a un cliente que le podíamos hacer una ALFOMBRA A MEDIDA. Eso NO
 // existe: La Casa del Cubreasiento no fabrica alfombras a pedido. Todo lo que
