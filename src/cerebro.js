@@ -9,7 +9,8 @@ import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACIO
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
-import { productos as productosML } from "./catalogo_vivo.js";
+import { productos as productosML, agotados as agotadosML, agotadoPorId } from "./catalogo_vivo.js";
+import { anotarEspera, hayEsperas } from "./esperas.js";
 import { leccionesActuales } from "./aprendizaje.js";
 import { crearLinkPago, hayMercadoPago } from "./pagos.js";
 import { registrarTransferencia } from "./transferencias.js";
@@ -32,7 +33,7 @@ const STOP_BUSQUEDA = new Set([
 ]);
 
 const _normTxt = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-const _mapProd = (item) => ({ nombre: item.n, precio: item.p, precio_lista: item.l, moneda: item.usd ? "USD" : "UYU", img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
+const _mapProd = (item) => ({ id: item.id, nombre: item.n, precio: item.p, precio_lista: item.l, moneda: item.usd ? "USD" : "UYU", img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
 // Formatea un precio con su símbolo de moneda. USD => "US$ 60"; UYU => "$ 8.010".
 const _fmtPrecio = (precio, moneda) => `${moneda === "USD" ? "US$ " : "$ "}${Number(precio).toLocaleString("es-UY")}`;
 
@@ -134,7 +135,9 @@ function _matchCarroceria(nombre, carr) {
 const SINONIMOS_MODELO = { freedom: "strada", volcano: "strada" };
 
 // Busca productos del catálogo priorizando el MODELO/marca (no las palabras genéricas).
-export function buscarPrecio(consulta) {
+// `lista` permite buscar sobre otro conjunto que no sea el catálogo de venta: lo usa
+// buscarAgotado() para revisar las publicaciones pausadas / sin stock.
+export function buscarPrecio(consulta, lista = null) {
   const palabras = _normTxt(consulta)
     .split(/\s+/)
     .filter((w) => w.length > 1)
@@ -145,9 +148,8 @@ export function buscarPrecio(consulta) {
   const catFiltro = categoriaDe(consulta);
   const cab = cabinaDe(consulta); // filtro suave por cabina simple/doble
   const carr = carroceriaDe(consulta); // filtro suave por sedán/hatch
-  const pool = catFiltro
-    ? productosML().filter((item) => catFiltro(_normTxt(item.n)))
-    : productosML();
+  const base0 = lista || productosML();
+  const pool = catFiltro ? base0.filter((item) => catFiltro(_normTxt(item.n))) : base0;
   // Aplica los filtros suaves (cabina, carrocería) SOLO si quedan resultados; si no, no descarta
   // (mejor ofrecer lo del modelo y, si hace falta, preguntar la variante).
   const aplicarCab = (lista) => {
@@ -179,6 +181,37 @@ export function buscarPrecio(consulta) {
   if (catFiltro) return aplicarCab(pool).slice(0, 6).map(_mapProd);
   const base = pool.filter((item) => { const m = _normTxt(item.n); return palabras.every((p) => m.includes(p)); });
   return aplicarCab(base).slice(0, 6).map(_mapProd);
+}
+
+// Busca lo mismo, pero entre las publicaciones AGOTADAS (pausadas o en cero). Sirve
+// para distinguir el producto que se agotó y va a volver —donde Max ofrece avisarle—
+// del que directamente no trabajamos. Devuelve el primero, o null.
+export function buscarAgotado(consulta) {
+  const r = buscarPrecio(consulta, agotadosML());
+  return r.length ? { id: r[0].id, nombre: r[0].nombre } : null;
+}
+
+// Respuesta de las herramientas de búsqueda cuando el catálogo de venta no tiene
+// nada. Distingue los dos casos que antes se trataban igual (y terminaban siempre
+// en una derivación):
+//   · la publicación EXISTE pero está caída → se agotó, ofrecemos avisarle;
+//   · no existe → no lo trabajamos (salvo cubreasientos y JMC, que siguen derivando).
+export function sinStockOInexistente(consulta) {
+  const ago = buscarAgotado(consulta);
+  if (ago) {
+    return {
+      encontrado: false,
+      agotado: true,
+      producto_id: ago.id,
+      producto: ago.nombre,
+      mensaje: `"${ago.nombre}" existe pero está AGOTADO. ⛔ NO derives a un asesor y NO des precio. Decile con naturalidad que se agotó / está por llegar y ofrecele avisarle apenas entre. Si acepta, llamá a "avisar_cuando_llegue" con producto_id="${ago.id}".`,
+    };
+  }
+  return {
+    encontrado: false,
+    agotado: false,
+    mensaje: "No existe publicación de eso, ni activa ni agotada. Si es ALFOMBRA, CUBREAUTO o ACCESORIO: decile con sinceridad que ese producto para ese vehículo no lo trabajamos, y NO derives ni le ofrezcas avisarle. Si es un CUBREASIENTO o el vehículo es JMC: seguí como siempre (ofrecé las líneas y derivá con derivar_a_humano).",
+  };
 }
 
 let _client = null;
@@ -339,7 +372,7 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 - ⛔ NO SEAS INSISTENTE NI REPETITIVO. Nunca repreguntes algo que el cliente YA respondió, ya aclaró, o eligió no contestar. Si el cliente confirma o avanza (dice "ese está bien", "dale", "me sirve", "ok"), SEGUÍ SU RITMO y avanzá con lo que quiere: NO vuelvas a pedir el mismo dato (año, modelo, etc.) salvo que sea imprescindible para concretar la venta/el turno. Si ya preguntaste algo una vez y no te lo contestó, NO lo repitas.
 - 🧠 RECORDÁ TODO LO QUE EL CLIENTE YA DIJO (REGLA CLAVE, no la rompas): tenés el historial completo de la charla — USALO. Apenas el cliente menciona el MODELO de su auto (ej. "cubreasiento para HB20"), ese es SU vehículo para TODA la conversación: NO le vuelvas a preguntar "¿para qué modelo?" más adelante. Lo mismo con el COLOR, el AÑO, el tipo de cabina, si quiere logo, el medio de pago, etc.: una vez que lo dijo, queda FIJADO y das por sabido ese dato; NO lo repreguntes. Si el cliente eligió un color, referite a ESE color de ahí en más ("el capitoneado negro que elegiste"). Antes de preguntar CUALQUIER dato, revisá si ya está en la conversación: si está, NO preguntes. Solo se vuelve a preguntar si el cliente CAMBIA de auto/modelo explícitamente. Ser coherente con lo que ya te dijeron es lo más importante: nada de hacer sentir al cliente que no lo escuchaste.
 - No repitas el saludo, tu nombre, ni reformules la misma pregunta de otra forma.
-- 🚗 EL VEHÍCULO SE PREGUNTA UNA SOLA VEZ (REGLA DURA, te está fallando): en cuanto el cliente te da CUALQUIER referencia de su vehículo —una marca, un modelo, o un tipo genérico como "combi", "camioneta", "auto chico"— tu PRÓXIMA acción es BUSCAR ESE TÉRMINO en el catálogo con "enviar_foto" (o "consultar_precio"), NO volver a preguntar. ⛔ PROHIBIDO pedirle que precise el modelo de nuevo y PROHIBIDO tirarle una lista de submodelos para que elija ("¿VW Combi, Sprinter, Transit...?"). Ejemplo concreto: cliente dice "tengo una combi" → buscás "combi" con enviar_foto y le mostrás lo que aparezca. Si la búsqueda NO devuelve nada para ese vehículo, NO sigas pidiendo el modelo: decile con sinceridad que para ese vehículo lo cotiza un vendedor y derivá con "derivar_a_humano". Como mucho, UNA repregunta corta en toda la charla; si no la contesta, seguí igual.
+- 🚗 EL VEHÍCULO SE PREGUNTA UNA SOLA VEZ (REGLA DURA, te está fallando): en cuanto el cliente te da CUALQUIER referencia de su vehículo —una marca, un modelo, o un tipo genérico como "combi", "camioneta", "auto chico"— tu PRÓXIMA acción es BUSCAR ESE TÉRMINO en el catálogo con "enviar_foto" (o "consultar_precio"), NO volver a preguntar. ⛔ PROHIBIDO pedirle que precise el modelo de nuevo y PROHIBIDO tirarle una lista de submodelos para que elija ("¿VW Combi, Sprinter, Transit...?"). Ejemplo concreto: cliente dice "tengo una combi" → buscás "combi" con enviar_foto y le mostrás lo que aparezca. Si la búsqueda NO devuelve nada para ese vehículo, NO sigas pidiendo el modelo: resolvelo como dice la sección "PRODUCTO AGOTADO / QUE NO TRABAJAMOS" (según lo que te haya devuelto la herramienta, le ofrecés el aviso, le decís que no lo trabajamos, o derivás). Como mucho, UNA repregunta corta en toda la charla; si no la contesta, seguí igual.
 - Sin emojis. Lenguaje claro, profesional y cordial (tuteando, con respeto). Si no sabés algo, no lo inventes: consultalo (ver más abajo).
 - DALE ESPACIO: después de preguntar algo, esperá la respuesta. Si el cliente no contestó, NO mandes otro mensaje insistiendo.
 
@@ -372,10 +405,19 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 
 # SI NO ENCONTRÁS EL PRODUCTO o NO SABÉS ALGO (importante — es la REGLA N°0 aplicada)
 - NUNCA inventes datos, precios, plazos ni características.
-- Si el producto NO aparece en el catálogo, o te preguntan algo que no podés resolver (un costo no especificado, un caso especial), indicá con cortesía que lo va a consultar con un vendedor para darle una respuesta precisa, y usá la herramienta "derivar_a_humano" (motivo "otro") con el resumen. Ej: "${FRASE_CONSULTO}". Así no queda nada sin resolver.
-- ⛔ NO EXISTE EL "TE LO CONSEGUIMOS": si la herramienta no devuelve nada para lo que el cliente pide (un producto que no está, un vehículo sin publicaciones, un accesorio que no vendemos), está PROHIBIDO decir que se lo fabricamos, que se lo encargamos, que lo traemos, que lo adaptamos o que "se puede hacer a medida". Lo único que podés decir es la verdad: que lo verificás con un asesor. Y derivás en ese mismo turno.
-- ⛔ Tampoco inventes al revés: si no estás seguro de que NO lo tenemos, no le cierres la puerta al cliente con un "no tenemos" tajante. La respuesta segura cuando no sabés es siempre la misma: lo consultás con un asesor y derivás.
+- Si te preguntan algo que no podés resolver (un costo no especificado, un caso especial), indicá con cortesía que lo va a consultar con un vendedor para darle una respuesta precisa, y usá la herramienta "derivar_a_humano" (motivo "otro") con el resumen. Ej: "${FRASE_CONSULTO}". Así no queda nada sin resolver. ⚠️ Si lo que NO aparece es un PRODUCTO, no derives de entrada: leé la sección "PRODUCTO AGOTADO / QUE NO TRABAJAMOS" y hacé lo que dice.
+- ⛔ NO EXISTE EL "TE LO CONSEGUIMOS": si la herramienta no devuelve nada para lo que el cliente pide (un producto que no está, un vehículo sin publicaciones, un accesorio que no vendemos), está PROHIBIDO decir que se lo fabricamos, que se lo encargamos, que lo traemos, que lo adaptamos o que "se puede hacer a medida". Lo único que podés decir es la verdad.
+- ⛔ Tampoco inventes al revés: si NO SABÉS si lo tenemos, no le cierres la puerta al cliente con un "no tenemos" tajante. La ÚNICA vez que sí podés decirle que no lo trabajamos es el CASO 2 de la sección de abajo, y es porque ahí la herramienta ya verificó que no existe la publicación ni activa ni agotada: eso no es suponer, es un dato.
 - ⚠️ Las ÚNICAS excepciones al "no hay" (porque el dueño lo confirmó) son: las 4 líneas de CUBREASIENTOS a medida, que se hacen para CUALQUIER vehículo; los cubreasientos para TODOS los modelos JMC; y la Fiat Strada/Freedom/Volcano, que son el mismo vehículo. Fuera de esas tres excepciones, no des por hecho que existe algo que no viste.
+
+# PRODUCTO AGOTADO / QUE NO TRABAJAMOS (leelo antes de derivar por un producto)
+Cuando "consultar_precio" o "enviar_foto" no encuentran nada, la herramienta te dice cuál de los DOS casos es. No son lo mismo y se responden distinto:
+- 📦 CASO 1 — te devuelve **agotado: true** (con producto y producto_id): esa publicación EXISTE pero se quedó sin stock. ⛔ PROHIBIDO derivar y PROHIBIDO dar precio. Decile con naturalidad que ese se agotó y que estamos esperando la reposición, y OFRECELE avisarle apenas llegue. Ej: "Justo ese se nos agotó, estamos esperando que lleguen. ¿Querés que te avise apenas entren?".
+  · Si el cliente dice que SÍ, llamá a "avisar_cuando_llegue" con el producto_id EXACTO que te dio la herramienta, y confirmale corto ("Listo, quedás anotado: te escribo apenas entre"). Si dice que no, seguí la charla normal.
+  · ⛔ NUNCA le prometas una fecha de llegada: no la sabemos. "Estamos esperando la llegada" y nada más.
+- 🚫 CASO 2 — te devuelve **agotado: false**: no hay publicación de eso, ni activa ni agotada. Para ALFOMBRAS, CUBREAUTOS y ACCESORIOS eso significa que ese producto para ese vehículo NO lo trabajamos (son productos por molde/medida: si no está publicado, no existe). Decíselo con sinceridad y sin vueltas ("Para ese modelo no estamos trabajando alfombras"), ofrecele ayudarlo con otra cosa, y ⛔ NO derives ni le ofrezcas avisarle cuando llegue (no va a llegar nunca).
+  · ⚠️ TRES EXCEPCIONES donde el CASO 2 NO aplica y seguís como siempre (ofrecés y derivás, NUNCA decís que no): (a) CUBREASIENTOS — se hacen A MEDIDA para cualquier vehículo, así que aunque no haya publicación SÍ tenemos; (b) JMC y camiones JMC — de esa marca tenemos TODOS los modelos; (c) Fiat Strada / Freedom / Volcano — son el mismo vehículo y el dueño confirmó que los trabajamos.
+  · Son las MISMAS tres excepciones al "no hay" de la sección de arriba: si el caso cae en una de ellas, derivás; si no cae en ninguna, le decís la verdad de que no lo trabajamos.
 
 # Qué hacés
 1. Respondés consultas sobre los productos.
@@ -388,7 +430,7 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 - "enviar_foto" ya incluye el precio de cada opción, así que para ofrecer/mostrar productos de un modelo NO necesitás llamar también a "consultar_precio".
 - ⛔ ENVIÁ SOLO LO QUE EL CLIENTE PIDE (REGLA DE ORO, NO LA ROMPAS): si el cliente pregunta por CUBREASIENTOS, mandá únicamente cubreasientos. Si pregunta por ALFOMBRAS, solo alfombras. Si pregunta por CUBRE VOLANTE, solo cubre volante. NUNCA agregues otros productos/accesorios que el cliente NO pidió (no sumes el cubre volante, ni alfombras, ni cubreauto "de yapa"). Llamá a "enviar_foto" UNA sola vez, con el TIPO de producto que pidió + el modelo. Nada de productos sorpresa.
 - VENTA ADICIONAL (solo si el cliente abre la puerta): recién DESPUÉS de resolver lo que pidió, y solo si el cliente muestra interés o pregunta "¿qué más tienen?", podés MENCIONAR en texto (sin mandar fotos sin que las pida) que también hay otros accesorios para su vehículo (ej: "Si le interesa, también tenemos cubre volante para su marca"). Nunca al inicio ni sin que lo pida.
-- ⛔⛔ HABLÁ SOLO DEL MODELO QUE TE NOMBRÓ EL CLIENTE (REGLA DURA, te está fallando): si el cliente te pregunta por un modelo (ej. una Fiat Toro), TODA tu respuesta es sobre ESE modelo y nada más. ⛔ PROHIBIDO comparar, equiparar o mezclar modelos: NUNCA digas cosas como "la alfombra de la Toro es la misma que la de la Strada", "le sirve la de tal otro modelo", "comparte producto con...", ni menciones otro vehículo que el cliente no nombró. Cada vehículo tiene SU producto, hecho a medida para él: eso es lo único que el cliente quiere escuchar, y decirle que es "igual a la de otro auto" le hace dudar de que le vaya a calzar. Buscá y mostrá los productos de SU modelo con "enviar_foto"/"consultar_precio" y punto. Si para ese modelo no aparece nada, NO ofrezcas el de otro auto: derivá con "derivar_a_humano" para que un asesor lo cotice.
+- ⛔⛔ HABLÁ SOLO DEL MODELO QUE TE NOMBRÓ EL CLIENTE (REGLA DURA, te está fallando): si el cliente te pregunta por un modelo (ej. una Fiat Toro), TODA tu respuesta es sobre ESE modelo y nada más. ⛔ PROHIBIDO comparar, equiparar o mezclar modelos: NUNCA digas cosas como "la alfombra de la Toro es la misma que la de la Strada", "le sirve la de tal otro modelo", "comparte producto con...", ni menciones otro vehículo que el cliente no nombró. Cada vehículo tiene SU producto, hecho a medida para él: eso es lo único que el cliente quiere escuchar, y decirle que es "igual a la de otro auto" le hace dudar de que le vaya a calzar. Buscá y mostrá los productos de SU modelo con "enviar_foto"/"consultar_precio" y punto. Si para ese modelo no aparece nada, NO ofrezcas el de otro auto: resolvelo como dice la sección "PRODUCTO AGOTADO / QUE NO TRABAJAMOS".
 - ⚠️ ÚNICA EXCEPCIÓN — MODELOS QUE SON LA MISMA UNIDAD (no digas que no hay): la **Fiat Strada, la Fiat Freedom y la Fiat Volcano son el MISMO vehículo** (Freedom y Volcano son versiones de la Strada, no son otro auto). Si el cliente pregunta por Freedom o Volcano, SÍ tenemos productos: mostráselos con "enviar_foto"/"consultar_precio" (la herramienta ya los busca como Strada) y NUNCA digas que no hay. Pero incluso acá, NO le expliques al cliente que "es lo mismo que la Strada" ni le nombres otra versión: hablale de SU auto, con naturalidad, como si el producto fuera para el modelo que él te dijo. Esta excepción vale SOLO para Strada/Freedom/Volcano: no la extiendas a NINGÚN otro par de modelos (la Toro NO es una Strada, la Saveiro NO es una Strada, etc.).
 - ⚠️ JMC Y CAMIONES (REGLA, no la rompas — NUNCA digas que no hay): para los vehículos **JMC** y los **camiones** de esa marca, la casa del cubreasiento tiene cubreasientos para **TODOS los modelos**, aunque NO todos estén publicados en Mercado Libre / en el catálogo. Por eso, si el cliente pregunta por un modelo de JMC (o un camión JMC) que NO aparece en el catálogo o del que vos no tenés información, ⛔ NO digas que no hay ni que no lo tenemos: decile con seguridad que **sí tenemos cubreasientos para todos los modelos de JMC** y que lo derivás con un asesor para que lo asesore mejor con ese modelo en particular. En ese mismo turno llamá a "derivar_a_humano" (motivo "otro", resumen con el vehículo JMC que consultó). Ej: "Sí, tenemos cubreasientos para todos los modelos de JMC. Le paso con un asesor que lo asesora mejor según su modelo."
 - 🏪 "¿CUÁNDO PUEDO PASAR A BUSCARLO?" (REGLA, contestá ESO y no otra cosa): si el cliente pregunta cuándo puede pasar, si tiene que agendar, o si necesita turno para RETIRAR un producto que NO se coloca (alfombras, cubre volantes, cubreautos, accesorios, o el cubreasiento eco cuero económico), respondé DERECHO y en ESE mismo mensaje: puede venir CUANDO QUIERA, sin turno ni coordinar nada, dentro del horario del local (${NEGOCIO.horario}), en ${NEGOCIO.direccion}. ⛔ NO le cambies de tema al pago ni le hagas otra pregunta antes de contestarle eso: te preguntó cuándo puede ir, contestale cuándo puede ir. El pago lo seguís después, en el mismo mensaje o en el siguiente. ⛔ Y NO llames a "solicitar_turno" para esto.
@@ -543,6 +585,20 @@ const TOOLS = [
         type: "object",
         properties: { modelo: { type: "string", description: "Qué busca: producto y/o modelo del auto. Ej: 'cubreasiento Hilux', 'alfombra Nivus', 'cubre volante cuero', 'cubreauto'" } },
         required: ["modelo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "avisar_cuando_llegue",
+      description: "Anota al cliente para avisarle por WhatsApp cuando un producto AGOTADO vuelva a estar disponible. Usar SOLO cuando 'consultar_precio' o 'enviar_foto' devolvieron agotado:true Y el cliente aceptó que le avisemos. El aviso lo manda el sistema solo cuando el producto vuelve.",
+      parameters: {
+        type: "object",
+        properties: {
+          producto_id: { type: "string", description: "El producto_id EXACTO que devolvió la herramienta de búsqueda. No lo inventes ni lo modifiques." },
+        },
+        required: ["producto_id"],
       },
     },
   },
@@ -794,12 +850,29 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       return { ok: true, link: r.link, monto: r.monto, instruccion: "Pasale este link al cliente para que pague directo. Es por el monto exacto de su compra." };
     }
     if (nombre === "consultar_precio") {
-      const encontrados = buscarPrecio(input.modelo || input.producto || "");
-      if (!encontrados.length) return { encontrado: false, mensaje: "No aparece ese producto exacto en la lista; pedí más datos (modelo/año) u ofrecé cotizarlo." };
+      const consulta = input.modelo || input.producto || "";
+      const encontrados = buscarPrecio(consulta);
+      if (!encontrados.length) return { ...sinStockOInexistente(consulta) };
       return { encontrado: true, moneda: "UYU", resultados: encontrados };
     }
+    if (nombre === "avisar_cuando_llegue") {
+      if (!hayEsperas()) return { ok: false, mensaje: "No puedo anotar el aviso ahora. NO le prometas al cliente que le vas a avisar: derivá con derivar_a_humano (motivo otro) contando qué producto busca." };
+      // Validamos el id contra la lista real de agotados: si el modelo lo inventó,
+      // el aviso nunca llegaría y le habríamos mentido al cliente.
+      const prod = agotadoPorId(input.producto_id);
+      if (!prod) return { ok: false, mensaje: "Ese id de producto no está en la lista de agotados. Volvé a llamar a consultar_precio y usá EXACTAMENTE el id que te devuelva." };
+      const tel = ctx.contacto?.tel || String(ctx.chatId || "").split("@")[0];
+      const r = await anotarEspera({ telefono: tel, itemId: prod.id, titulo: prod.n });
+      if (!r.ok) return { ok: false, mensaje: "No pude anotar el aviso. NO se lo prometas al cliente: derivá con derivar_a_humano." };
+      return { ok: true, producto: prod.n, instruccion: "Ya quedó anotado. Confirmáselo corto y cálido (ej: 'Listo, quedás anotado: te escribo apenas entre'). NO le prometas fecha de llegada." };
+    }
     if (nombre === "enviar_foto") {
-      const encontrados = buscarPrecio(input.producto || input.modelo || "").filter((x) => x.img);
+      const consulta = input.producto || input.modelo || "";
+      const hallados = buscarPrecio(consulta);
+      // Solo cuando NO hay nada del producto miramos si está agotado o si no lo
+      // trabajamos: si hay productos pero ninguno tiene foto, es otro problema.
+      if (!hallados.length) return { ok: false, ...sinStockOInexistente(consulta) };
+      const encontrados = hallados.filter((x) => x.img);
       if (!encontrados.length) return { ok: false, mensaje: "No tengo foto exacta de eso; pedí más datos del modelo." };
       const elegidas = encontrados.slice(0, 4); // hasta 4 fotos (opciones del modelo)
       return { ok: true, enviadas: elegidas.length, fotos: elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio, moneda: x.moneda })) };

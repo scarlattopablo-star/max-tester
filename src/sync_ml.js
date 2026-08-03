@@ -60,7 +60,9 @@ function mapItem(it, precio) {
   const lista = precio ? precio.lista : (it.original_price ? Math.round(Number(it.original_price)) : null);
   if (!venta || !it.title) return null;
   const img = String(it.thumbnail || "").replace(/^http:/, "https:");
-  const out = { n: it.title, p: venta, l: lista && lista > venta ? lista : null, img };
+  // El `id` de la publicación es lo que ata una ESPERA ("avisame cuando llegue")
+  // a un producto concreto: sin él no se puede saber que volvió el mismo artículo.
+  const out = { id: String(it.id || ""), n: it.title, p: venta, l: lista && lista > venta ? lista : null, img };
   // Todas las fotos de la publicación (la web arma una galería con estas).
   if (Array.isArray(it.pictures) && it.pictures.length) {
     out.imgs = it.pictures
@@ -135,12 +137,14 @@ function dedup(items) {
   return out;
 }
 
-// ── Método principal: IDs de las publicaciones activas del vendedor ──
-async function idsActivos(tk) {
+// ── Método principal: IDs de las publicaciones del vendedor, por estado ──
+// `estado` = "active" (las que se venden) o "paused" (las caídas: agotadas o
+// pausadas a mano, que son las que un cliente puede pedir que le avisemos).
+async function idsPorEstado(tk, estado = "active") {
   const ids = [];
   let total = Infinity;
   for (let offset = 0; offset < Math.min(total, 1000); offset += 100) {
-    const url = `${API}/users/${SELLER_ML_ID}/items/search?status=active&limit=100&offset=${offset}`;
+    const url = `${API}/users/${SELLER_ML_ID}/items/search?status=${estado}&limit=100&offset=${offset}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${tk}` } });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(`items/search ${res.status}: ${body.message || body.error || ""}`);
@@ -153,8 +157,14 @@ async function idsActivos(tk) {
 }
 
 // ── Detalle (título, fotos, stock) de cada publicación, de a 20 (multiget) ──
+// Devuelve DOS listas:
+//   activos  → se pueden vender hoy (status active y stock > 0). Es el catálogo.
+//   agotados → existen pero no se pueden comprar (pausadas, o activas en cero).
+// Antes las caídas se tiraban a la basura, y por eso Max no podía distinguir
+// "se agotó" de "no trabajamos ese modelo".
 async function detallesDe(tk, ids) {
-  const raws = [];
+  const vendibles = [];
+  const caidos = [];
   const ATTRS = "id,title,price,original_price,currency_id,thumbnail,pictures,available_quantity,status,permalink,variations";
   for (let i = 0; i < ids.length; i += 20) {
     const grupo = ids.slice(i, i + 20);
@@ -165,19 +175,34 @@ async function detallesDe(tk, ids) {
     for (const wrap of body) {
       const it = wrap?.body;
       if (!it || (wrap.code && wrap.code !== 200)) continue;
-      if (it.status && it.status !== "active") continue;
-      if (typeof it.available_quantity === "number" && it.available_quantity <= 0) continue;
-      raws.push(it);
+      // "closed" = publicación terminada para siempre: no vuelve, no interesa.
+      if (it.status && it.status !== "active" && it.status !== "paused") continue;
+      const sinStock = typeof it.available_quantity === "number" && it.available_quantity <= 0;
+      if (it.status === "paused" || sinStock) caidos.push(it);
+      else vendibles.push(it);
     }
   }
-  // Precio REAL (con promociones activas) de cada publicación, vía /prices.
-  const precios = await preciosReales(tk, raws.map((r) => r.id));
-  const out = [];
-  for (const it of raws) {
+  // Precio REAL (con promociones activas) vía /prices: SOLO de los vendibles.
+  // De un producto agotado alcanza con el título (es lo único que sale en el aviso),
+  // así el sync no duplica las llamadas a la API de ML.
+  const precios = await preciosReales(tk, vendibles.map((r) => r.id));
+  const activos = [];
+  for (const it of vendibles) {
     const m = mapItem(it, precios.get(it.id));
-    if (m) out.push(m);
+    if (m) activos.push(m);
   }
-  return out;
+  // Para los agotados NO exigimos precio (mapItem descarta lo que no lo tenga, y una
+  // publicación pausada bien puede venir en cero): alcanza con id + título, que es
+  // lo único que necesita el aviso "volvió a estar disponible".
+  const agotados = caidos
+    .filter((it) => it.id && it.title)
+    .map((it) => ({
+      id: String(it.id),
+      n: it.title,
+      img: String(it.thumbnail || "").replace(/^http:/, "https:"),
+      motivo: it.status === "paused" ? "pausada" : "sin stock",
+    }));
+  return { activos, agotados };
 }
 
 // ── Respaldo: vieja búsqueda pública por seller_id (ML la restringió, suele dar 403) ──
@@ -209,11 +234,24 @@ export async function sincronizar() {
   try {
     const tk = await tokenApp();
     let items = [];
+    let caidos = null; // null = esta vía no sabe de agotados; no pisamos los que había
     let via = "";
     // 1) Método recomendado: items del propio vendedor + multiget de detalles.
+    //    Pedimos los ACTIVOS y también los PAUSADOS: de estos últimos sale la lista
+    //    de agotados que Max usa para ofrecer "te aviso cuando llegue".
     try {
-      const ids = await idsActivos(tk);
-      items = dedup(await detallesDe(tk, ids));
+      const [idsAct, idsPau] = await Promise.all([
+        idsPorEstado(tk, "active"),
+        // Que falle el listado de pausados NO puede voltear el sync entero: en el
+        // peor caso nos quedamos sin agotados nuevos, pero el catálogo se actualiza.
+        idsPorEstado(tk, "paused").catch((e) => {
+          console.error("⚠ No pude listar las publicaciones pausadas:", e.message);
+          return [];
+        }),
+      ]);
+      const det = await detallesDe(tk, [...idsAct, ...idsPau]);
+      items = dedup(det.activos);
+      caidos = det.agotados;
       via = "users/items";
     } catch (e1) {
       // 2) Respaldo: búsqueda pública por seller_id (por si vuelve a habilitarse).
@@ -230,9 +268,17 @@ export async function sincronizar() {
       _ultima = { ok: false, motivo: `solo ${items.length} items (via ${via}); no piso el catálogo`, cuando: ahora(), cantidad: items.length };
       return _ultima;
     }
-    actualizarCatalogo(items, "api-ml");
-    console.log(`🔄 Catálogo sincronizado con Mercado Libre: ${items.length} publicaciones activas (${via}).`);
-    _ultima = { ok: true, motivo: `ok (${via})`, cuando: ahora(), cantidad: items.length };
+    actualizarCatalogo(items, "api-ml", caidos);
+    console.log(`🔄 Catálogo sincronizado con Mercado Libre: ${items.length} publicaciones activas${caidos ? ` y ${caidos.length} agotadas` : ""} (${via}).`);
+    _ultima = { ok: true, motivo: `ok (${via})`, cuando: ahora(), cantidad: items.length, agotados: caidos ? caidos.length : null };
+    // Con el catálogo fresco, avisamos a los clientes cuyo producto volvió.
+    // Nunca puede voltear la sincronización: si falla, se reintenta en la próxima.
+    try {
+      const { revisarReposiciones } = await import("./esperas.js");
+      await revisarReposiciones();
+    } catch (e) {
+      console.error("⚠ Repaso de esperas falló:", e.message);
+    }
     return _ultima;
   } catch (e) {
     console.error("⚠ Sync ML falló:", e.message);
