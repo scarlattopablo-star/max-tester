@@ -12,7 +12,7 @@ import { reiniciar, historial, agregar, cargarConversaciones, ultimasConversacio
 import { cargarLecciones, programarAprendizaje, analizarAhora, estadoAprendizaje } from "./aprendizaje.js";
 import { sleep, delayEscritura } from "./humano.js";
 import { programarSync, haySyncML, ultimaSync, sincronizar } from "./sync_ml.js";
-import { infoCatalogo, productos } from "./catalogo_vivo.js";
+import { infoCatalogo, productos, agotados } from "./catalogo_vivo.js";
 import { hayMercadoPago } from "./pagos.js";
 import { proveedorIA } from "./config.js";
 import { enviarAviso, enviarTexto, enviarTextoA, formatearCupon, hayWhatsApp, linkWa } from "./notificador.js";
@@ -127,6 +127,22 @@ app.get("/api/metricas", async (req, res) => {
     return res.status(401).json({ error: "no autorizado" });
   const [mensajes, transferencias] = await Promise.all([resumenMensajes(), resumenTransferencias()]);
   res.json({ ...mensajes, transferencias });
+});
+
+// Publicaciones AGOTADAS (pausadas o en cero) que Max conoce, con búsqueda por texto.
+// Sirve para contestar con datos la pregunta "¿esto está pausado o directamente no lo
+// tenemos publicado?", que es la que decide si Max ofrece avisar cuando llegue o dice
+// que no trabajamos ese producto. Solo lectura. Misma autenticación que /api/metricas.
+app.get("/api/agotados", (req, res) => {
+  const token = process.env.NOTIFY_TOKEN;
+  const auth = req.headers.authorization || "";
+  const clave = String(req.query.clave || "");
+  if (!token || (auth !== `Bearer ${token}` && clave !== token))
+    return res.status(401).json({ error: "no autorizado" });
+  const q = String(req.query.q || "").trim().toLowerCase();
+  const lista = agotados();
+  const filtrada = q ? lista.filter((p) => String(p.n || "").toLowerCase().includes(q)) : lista;
+  res.json({ total: lista.length, encontrados: filtrada.length, resultados: filtrada.slice(0, 100) });
 });
 
 // Lista de transferencias recientes (una fila por gestión, con monto) para el
