@@ -102,10 +102,15 @@ const ERRATAS_ML = [
 // "de bandeja") y volverlas vacías le daría al cliente la que no pidió. Lo único que no
 // pueden hacer es contar como si fueran el MODELO: con "quiero una alfombra antiderrame"
 // no sabemos qué auto tiene, y hay que preguntárselo antes de cotizar nada.
+// Van también las MISMAS palabras como las escribe mal el catálogo. No es un detalle:
+// el nombre que llega a la herramienta suele ser el título de la publicación copiado tal
+// cual, y "Alfombra Bual Bandeja 3d" son 4 publicaciones ACTIVAS. Sin estas, "alfombra
+// bual" pasaba como si dijera el auto y devolvía el Dolphin, el Nammi y el HB20 juntos.
 const NO_ES_AUTO = new Set([
   "antiderrame", "antiderrames", "latex", "bandejas", "3d", "5d", "baul", "baules",
   "caja", "cajas", "socalo", "socalos", "cubresocalos", "cubresocalo", "pisadera",
   "pisaderas", "lluvero", "lluveros", "gotero", "goteros",
+  "antiderame", "bual", "buales", "cubesocales", "cubresocales",
 ]);
 
 // El ACABADO del producto: nombra la MISMA pieza que el título a veces escribe de otra

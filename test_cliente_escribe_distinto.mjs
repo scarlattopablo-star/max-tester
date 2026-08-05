@@ -128,7 +128,11 @@ if (!paresRevisados) console.log("   (el catálogo no tiene ningún modelo escri
 console.log("\n── sin el auto, Max pregunta (falta_modelo) ──");
 const SOLO_PRODUCTO = ["antiderrame", "latex", "bandejas", "3d", "5d", "baul", "caja", "socalo",
   "cubresocalos", "quiero una alfombra antiderrame", "tenes bandeja rigida antiderrame",
-  "precio de la 3d antiderrame", "alfombra de baul", "alfombra de caja"];
+  "precio de la 3d antiderrame", "alfombra de baul", "alfombra de caja",
+  // La palabra del producto TAL CUAL la escribe mal el catálogo: es la que llega cuando
+  // el nombre sale de copiar el título de la publicación ("Alfombra Bual Bandeja 3d",
+  // 4 activas). Escrita así se colaba y devolvía el Dolphin, el Nammi y el HB20 juntos.
+  "alfombra bual", "alfombra antiderame", "goma cubesocales"];
 for (const q of SOLO_PRODUCTO) {
   ok(!identificaModelo(q), `"${q}" no alcanza para saber qué auto tiene → pregunta`);
 }
