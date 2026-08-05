@@ -123,3 +123,52 @@ guard de derivación, el filtro de variantes):
 
 Si se agrega otro marcador interno o algún otro dato duro (plazos, medidas, garantías), sumarlo al
 filtro **y** al test.
+
+---
+
+## Apéndice: dos errores míos que salieron al verificar en vivo
+
+Pablo avisó que **seguía dando mal el precio** con el control ya puesto. Tenía razón, y aparecieron
+dos cosas distintas.
+
+### 1. El control se auto-engañaba: un invento anterior se heredaba
+
+La primera versión aceptaba cualquier precio que **ya estuviera en la charla**, con el argumento de
+que "pasó por este mismo control cuando se dijo". Eso es falso para las conversaciones que **ya
+tenían un invento escrito de antes**: el `$2.850` del HB20 quedó en el historial y el propio control
+lo daba por bueno, así que Max lo seguía repitiendo (*"tal como te comenté recién"*). Reproducido:
+
+```
+filtrarPrecios("...a $2.850.", [], charla_que_ya_tenia_2850)
+  → inventado: null   🚨 lo dejaba pasar
+```
+
+**Corregido con la asimetría correcta:**
+
+| De dónde viene el precio | Qué se acepta |
+|---|---|
+| La herramienta, **en ese turno** | el número, su 10% de descuento y las sumas — salió del catálogo hace un segundo |
+| **La charla** (lo que Max dijo antes) | **solo si es un precio REAL del catálogo, tal cual** — su propio texto no es fuente de verdad |
+
+### 2. No había forma honesta de saber qué código estaba corriendo
+
+Se estaba usando `ultimaSync` de `/api/estado` como señal de deploy. **Esa hora cambia sola cada 30
+minutos** con la sincronización de Mercado Libre: daba por desplegado un build que podía seguir
+viejo. Verificar mirando la señal equivocada es peor que no verificar, porque se reporta como hecho
+algo que no está.
+
+- **`/api/estado` ahora publica `build.commit`** (el `RENDER_GIT_COMMIT`, se compara con el
+  `git log -1` local) **y `build.arranque`** (desde cuándo vive el proceso). Si `arranque` no cambió
+  después de un push, el deploy no subió.
+- **El hook `pre-push` podía no disparar nada.** Corría el curl del Deploy Hook en segundo plano
+  (`( sleep 6; curl ) &`) y ese subproceso podía morir al terminar el push, mientras el hook igual
+  imprimía "deploy programado". Ahora corre en **primer plano** y avisa con el código HTTP si no
+  salió. ⚠️ Vive en `.git/hooks/pre-push` y **no está versionado**: al clonar el repo hay que
+  rehacerlo.
+- **Para probar el Max de producción sin escribirle a nadie**, `POST /api/chat` (sin auth) con un
+  `chatId` descartable devuelve el texto y los captions con sus precios:
+
+```bash
+curl -s -X POST https://max-tester.onrender.com/api/chat -H "Content-Type: application/json" \
+  -d '{"chatId":"prueba","texto":"tenes alfombra para hb20? cuanto sale"}'
+```
