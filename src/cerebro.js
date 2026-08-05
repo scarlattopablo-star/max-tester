@@ -1602,7 +1602,10 @@ export function limpiarJerga(texto) {
     // propia respuesta y se las mandó pegadas a un cliente que preguntaba por el HB20: no
     // se entiende nada. Los tres canales ya envían el texto limpio, así que el agujero no
     // estaba en el envío sino en lo que escribe el modelo — y de ahí que se corte acá.
-    .replace(/[⁠-⁤]?\s*\[\s*contexto interno\b[^\]]*\]?/gi, "")
+    // "contexto" a secas y no solo "contexto interno": el bloque del anuncio de
+    // Instagram/Facebook ("[Contexto: el cliente llegó desde un anuncio…]") entra por el
+    // turno del cliente y es igual de largo y de incomprensible si Max lo copia.
+    .replace(/[⁠-⁤]?\s*\[\s*contexto\b[^\]]*\]?/gi, "")
     .replace(/[⁠-⁤]?\s*\[\s*respuesta escrita por un asesor\b[^\]]*\]?/gi, "")
     .replace(/[⁠-⁤]/g, "")
     .replace(/\bpublicad([oa])\b/gi, (m, g) => (g === g.toUpperCase() ? "DISPONIBLE" : "disponible"))

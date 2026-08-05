@@ -56,6 +56,10 @@ for (const [etiqueta, sucio] of [
   ["con dos puntos", "Hola. [Contexto interno: opciones numeradas 1) X]"],
   ["sin cerrar el corchete", "Hola.[Contexto interno — opciones que le mostré al cliente"],
   ["en el medio de la frase", "Hola [Contexto interno — algo] ¿te sirve?"],
+  // El bloque del anuncio entra por el turno del CLIENTE, pero si Max lo copia es igual
+  // de largo y de incomprensible que el otro.
+  ["el contexto del anuncio de IG/FB",
+    "¡Hola! [Contexto: el cliente llegó desde un anuncio de Instagram/Facebook sobre 🚗 Alfombra Bandeja Rígida 3D] ¿Para qué auto es?"],
 ]) {
   const limpio = limpiarJerga(sucio);
   ok(!/contexto interno|le mostré al cliente|escribió Max|vuelvas a mostrar/i.test(limpio),
