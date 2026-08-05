@@ -76,10 +76,21 @@ const ERRATAS_ML = [
   [/\b(cuberasiento|curbeasiento|cubrasiento|cubreasinto)(s?)\b/g, "cubreasiento$2"],
   [/\bchervolet\b/g, "chevrolet"],
   [/\bhyudndai\b/g, "hyundai"],
+  // Modelos que el catálogo escribe de las dos formas y el cliente también: se llevan
+  // todos a UNA sola, la separada, para que "ecosport" y "Eco Sport" sean lo mismo.
+  [/\b(ecosport|eco esport|ecoesport)\b/g, "eco sport"],
+  [/\btcross\b/g, "t cross"],
+  [/\bcorollacross\b/g, "corolla cross"],
 ];
-// Título del producto, normalizado y con las erratas corregidas. Es el texto contra el
-// que se busca (los títulos NO se tocan en el catálogo: la corrección es solo acá).
-const _tituloDe = (n) => ERRATAS_ML.reduce((s, [re, ok]) => s.replace(re, ok), _normTxt(n));
+// Título del producto, normalizado, sin puntuación y con las erratas corregidas. Es el
+// texto contra el que se busca — la MISMA cocina que se le aplica a la consulta, para
+// que "T-Cross" y "t cross" sean la misma cosa. Los títulos del catálogo no se tocan.
+const _tituloDe = (n) => ERRATAS_ML
+  .reduce((s, [re, ok]) => s.replace(re, ok), _normTxt(n).replace(/[^a-z0-9]+/g, " "))
+  .trim();
+// Mismo texto normalizado, expuesto para las pruebas: así el test compara títulos y
+// consultas con la MISMA vara que usa la búsqueda ("L 200" y "l200" son lo mismo).
+export const textoNormalizado = _tituloDe;
 // ¿El título `m` contiene el término `d`? Además del texto tal cual, acepta los
 // modelos alfanuméricos ESCRITOS CON ESPACIO en la publicación: el cliente escribe
 // "hb20" y el título dice "Hb 20" (pasa igual con "ev4"/"EV 4", "t60"/"T 60").
@@ -224,39 +235,127 @@ function variantesEn(texto) {
 // la Fiat Strada: comparten cubreasientos/alfombras/etc.
 const SINONIMOS_MODELO = { freedom: "strada", volcano: "strada" };
 
+// ── Reconocer el MODELO cuando se llama como una palabra genérica ────────────
+// Regla del dueño: si el cliente pide un auto, no se le ofrece el de otro. El problema
+// es que algunos modelos se llaman igual que una palabra del producto y quedaban
+// tapados por la lista de genéricas: al que pedía un cubreasiento para el **Suzuki
+// Alto** le salían el Celerio y el Swift, y al del **Ford EcoSport** le salía la Ranger.
+// Estas frases vuelven a contar como modelo (obligatorias) cuando aparecen enteras.
+const MODELOS_TAPADOS = [
+  ["eco", "sport"],      // Ford EcoSport ("eco" y "sport" son genéricas por separado)
+  ["t", "cross"],        // VW T-Cross ("t" se descarta por corta, "cross" es genérica)
+  ["corolla", "cross"],  // Toyota Corolla Cross ≠ Corolla
+  ["alto"],              // Suzuki Alto (choca con "alta densidad": pide la marca)
+];
+// Los de UNA sola palabra solo cuentan como modelo si el cliente nombró la marca;
+// los de dos ya son inconfundibles por sí solos.
+const MARCA_DEL_MODELO = { alto: ["suzuki"] };
+
+// Modelos que son un NÚMERO (Peugeot 208/2008/3008, Omoda 5, JAC 1083). Se sacan del
+// propio catálogo —el token que va justo detrás de la marca— así se mantienen solos
+// cuando cambia el catálogo. Sin esto, "cubreasiento peugeot 208" le ofrecía al cliente
+// el 2008 y la Landtrek, y "alfombra fiat 500" le ofrecía la Toro.
+let _numCache = null;
+function modelosNumericos() {
+  const lista = [...productosML(), ...agotadosML()];
+  // La clave mira largo + primer y último id: alcanza para notar que el sync cambió el
+  // catálogo, sin recorrerlo entero en cada búsqueda.
+  const clave = `${lista.length}|${lista[0]?.id}|${lista[lista.length - 1]?.id}`;
+  if (_numCache && _numCache.clave === clave) return _numCache.mapa;
+  const porNumero = new Map(); // numero -> Set(marcas)
+  for (const p of lista) {
+    const t = _tituloDe(p.n).split(" ");
+    for (let i = 0; i < t.length - 1; i++) {
+      if (!MARCAS.has(t[i]) || !/^\d{1,4}$/.test(t[i + 1])) continue;
+      if (t[i + 1] === "100") continue; // viene de "100 % goma", no es un modelo
+      if (!porNumero.has(t[i + 1])) porNumero.set(t[i + 1], new Set());
+      porNumero.get(t[i + 1]).add(t[i]);
+    }
+  }
+  // Un número que aparece detrás de MUCHAS marcas no es un modelo, es una medida.
+  const mapa = new Set([...porNumero].filter(([, marcas]) => marcas.size <= 2).map(([n]) => n));
+  _numCache = { clave, mapa };
+  return mapa;
+}
+
+// Términos de la consulta que identifican al AUTO aunque la lista de genéricas los
+// tape: las frases de MODELOS_TAPADOS y los números que el catálogo usa como modelo.
+function modelosEnConsulta(crudas) {
+  const rescatadas = new Set();
+  for (const frase of MODELOS_TAPADOS) {
+    for (let i = 0; i + frase.length <= crudas.length; i++) {
+      if (!frase.every((w, k) => crudas[i + k] === w)) continue;
+      const marcas = frase.length === 1 ? MARCA_DEL_MODELO[frase[0]] : null;
+      if (marcas && !crudas.some((w) => marcas.includes(w))) continue;
+      frase.forEach((w) => rescatadas.add(w));
+    }
+  }
+  // Un número JUSTO DETRÁS DE LA MARCA es el modelo que pidió el cliente ("Peugeot 208",
+  // "Fiat 500"), y por eso es obligatorio: sin esto, al del 208 le salía el 2008 y la
+  // Landtrek, y al que preguntaba por un Fiat 500 —que no trabajamos— le ofrecíamos la
+  // Toro. Los AÑOS quedan afuera ("un Toyota 2015" no es el modelo 2015), salvo que el
+  // catálogo los use como modelo: el Peugeot 2008 existe y se llama así.
+  const numericos = modelosNumericos();
+  const esAnio = (w) => /^\d{4}$/.test(w) && +w >= 1990 && +w <= 2035;
+  for (let i = 0; i < crudas.length - 1; i++) {
+    const n = crudas[i + 1];
+    if (!MARCAS.has(crudas[i]) || !/^\d{1,4}$/.test(n) || n === "100") continue;
+    if (numericos.has(n) || !esAnio(n)) rescatadas.add(n);
+  }
+  return rescatadas;
+}
+
 // Busca productos del catálogo priorizando el MODELO/marca (no las palabras genéricas).
 // `lista` permite buscar sobre otro conjunto que no sea el catálogo de venta: lo usa
 // buscarAgotado() para revisar las publicaciones pausadas / sin stock.
-export function buscarPrecio(consulta, lista = null) {
-  const r = _buscar(consulta, lista);
-  if (r.length) return r;
-  // Última pasada: el cliente separa el modelo que en el título va junto ("hb 20" por
-  // "Hb20", "ev 4" por "EV4"). Se pega y se busca de nuevo. Va al final a propósito:
-  // si la consulta ya encontró algo, no se toca (así "vw up 2 asientos" no se
-  // convierte en un "up2" que no existe).
-  const limpia = _normTxt(consulta);
-  const pegada = limpia.replace(/\b([a-z]{1,2}) (\d{1,2})\b/g, "$1$2");
-  return pegada === limpia ? r : _buscar(pegada, lista);
-}
-
-function _buscar(consulta, lista = null) {
-  // La consulta pasa por la MISMA corrección de erratas que los títulos: si Max copia
-  // el nombre de una publicación mal escrita ("Alfomrba Vw Nivus"), tiene que seguir
-  // encontrándola.
-  const palabras = _tituloDe(consulta)
-    // La puntuación se saca ANTES de cortar en palabras: si no, "hola, necesito algo
-    // para mi montana" busca la palabra "hola," dentro de los títulos y no encuentra
-    // nada. Los títulos quedan como están: acá solo se limpia lo que escribe el cliente.
-    .replace(/[^a-z0-9]+/g, " ")
+// Corta la consulta del cliente en términos y decide cuáles identifican el AUTO.
+// La consulta pasa por la MISMA cocina que los títulos (erratas incluidas): si Max copia
+// el nombre de una publicación mal escrita ("Alfomrba Vw Nivus"), tiene que encontrarla.
+function _terminos(consulta) {
+  const crudas = _tituloDe(consulta)
     // Los números que CUENTAN algo ("4 puertas", "2 asientos", "10 mm") describen el
     // producto, no el modelo: se sacan para que no se confundan con el número del
     // vehículo (Tiggo 2, Yuan 3), que sí manda.
     .replace(/\b\d{1,3} ?(puertas?|asientos?|butacas?|piezas?|plazas?|pasajeros?|mm|cm)\b/g, " ")
+    // El cliente separa el modelo que en el título va junto: "hb 20" es el HB20, "ev 4"
+    // es el EV4. Se pega SIEMPRE, para que la consulta identifique el auto desde el
+    // principio: si no, "hyundai hb 20" se quedaba solo con "hyundai" y le ofrecía al
+    // cliente el Tucson y el Creta. Los años no se tocan (4 cifras).
+    .replace(/\b([a-z]{1,2}) (\d{1,2})\b/g, "$1$2")
     .split(/\s+/)
-    .filter((w) => w.length > 1 || /\d/.test(w)) // el "2" de "Tiggo 2" es una palabra
+    .filter(Boolean)
     .map((w) => SINONIMOS_MODELO[w] || w);
+  // Términos que identifican el AUTO aunque sean cortos o genéricos ("eco sport",
+  // "t cross", "alto", "208"). Se calculan sobre las palabras SIN filtrar: la "t" de
+  // T-Cross se caía por corta.
+  const modelos = modelosEnConsulta(crudas);
+  const palabras = crudas.filter((w) => w.length > 1 || /\d/.test(w) || modelos.has(w));
+  const distintivas = palabras.filter((w) => !STOP_BUSQUEDA.has(w) || modelos.has(w));
+  // "fuertes" = términos identificatorios (modelo/marca): con letras y largo >=3.
+  // Los años/números sueltos (ej "2020") quedan como opcionales para no excluir de más.
+  // Modelos cortos alfanuméricos (q5, x3, a3, t5, c3...) también identifican: son obligatorios.
+  // Un número de UNA cifra es el número del MODELO (Tiggo 2, Tiggo 7, Serie 3), no un
+  // año: es obligatorio, o le ofrecemos al del Tiggo 2 la alfombra del Tiggo 7. De dos
+  // cifras para arriba se deja opcional: ahí ya son años ("un tucson 21", "modelo 2020").
+  const esModeloCorto = (w) => /^[a-z]+\d+$|^\d+[a-z]+$|^\d$/.test(w);
+  // Un término reconocido como MODELO manda siempre, sea corto, numérico o genérico.
+  const fuertes = distintivas.filter((w) => modelos.has(w) || (w.length >= 3 && /[a-z]/.test(w)) || esModeloCorto(w));
+  return { palabras, distintivas, fuertes, modelos };
+}
+
+// ¿El cliente dijo QUÉ AUTO tiene? Con la marca sola no alcanza: "cubreasientos para
+// mi Peugeot" no dice si es un 208 o un 3008, y cotizarle uno cualquiera es mentirle.
+// Lo usan las herramientas para que Max PREGUNTE el modelo en vez de tirar un precio.
+export function identificaModelo(consulta) {
+  return _terminos(consulta).fuertes.some((w) => !MARCAS.has(w));
+}
+
+// Busca productos del catálogo priorizando el MODELO/marca (no las palabras genéricas).
+// `lista` permite buscar sobre otro conjunto que no sea el catálogo de venta: lo usa
+// buscarAgotado() para revisar las publicaciones pausadas / sin stock.
+export function buscarPrecio(consulta, lista = null) {
+  const { palabras, distintivas, fuertes, modelos } = _terminos(consulta);
   if (!palabras.length) return [];
-  const distintivas = palabras.filter((w) => !STOP_BUSQUEDA.has(w)); // modelo, marca, etc.
   // Filtro por TIPO de producto: si el cliente nombra un tipo, NO mezclamos categorías.
   const catFiltro = categoriaDe(consulta);
   const cab = cabinaDe(consulta); // filtro suave por cabina simple/doble
@@ -284,14 +383,6 @@ function _buscar(consulta, lista = null) {
   };
 
   if (distintivas.length) {
-    // "fuertes" = términos identificatorios (modelo/marca): con letras y largo >=3.
-    // Los años/números sueltos (ej "2020") quedan como opcionales para no excluir de más.
-    // Modelos cortos alfanuméricos (q5, x3, a3, t5, c3...) también identifican: son obligatorios.
-    // Un número de UNA cifra es el número del MODELO (Tiggo 2, Tiggo 7, Serie 3), no un
-    // año: es obligatorio, o le ofrecemos al del Tiggo 2 la alfombra del Tiggo 7. De dos
-    // cifras para arriba se deja opcional: ahí ya son años ("un tucson 21", "modelo 2020").
-    const esModeloCorto = (w) => /^[a-z]+\d+$|^\d+[a-z]+$|^\d$/.test(w);
-    const fuertes = distintivas.filter((w) => (w.length >= 3 && /[a-z]/.test(w)) || esModeloCorto(w));
     const obligatorias = fuertes.length ? fuertes : distintivas;
     // La MARCA no se exige mientras el cliente haya nombrado también el MODELO: en los
     // títulos de Mercado Libre la marca es opcional ("Alfombra Hb20 Bandeja 3d Negro",
@@ -320,6 +411,21 @@ function _buscar(consulta, lista = null) {
   if (catFiltro) return aplicarCab(pool).slice(0, 6).map(_mapProd);
   const base = pool.filter((item) => { const m = _tituloDe(item.n); return palabras.every((p) => m.includes(p)); });
   return aplicarCab(base).slice(0, 6).map(_mapProd);
+}
+
+// VERSIONES de un modelo que son OTRO AUTO (Yuan Pro ≠ Yuan Plus, Tiggo 7 ≠ Tiggo 7
+// Pro). ⚠️ "sport" queda afuera de esta lista aunque sea una variante de búsqueda: en
+// los títulos es la LÍNEA de tapizado ("Cuero Sport"), no la versión del vehículo.
+const VERSIONES_AUTO = new Set(["pro", "plus", "gt", "turbo", "hybrid"]);
+// Si el cliente no dijo la versión y TODO lo que encontramos es de una, hay que
+// confirmársela antes de venderle: es lo que pasó con el Yuan Pro y el Yuan Plus.
+// Devuelve las versiones encontradas, o null si no hay nada que confirmar.
+function versionSinConfirmar(consulta, resultados) {
+  const deltexto = (t) => [...variantesEn(t)].filter((v) => VERSIONES_AUTO.has(v));
+  if (!resultados.length || deltexto(consulta).length) return null;
+  const porResultado = resultados.map((r) => deltexto(r.nombre));
+  if (porResultado.some((v) => !v.length)) return null; // hay alguno sin versión: ese sirve
+  return [...new Set(porResultado.flat())];
 }
 
 // Busca lo mismo, pero entre las publicaciones AGOTADAS (pausadas o en cero). Sirve
@@ -562,7 +668,8 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
   · "Esa alfombra la tenemos agotada por ahora."
   · "Para ese vehículo no tenemos alfombras en este momento."
 ⛔ Están TERMINANTEMENTE PROHIBIDAS las palabras **publicado / publicada / publicadas**, **catálogo**, **sistema**, **lista** y **base de datos** en cualquier mensaje al cliente. Son palabras nuestras, de adentro: al cliente le suenan a excusa de robot y no le dicen nada. Él solo quiere saber si hay o no hay.
-Cuando "consultar_precio" o "enviar_foto" no encuentran nada, la herramienta te dice cuál de los DOS casos es. No son lo mismo y se responden distinto:
+Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramienta te dice cuál de los TRES casos es. No son lo mismo y se responden distinto:
+- 🚗 CASO 0 — te devuelve **falta_modelo: true**: todavía no sabés qué auto tiene. ⛔ PROHIBIDO dar precio, nombrar un producto o mandar fotos: lo que hay en el sistema es de OTROS modelos y le estarías cotizando el de otro auto. Preguntale marca y modelo en una frase corta y amable ("¿Para qué vehículo es? Decime marca y modelo así te paso el precio exacto") y cuando te conteste, buscá de nuevo. Esto NO es decirle que no tenemos: es que todavía no sabés qué buscar.
 ⚠️ ORDEN DE PRIORIDAD (no lo inviertas): si la herramienta dice **agotado: true**, ESO MANDA SIEMPRE y vas al CASO 1 — aunque el vehículo sea JMC, aunque sea un cubreasiento, aunque sea una Strada. Las excepciones de más abajo son SOLO para el CASO 2. Un producto agotado es un producto que existe: ofrecele el aviso, no lo mandes al asesor.
 - 📦 CASO 1 — te devuelve **agotado: true** (con producto y producto_id): esa publicación EXISTE pero se quedó sin stock. ⛔ PROHIBIDO derivar y PROHIBIDO dar precio.
   · El aviso de agotado lo manda EL SISTEMA, con el texto exacto del dueño, y termina preguntándole al cliente si quiere que le avisemos. ⛔ NO lo escribas vos, NO lo repitas y NO lo reformules: si lo hacés, el cliente lee dos veces lo mismo. Vos como mucho ponés UNA frase corta ANTES, nombrando el producto ("Justo la alfombra bandeja 3D para tu Yuan Pro..."). Podés no escribir nada y está perfecto.
@@ -744,7 +851,7 @@ const TOOLS = [
       description: "Busca el precio de CUALQUIER producto del negocio (cubreasientos, alfombras, cubre volantes, cubreautos, llaveros, accesorios, etc.) por nombre o modelo del auto. Datos reales de Mercado Libre. Usar SIEMPRE que el cliente pregunte cuánto sale algo.",
       parameters: {
         type: "object",
-        properties: { modelo: { type: "string", description: "Qué busca: producto y/o modelo del auto. Ej: 'cubreasiento Hilux', 'alfombra Nivus', 'cubre volante cuero', 'cubreauto'" } },
+        properties: { modelo: { type: "string", description: "Qué busca: producto Y MODELO DEL AUTO, siempre juntos. Ej: 'cubreasiento Hilux', 'alfombra Nivus', 'alfombra Peugeot 208'. ⚠️ Si el cliente dijo el vehículo en CUALQUIER mensaje anterior de la charla, ponelo acá aunque en este mensaje no lo repita: sin el modelo la búsqueda no puede darte el precio de SU auto." } },
         required: ["modelo"],
       },
     },
@@ -1043,6 +1150,11 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       turno.busco = true;
       const encontrados = buscarPrecio(consulta);
       if (!encontrados.length) return { ...sinStockOInexistente(consulta) };
+      // Si no sabemos QUÉ AUTO tiene, lo que encontramos es de un modelo cualquiera:
+      // darle ese precio es mentirle. Se le pregunta el vehículo primero.
+      if (!identificaModelo(consulta)) return { encontrado: false, falta_modelo: true, mensaje: "Todavía no sabés qué vehículo tiene, así que NO le des precio ni le nombres productos: lo que encontré es de otros modelos y le estarías cotizando cualquier cosa. Preguntale marca y modelo (y el año si es camioneta) en una frase corta y amable, y recién ahí volvé a buscar." };
+      const version = versionSinConfirmar(consulta, encontrados);
+      if (version) return { encontrado: true, moneda: "UYU", resultados: encontrados, confirmar_version: version, instruccion: `⚠️ TODO lo que encontré es de la versión ${version.join(" / ")} de ese modelo, y el cliente nunca dijo cuál tiene. El ${version[0]} es otro auto: si le vendés esto y tiene la versión común, no le calza. Pasale el precio aclarando la versión y CONFIRMÁSELA antes de cerrar ("es para la versión ${version[0]}, ¿esa tenés?").` };
       return { encontrado: true, moneda: "UYU", resultados: encontrados };
     }
     if (nombre === "avisar_cuando_llegue") {
@@ -1063,6 +1175,9 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       // Solo cuando NO hay nada del producto miramos si está agotado o si no lo
       // trabajamos: si hay productos pero ninguno tiene foto, es otro problema.
       if (!hallados.length) return { ok: false, ...sinStockOInexistente(consulta) };
+      // Mismo criterio que consultar_precio: sin saber el vehículo, las fotos serían de
+      // otro auto. Antes de mostrar nada, se pregunta el modelo.
+      if (!identificaModelo(consulta)) return { ok: false, falta_modelo: true, mensaje: "Todavía no sabés qué vehículo tiene: las fotos que encontré son de otros modelos y mostrárselas lo confunde. Preguntale marca y modelo en una frase corta y amable, y después buscá de nuevo." };
       const encontrados = hallados.filter((x) => x.img);
       if (!encontrados.length) return { ok: false, mensaje: "No tengo foto exacta de eso; pedí más datos del modelo." };
       const elegidas = encontrados.slice(0, 4); // hasta 4 fotos (opciones del modelo)

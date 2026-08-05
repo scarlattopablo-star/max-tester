@@ -53,6 +53,34 @@ familia, que el primer arreglo no cubría:
   igual con "ev4"/"EV 4"). Por eso "cubrevolante hb20" contestaba que no lo trabajábamos, cuando
   en realidad existe y está agotado. Ahora se prueban las dos formas, en los dos sentidos.
 
+## Tercera pasada: la regla completa, no los casos sueltos
+
+*"Si querés un artículo y te ofrecen otro no tiene sentido, así con cualquier modelo.
+Es sumamente importante que Max responda con claridad si hay o no en stock, que no
+invente ni se equivoque."*
+
+Se auditó el catálogo entero —una consulta por cada vehículo— en vez de mirar los casos
+reportados. Apareció una familia que las dos pasadas anteriores no tocaban: **los
+modelos que se llaman como una palabra genérica o como un número**. Quedaban tapados
+por la lista de palabras genéricas y la respuesta salía por marca, o sea, con el auto
+de otro:
+
+| El cliente pedía | Max le ofrecía |
+|---|---|
+| Cubreasiento **Suzuki Alto** | el Celerio y el Swift (el Alto, tercero) |
+| Alfombra **VW T-Cross** | el Polo y el Nivus |
+| Cubreasiento **Ford EcoSport** | la Ranger |
+| Cubreasiento **Peugeot 208** | el 2008 y la Landtrek |
+| Alfombra **Peugeot 2008** | el 3008 y el 308 |
+| Alfombra **JAC 1035** | el JAC 1083 |
+| Alfombra **Fiat 500** (no lo trabajamos) | la Toro |
+
+Además, escrito de otra forma el mismo auto no aparecía: "ecosport" todo junto o
+"volkswagen t cross" separado daban **cero**.
+
+Y un caso que no era de modelo sino de honestidad: **"¿tenés alfombras?"**, sin decir el
+auto, devolvía 6 productos con precio. Max podía cotizar el de cualquier vehículo.
+
 ## Qué se cambió (`src/cerebro.js`)
 
 - **Palabras de la pregunta a la lista de genéricas.** "artículo/s", "accesorio/s", "producto/s",
@@ -72,6 +100,20 @@ familia, que el primer arreglo no cubría:
   en el barrido; con esto quedan **0**, uno menos que en producción.
 - **El número de una cifra es del modelo, no un año**: "Tiggo 2" ya no trae el Tiggo 7. Los
   números que cuentan algo ("4 puertas", "10 mm") se descartan antes de buscar.
+- **El número que va detrás de la marca es el modelo** ("Peugeot 208", "Fiat 500", "JAC 1035") y
+  por eso es obligatorio. Los años quedan afuera —"un Toyota 2015" no es el modelo 2015— salvo que
+  el catálogo los use como nombre: el Peugeot 2008 existe y se llama así, y eso el código lo saca
+  del propio catálogo (`modelosNumericos`), así que se mantiene solo cuando cambia el stock.
+- **Modelos tapados por palabras genéricas** (`MODELOS_TAPADOS`): "eco sport", "t cross",
+  "corolla cross" y "alto" vuelven a contar como modelo. El de una sola palabra pide además la
+  marca, para no confundir el **Alto** con "alta densidad".
+- **La misma escritura para todos**: "ecosport" = "Eco Sport" = "Eco Esport" (errata de ML), y
+  "T-Cross" = "t cross". Consulta y títulos pasan por la misma cocina.
+- **Sin saber el auto, no se cotiza** (`falta_modelo`): si el cliente no dijo el vehículo, la
+  herramienta ya no devuelve productos — le dice a Max que pregunte marca y modelo. La marca sola
+  no alcanza: "cubreasientos para mi Peugeot" no dice si es un 208 o un 3008.
+- **La versión se confirma** (`confirmar_version`): si todo lo que hay es de una versión —Yuan
+  **Plus**, Song **Pro**— y el cliente no dijo cuál tiene, Max se la confirma antes de cerrar.
 - **Erratas de los títulos de ML** (`ERRATAS_ML`): "Alfomrba/Alombra/Alfomra" → alfombra,
   "Cuberasiento/Curbeasiento" → cubreasiento, "Chervolet" → Chevrolet, "Hyudndai" → Hyundai. Son
   **9 publicaciones activas** que, por la errata, no entraban en el filtro de categoría: al que
@@ -81,6 +123,17 @@ familia, que el primer arreglo no cubría:
 
 Lo que **no** cambió: un vehículo que no trabajamos sigue sin resultados, y lo que está pausado de
 verdad (la alfombra de caja de la Montana) se sigue informando como agotado con su aviso.
+
+### Cómo queda la respuesta al cliente
+
+Cuando "consultar_precio" o "enviar_foto" no devuelven productos, ahora hay **tres** casos, y el
+prompt los distingue (`# PRODUCTO AGOTADO / QUE NO TRABAJAMOS`):
+
+| La herramienta dice | Max responde |
+|---|---|
+| `falta_modelo: true` | pregunta marca y modelo. **No** da precio ni dice que no hay |
+| `agotado: true` | "de eso no hay ahora" + ofrece avisarle cuando entre |
+| `agotado: false` | "no lo tenemos", hablando de ese producto y de ese auto |
 
 ## Verificación
 
@@ -99,8 +152,22 @@ de devolver resultados devolvían **el producto de otro auto** (un Tiggo 2 al qu
 iX1 al que pidió X1, un cubrevolante Fiat al que pidió uno de HB20): ahí Max ahora dice que está
 agotado y ofrece avisar, que es lo correcto.
 
-`test_busqueda_marca.mjs` (28 casos, sin red y sin IA) deja los dos casos fijos. `test_esperas.mjs`
-(17) y `test_jerga_filtro.mjs` (8) siguen pasando.
+### La regla, probada sobre el catálogo entero
+
+`test_no_ofrecer_otro_auto.mjs` no mira casos sueltos: arma la consulta de un cliente para **cada
+vehículo del catálogo** y revisa las tres cosas que pueden salir mal. Hoy da:
+
+| Qué revisa | Resultado |
+|---|---|
+| 190 consultas — ¿alguna devuelve el producto de OTRO auto? | **0** |
+| ¿algún producto a la venta queda invisible? | **0** |
+| 137 sin stock — ¿se avisan como agotado **del mismo auto**? | **137 de 137** |
+
+Es la prueba que hay que correr cuando se toca la búsqueda: se mantiene sola contra el catálogo
+que haya en ese momento, y avisa si el snapshot está vacío en vez de dar un verde falso.
+
+`test_busqueda_marca.mjs` (52 casos, sin red y sin IA) deja fijos los casos concretos.
+`test_esperas.mjs` (17) y `test_jerga_filtro.mjs` (8) siguen pasando.
 
 ## Para el dueño, aparte del código
 

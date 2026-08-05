@@ -12,7 +12,7 @@
 //
 // Corre con: node test_busqueda_marca.mjs   (sin red y sin IA: solo la búsqueda)
 process.env.CATALOGO_SIN_DISCO = "1";
-import { buscarPrecio, buscarAgotado, sinStockOInexistente } from "./src/cerebro.js";
+import { buscarPrecio, buscarAgotado, sinStockOInexistente, identificaModelo } from "./src/cerebro.js";
 import { productos, agotados } from "./src/catalogo_vivo.js";
 
 let ok = 0, mal = 0;
@@ -91,6 +91,42 @@ if (conErrata.length) {
   caso(`los ${conErrata.length} activos con la palabra mal escrita se encuentran igual`, perdidos.length === 0, perdidos.map((p) => p.n).join(" | "));
 }
 
+// ── 4 quater) El auto que pidió, y solo ese ───────────────────────────────
+// Regla del dueño: si el cliente pide un auto, no se le ofrece el de otro. Estos son
+// los modelos que se llaman como una palabra genérica o como un número, y que por eso
+// quedaban tapados: al del Suzuki Alto le salían el Celerio y el Swift, al del Peugeot
+// 208 el 2008 y la Landtrek, y al que preguntaba por un Fiat 500 —que no trabajamos—
+// le ofrecíamos la Toro.
+const nombrados = [
+  ["cubreasiento suzuki alto", /\balto\b/i, "Suzuki Alto"],
+  ["alfombra vw t-cross", /t.?cross/i, "VW T-Cross"],
+  ["alfombra volkswagen t cross", /t.?cross/i, "VW T-Cross (escrito con espacio)"],
+  ["cubreasiento ford ecosport", /eco.?e?sport/i, "Ford EcoSport (todo junto)"],
+  ["cubreasiento ford eco sport", /eco.?e?sport/i, "Ford Eco Sport (separado)"],
+  ["cubreasiento peugeot 208", /\b208\b/i, "Peugeot 208"],
+  ["cubreasiento mitsubishi l200", /l ?200/i, "Mitsubishi L200"],
+];
+for (const [q, esperado, nombre] of nombrados) {
+  const r = buscarPrecio(q);
+  caso(`"${q}" solo trae ${nombre}`, r.length > 0 && r.every((x) => esperado.test(x.nombre)), r.map((x) => x.nombre).join(" | ") || "no devolvió nada");
+}
+// Un modelo que NO trabajamos no puede caer en otro del mismo fabricante.
+const inexistente = buscarPrecio("alfombra fiat 500");
+caso("un Fiat 500 (que no trabajamos) no trae la Toro", inexistente.length === 0, inexistente.map((x) => x.nombre).join(" | "));
+// Y el número del modelo no se confunde con el año del auto.
+const conAnio = buscarPrecio("alfombra toyota hilux 2015");
+caso("\"hilux 2015\" no trata al 2015 como modelo", conAnio.length > 0 && conAnio.every((x) => /hilux/i.test(x.nombre)), conAnio.map((x) => x.nombre).join(" | "));
+
+// ── 4 quinquies) Sin saber el auto, no se cotiza ──────────────────────────
+// "¿Tenés alfombras?" no alcanza: lo que hay es de otros modelos y darle ese precio es
+// cotizarle el auto de otro. La herramienta avisa (falta_modelo) para que Max pregunte.
+for (const q of ["tenes alfombras?", "cubreasiento cuero ecologico", "alfombra para mi peugeot"]) {
+  caso(`"${q}" no identifica el vehículo`, identificaModelo(q) === false);
+}
+for (const q of ["alfombra hb20", "cubreasiento suzuki alto", "alfombra peugeot 208", "alfombra chevrolet montana"]) {
+  caso(`"${q}" sí identifica el vehículo`, identificaModelo(q) === true);
+}
+
 // ── 5) Lo que NO se aflojó: el modelo sigue mandando ──────────────────────
 // Aflojar la marca no puede reabrir el cruce de variantes (Yuan PRO ≠ Yuan PLUS).
 const hayVariantes = [...productos(), ...agotados()].some((p) => /yuan plus/i.test(p.n)) && [...productos(), ...agotados()].some((p) => /yuan pro/i.test(p.n));
@@ -114,10 +150,23 @@ const cruces = [
   ["alfombra bmw x1", /\bix1\b/i, "el X1 no trae el iX1 (son autos distintos)"],
   ["alfombra citroen c4", /xc40/i, "el C4 no trae el Volvo XC40"],
   ["alfombra volkswagen gol", /golf/i, "el Gol no trae el Golf"],
+  ["alfombra peugeot 2008", /\b(308|3008|307|206|landtrek)\b/i, "el 2008 no trae el 308 ni el 3008"],
+  ["alfombra peugeot 208", /\b(2008|3008|308|307)\b/i, "el 208 no trae el 2008 ni el 308"],
+  ["alfombra jac 1035", /\b(1083|1048|1063)\b/i, "el JAC 1035 no trae el 1083"],
+  ["cubreasiento suzuki alto", /(celerio|swift|baleno|vitara)/i, "el Alto no trae el Celerio ni el Swift"],
+  ["cubreasiento ford eco sport", /(ranger|maverick|f.?150|territory)/i, "el EcoSport no trae la Ranger"],
 ];
 for (const [q, prohibido, nombre] of cruces) {
   const r = buscarPrecio(q).filter((x) => prohibido.test(x.nombre));
   caso(nombre, r.length === 0, r.map((x) => x.nombre).join(" | "));
+}
+// Y cuando no hay del modelo pedido, la respuesta es sobre ESE modelo: agotado del
+// mismo auto, no un "no tenemos" genérico ni el producto de otro.
+const derivan = [["alfombra peugeot 2008", /2008/i], ["alfombra jac 1035", /1035/i], ["alfombra bmw x1", /x1/i]];
+for (const [q, esperado] of derivan) {
+  if (buscarPrecio(q).length) continue; // si hay stock, este caso no aplica
+  const s = sinStockOInexistente(q);
+  caso(`"${q}" sin stock → agotado DEL MISMO modelo`, s.agotado === true && esperado.test(s.producto || ""), s.producto || "(dijo que no lo trabajamos)");
 }
 
 // Y el que está pausado de verdad sigue marcándose como agotado (no lo tapamos).
