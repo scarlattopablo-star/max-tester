@@ -345,6 +345,75 @@ function modelosLetra() {
   return mapa;
 }
 
+// ── El cliente escribe mal ────────────────────────────────────────────────────
+// En WhatsApp se tipea rápido: "alfonbra", "hylux", "montanna", "chebrolet". Una palabra
+// que no está en NINGÚN título se volvía obligatoria y dejaba la búsqueda en cero, así
+// que un solo error de tipeo tumbaba la consulta entera y Max contestaba que no había.
+//
+// La corrección se hace contra el VOCABULARIO DEL PROPIO CATÁLOGO y con dos candados,
+// porque acá el riesgo es al revés: empujar la palabra al auto más parecido sería
+// venderle al cliente el vehículo de otro.
+//   1. Solo se toca lo que NO existe en ningún título. Un modelo real nunca se corrige.
+//   2. Solo si hay UN candidato a esa distancia. Con empate no se toca.
+// Además quedan afuera los alfanuméricos (l200, c4, 208, hb20): ahí una cifra de
+// diferencia es otro auto, no un error de tipeo.
+let _vocabCache = null;
+function vocabularioCatalogo() {
+  const lista = [...productosML(), ...agotadosML()];
+  const clave = `${lista.length}|${lista[0]?.id}|${lista[lista.length - 1]?.id}`;
+  if (_vocabCache && _vocabCache.clave === clave) return _vocabCache.mapa;
+  const mapa = new Map(); // largo -> Set(palabras de ese largo)
+  const sumar = (w) => {
+    if (w.length < 3 || !/^[a-z]+$/.test(w)) return;
+    if (!mapa.has(w.length)) mapa.set(w.length, new Set());
+    mapa.get(w.length).add(w);
+  };
+  for (const p of lista) for (const w of _tituloDe(p.n).split(" ")) sumar(w);
+  // También las palabras con las que el cliente arma la pregunta ("para", "tenes"). Sin
+  // ellas, un "pra" mal tipeado no tenía a qué parecerse, se exigía tal cual y tumbaba
+  // la búsqueda entera; corregido cae en la lista de genéricas y simplemente se ignora.
+  for (const w of STOP_BUSQUEDA) sumar(w);
+  _vocabCache = { clave, mapa };
+  return mapa;
+}
+// Distancia de edición con corte: si ya se pasó del máximo no sigue calculando.
+function _distancia(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const fila = [i];
+    let mejor = i;
+    for (let j = 1; j <= b.length; j++) {
+      fila[j] = a[i - 1] === b[j - 1] ? prev[j - 1] : 1 + Math.min(prev[j - 1], prev[j], fila[j - 1]);
+      if (fila[j] < mejor) mejor = fila[j];
+    }
+    if (mejor > max) return max + 1; // toda la fila se pasó: no hay vuelta atrás
+    prev = fila;
+  }
+  return prev[b.length];
+}
+// ¿Esta palabra existe en algún título del catálogo?
+const existeEnCatalogo = (w) => vocabularioCatalogo().get(w.length)?.has(w) === true;
+
+// La palabra del catálogo más parecida, o la misma palabra si no hay una sola clara.
+function corregirTipeo(w) {
+  if (w.length < 3 || !/^[a-z]+$/.test(w)) return w;
+  if (STOP_BUSQUEDA.has(w) || NO_ES_AUTO.has(w) || ACABADO_PRODUCTO.has(w)) return w;
+  const vocab = vocabularioCatalogo();
+  if (vocab.get(w.length)?.has(w)) return w; // existe tal cual: no se toca
+  const max = w.length <= 5 ? 1 : 2;
+  let mejor = null, mejorD = max + 1, empate = false;
+  for (let L = w.length - max; L <= w.length + max; L++) {
+    for (const cand of vocab.get(L) || []) {
+      const d = _distancia(w, cand, max);
+      if (d > max) continue;
+      if (d < mejorD) { mejorD = d; mejor = cand; empate = false; }
+      else if (d === mejorD && cand !== mejor) empate = true;
+    }
+  }
+  return mejor && !empate ? mejor : w;
+}
+
 // Términos de la consulta que identifican al AUTO aunque la lista de genéricas los
 // tape: las frases de MODELOS_TAPADOS y los números que el catálogo usa como modelo.
 function modelosEnConsulta(crudas) {
@@ -404,12 +473,17 @@ function _terminos(consulta) {
     .replace(/\b([a-z]{1,2}) (\d{1,3})\b/g, (t, l, n) => (n === "100" || MARCAS.has(l) ? t : l + n))
     .split(/\s+/)
     .filter(Boolean)
+    // Lo que el cliente escribió mal se lleva a la palabra del catálogo más parecida
+    // ANTES de resolver sinónimos: si no, "chebrolet" se exigía tal cual y no aparecía en
+    // ningún título, así que la búsqueda entera quedaba en cero por una letra.
+    .map(corregirTipeo)
     .map((w) => SINONIMOS_MODELO[w] || w);
   // Términos que identifican el AUTO aunque sean cortos o genéricos ("eco sport",
   // "t cross", "alto", "208"). Se calculan sobre las palabras SIN filtrar: la "t" de
   // T-Cross se caía por corta.
   const modelos = modelosEnConsulta(crudas);
   const palabras = crudas.filter((w) => w.length > 1 || /\d/.test(w) || modelos.has(w));
+  const texto = crudas.join(" "); // la consulta ya corregida, para los filtros de abajo
   const distintivas = palabras.filter((w) => !STOP_BUSQUEDA.has(w) || modelos.has(w));
   // "fuertes" = términos identificatorios (modelo/marca): con letras y largo >=3.
   // Los años/números sueltos (ej "2020") quedan como opcionales para no excluir de más.
@@ -419,8 +493,15 @@ function _terminos(consulta) {
   // cifras para arriba se deja opcional: ahí ya son años ("un tucson 21", "modelo 2020").
   const esModeloCorto = (w) => /^[a-z]+\d+$|^\d+[a-z]+$|^\d$/.test(w);
   // Un término reconocido como MODELO manda siempre, sea corto, numérico o genérico.
-  const fuertes = distintivas.filter((w) => modelos.has(w) || (w.length >= 3 && /[a-z]/.test(w)) || esModeloCorto(w));
-  return { palabras, distintivas, fuertes, modelos };
+  // Una palabra de TRES letras que no está en ningún título y que el corrector no supo a
+  // qué llevar ("pra" empata entre "para" y "pro") es ruido de tipeo, no un vehículo.
+  // Exigirla solo puede dar cero: se ignora. Las largas SÍ se siguen exigiendo aunque no
+  // existan —"ferrari" no está en ningún título— porque ahí el cero es la respuesta
+  // correcta: no lo trabajamos, y aflojarla le ofrecería el producto de otro auto.
+  const ruidoCorto = (w) => w.length === 3 && /^[a-z]+$/.test(w) && !existeEnCatalogo(w) && !modelos.has(w);
+  const fuertes = distintivas.filter((w) => !ruidoCorto(w))
+    .filter((w) => modelos.has(w) || (w.length >= 3 && /[a-z]/.test(w)) || esModeloCorto(w));
+  return { palabras, distintivas, fuertes, modelos, texto };
 }
 
 // ¿El cliente dijo QUÉ AUTO tiene? Con la marca sola no alcanza: "cubreasientos para
@@ -434,19 +515,21 @@ export function identificaModelo(consulta) {
 // `lista` permite buscar sobre otro conjunto que no sea el catálogo de venta: lo usa
 // buscarAgotado() para revisar las publicaciones pausadas / sin stock.
 export function buscarPrecio(consulta, lista = null) {
-  const { palabras, distintivas, fuertes, modelos } = _terminos(consulta);
+  const { palabras, distintivas, fuertes, modelos, texto } = _terminos(consulta);
   if (!palabras.length) return [];
   // Filtro por TIPO de producto: si el cliente nombra un tipo, NO mezclamos categorías.
-  const catFiltro = categoriaDe(consulta);
-  const cab = cabinaDe(consulta); // filtro suave por cabina simple/doble
-  const carr = carroceriaDe(consulta); // filtro suave por sedán/hatch
+  // Sobre el texto YA CORREGIDO: si el cliente escribe "alfonbra", el filtro no la
+  // reconocía como alfombra y le mezclaba los cubreasientos con lo que pidió.
+  const catFiltro = categoriaDe(texto);
+  const cab = cabinaDe(texto); // filtro suave por cabina simple/doble
+  const carr = carroceriaDe(texto); // filtro suave por sedán/hatch
   const base0 = lista || productosML();
   let pool = catFiltro ? base0.filter((item) => catFiltro(_tituloDe(item.n))) : base0;
   // Filtro DURO por variante: si el cliente nombró una (Yuan PRO), sacamos del pozo
   // todo lo que sea de OTRA (Yuan PLUS). A diferencia de los filtros de cabina o
   // carrocería, este NO se afloja cuando no quedan resultados: preferimos decirle
   // que no hay antes que ofrecerle el producto de otro auto.
-  const varQ = variantesEn(consulta);
+  const varQ = variantesEn(texto);
   if (varQ.size) {
     pool = pool.filter((item) => {
       for (const v of variantesEn(item.n)) if (!varQ.has(v)) return false;
