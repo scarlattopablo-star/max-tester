@@ -1587,6 +1587,82 @@ export function filtrarInventos(texto, contexto = "") {
   return { texto: [limpio, FRASE_CONSULTO].filter(Boolean).join("\n\n"), invento };
 }
 
+// ── Un precio que Max no sacó de la herramienta es un precio inventado ────────
+// El 5 ago 2026 le dijo a un cliente que la bandeja del HB20 salía $2.850. Sale $3.360,
+// y $2.850 no es el precio de NINGUNA publicación: se lo inventó junto con el nombre del
+// producto, y después lo repitió ("tal como te comenté recién").
+//
+// Controlar contra TODO el catálogo no sirve: probado, $2.850 entra por casualidad como
+// el 10% de descuento de otro producto (el 4,8% de los números de 4 cifras pasarían). El
+// control tiene que ser contra los precios que la herramienta devolvió EN ESE TURNO, que
+// son un puñado de números. Lo que sí se acepta además del precio tal cual:
+//   · el 10% de la transferencia — el prompt le PIDE que diga el monto ya descontado;
+//   · las sumas, para cuando el cliente se lleva más de un producto;
+//   · los precios que ya estaban en la charla, que pasaron por este mismo control cuando
+//     se dijeron por primera vez (si el primero se bloquea, no hay invento que arrastrar).
+const _PRECIO_EN_TEXTO = /(?:us\$|u\$s|\$)\s?(\d{1,3}(?:[.,]\d{3})+|\d{3,6})\b|\b(\d{1,3}(?:[.,]\d{3})+|\d{3,6})\s*pesos\b/gi;
+const _aNumero = (s) => Number(String(s).replace(/[.,]/g, ""));
+// Precios que la herramienta devolvió en este turno (y el monto de un link de pago).
+function _preciosDeAcciones(acciones = []) {
+  const out = new Set();
+  const sumar = (v) => { if (Number.isFinite(v) && v > 0) out.add(Math.round(v)); };
+  for (const a of acciones) {
+    const r = a?.resultado;
+    if (!r) continue;
+    for (const p of r.resultados || []) { sumar(p?.precio); sumar(p?.precio_lista); }
+    for (const f of r.fotos || []) { sumar(f?.precio); sumar(f?.precio_lista); }
+    sumar(r.monto);
+  }
+  return out;
+}
+// Todo lo que se puede decir a partir de esos precios: el número, su 10% (redondeado como
+// sea) y las sumas de cualquier combinación. Los productos por turno son pocos (hasta 6),
+// así que las combinaciones se pueden recorrer enteras sin costo.
+function _preciosPermitidos(base) {
+  const nums = [...base];
+  const totales = new Set(nums);
+  for (let m = 1; m < 1 << Math.min(nums.length, 6); m++) {
+    let s = 0;
+    for (let i = 0; i < Math.min(nums.length, 6); i++) if (m & (1 << i)) s += nums[i];
+    if (s > 0) totales.add(s);
+  }
+  const ok = new Set();
+  for (const v of totales) {
+    ok.add(v);
+    const d = v * (1 - NEGOCIO.descuentoTransferencia / 100);
+    for (const r of [Math.round(d), Math.floor(d), Math.ceil(d),
+      Math.round(d / 10) * 10, Math.floor(d / 10) * 10, Math.round(d / 50) * 50, Math.round(d / 100) * 100]) ok.add(r);
+  }
+  return ok;
+}
+// Devuelve el texto sin la frase del precio inventado (y qué número era, o null).
+export function filtrarPrecios(texto, acciones = [], textoCharla = "") {
+  const original = String(texto || "");
+  if (!original.trim()) return { texto: original, inventado: null };
+  const permitidos = _preciosPermitidos(_preciosDeAcciones(acciones));
+  // Los precios que YA estaban en la charla pasaron por este control cuando se dijeron.
+  for (const m of String(textoCharla || "").matchAll(_PRECIO_EN_TEXTO)) {
+    const v = _aNumero(m[1] ?? m[2]);
+    if (Number.isFinite(v)) for (const p of _preciosPermitidos(new Set([v]))) permitidos.add(p);
+  }
+  const malos = [];
+  for (const m of original.matchAll(_PRECIO_EN_TEXTO)) {
+    const v = _aNumero(m[1] ?? m[2]);
+    if (Number.isFinite(v) && !permitidos.has(v)) malos.push({ v, i: m.index });
+  }
+  if (!malos.length) return { texto: original, inventado: null };
+  // Se cae la FRASE donde está el precio inventado, no el mensaje entero: el resto de lo
+  // que dijo puede estar bien. Si no queda nada, contesta que lo confirma.
+  // ⚠️ El punto de "$2.850" NO es un fin de frase. Para cortar bien se tapan los
+  // separadores de miles por un caracter neutro del MISMO largo, así los índices siguen
+  // valiendo sobre el texto original; si no, queda un "850." suelto dando vueltas.
+  const frases = _frases(original.replace(/(\d)[.,](\d)/g, "$1·$2"));
+  const borrar = new Set(malos.map((x) => frases.find((f) => x.i >= f.ini && x.i < f.fin)).filter(Boolean));
+  const limpio = frases.filter((f) => !borrar.has(f)).map((f) => original.slice(f.ini, f.fin)).join("").trim()
+    .replace(/\s*[,;]\s*$/, ".");
+  return { texto: [limpio, FRASE_CONSULTO].filter(Boolean).join("\n\n"), inventado: malos[0].v };
+}
+
 // Saca las palabras de ADENTRO que se le escapan a Max. Al cliente no le dice nada
 // que algo esté "publicado" o que "figure en el catálogo": eso es de nuestro sistema
 // y suena a excusa. El prompt se lo prohíbe, pero se le escapa igual, así que se
@@ -1658,12 +1734,20 @@ function armarRespuesta(texto, acciones, ctx = {}) {
   // consulta con un asesor y se DERIVA para que una persona lo resuelva.
   const { texto: sinInventos, invento } = filtrarInventos(limpio, ctx.textoCharla);
   limpio = sinInventos;
+  // ANTI-PRECIO-INVENTADO: el precio lo manda la herramienta, nunca la memoria de Max.
+  // Le dijo a un cliente que la bandeja del HB20 salía $2.850 cuando sale $3.360 (5 ago
+  // 2026), y después lo repitió como si lo hubiera confirmado. Un precio equivocado es
+  // peor que no dar precio: o perdemos plata sosteniéndolo, o le quedamos mal.
+  const { texto: sinPrecios, inventado } = filtrarPrecios(limpio, acciones, ctx.textoCharla);
+  limpio = sinPrecios;
   // Y si Max le dijo al cliente que lo consulta / lo pasa con un asesor pero se
   // olvidó de llamar la herramienta, la derivación se registra igual: nadie queda
   // esperando una respuesta que el equipo nunca vio.
   const motivoDerivacion = invento
     ? `⚠️ Max estuvo por prometer ${invento} (NO lo hacemos). Se le borró esa frase y se le dijo al cliente que lo consulta un asesor. Revisá la conversación y respondele vos.`
-    : (prometioAsesor(limpio) ? "Max le dijo al cliente que lo consultaba con un asesor / que lo pasaba con una persona. Continuá vos la conversación." : null);
+    : inventado != null
+      ? `⚠️ Max estuvo por dar un precio que NO salió del catálogo ($${inventado.toLocaleString("es-UY")}). Se le borró esa frase antes de que saliera. Pasale vos el precio correcto.`
+      : (prometioAsesor(limpio) ? "Max le dijo al cliente que lo consultaba con un asesor / que lo pasaba con una persona. Continuá vos la conversación." : null);
   if (motivoDerivacion && !acciones.some((a) => a.herramienta === "derivar_a_humano")) {
     const input = { motivo: "otro", resumen: motivoDerivacion };
     acciones.push({ herramienta: "derivar_a_humano", input, resultado: registrarDerivacion(input) });
