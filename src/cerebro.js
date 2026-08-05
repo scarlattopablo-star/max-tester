@@ -81,6 +81,10 @@ const ERRATAS_ML = [
   [/\b(ecosport|eco esport|ecoesport)\b/g, "eco sport"],
   [/\btcross\b/g, "t cross"],
   [/\bcorollacross\b/g, "corolla cross"],
+  // "Pik Up" / "Pick Up" / "Pik Cup" es la CARROCERÍA, no el VW Up: se junta en una
+  // sola palabra para que la "up" suelta del Saveiro y de la Strada no le salga al
+  // cliente que pidió un cubreasiento para su Up.
+  [/\bpi(?:k|ck) ?c?up\b/g, "pickup"],
 ];
 // Título del producto, normalizado, sin puntuación y con las erratas corregidas. Es el
 // texto contra el que se busca — la MISMA cocina que se le aplica a la consulta, para

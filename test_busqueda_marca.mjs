@@ -155,6 +155,8 @@ const cruces = [
   ["alfombra jac 1035", /\b(1083|1048|1063)\b/i, "el JAC 1035 no trae el 1083"],
   ["cubreasiento suzuki alto", /(celerio|swift|baleno|vitara)/i, "el Alto no trae el Celerio ni el Swift"],
   ["cubreasiento ford eco sport", /(ranger|maverick|f.?150|territory)/i, "el EcoSport no trae la Ranger"],
+  // "Pik Up" es la carrocería del Saveiro y de la Strada, no el VW Up.
+  ["cubreasiento vw up", /(saveiro|strada)/i, "el VW Up no trae el Saveiro ni la Strada Pik Up"],
 ];
 for (const [q, prohibido, nombre] of cruces) {
   const r = buscarPrecio(q).filter((x) => prohibido.test(x.nombre));
