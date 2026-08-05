@@ -1595,6 +1595,16 @@ export function filtrarInventos(texto, contexto = "") {
 // oración) y se borra el complemento "en el catálogo / sistema / lista".
 export function limpiarJerga(texto) {
   return String(texto || "")
+    // ⛔ LO PRIMERO: sacar las notas internas. En el historial que lee Max quedan bloques
+    // "[Contexto interno — ...]" (qué opciones numeradas le mostró, qué video ya mandó) y
+    // la marca de respuesta escrita por un asesor. Son para que ÉL sepa a qué se refiere
+    // "la 1" en el turno siguiente, no para el cliente. El 5 ago 2026 Max las copió en su
+    // propia respuesta y se las mandó pegadas a un cliente que preguntaba por el HB20: no
+    // se entiende nada. Los tres canales ya envían el texto limpio, así que el agujero no
+    // estaba en el envío sino en lo que escribe el modelo — y de ahí que se corte acá.
+    .replace(/[⁠-⁤]?\s*\[\s*contexto interno\b[^\]]*\]?/gi, "")
+    .replace(/[⁠-⁤]?\s*\[\s*respuesta escrita por un asesor\b[^\]]*\]?/gi, "")
+    .replace(/[⁠-⁤]/g, "")
     .replace(/\bpublicad([oa])\b/gi, (m, g) => (g === g.toUpperCase() ? "DISPONIBLE" : "disponible"))
     .replace(/\bpublicad([oa])s\b/gi, (m, g) => (g === g.toUpperCase() ? "DISPONIBLES" : "disponibles"))
     .replace(/\s+en (?:el|la|nuestro|nuestra|mi) (?:cat[aá]logo|sistema|lista|base de datos)\b/gi, "")
