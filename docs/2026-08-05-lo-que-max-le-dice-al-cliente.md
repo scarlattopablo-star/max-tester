@@ -84,9 +84,9 @@ los precios que la herramienta devolvió **en ese turno**, que son un puñado de
 - **El 10% de la transferencia** (redondeado como sea): el prompt le PIDE decir el monto ya
   descontado (líneas "REGLA DE ORO" del prompt).
 - **Las sumas**, para cuando el cliente se lleva más de un producto.
-- **Los precios que ya estaban en la charla**: pasaron por este mismo control cuando se dijeron por
-  primera vez. Bloqueado el primero, no hay invento que arrastrar — que es exactamente cómo se coló
-  el *"tal como te comenté recién"*.
+- **Los precios que ya estaban en la charla**, pero ⚠️ **solo si son un precio REAL del catálogo,
+  tal cual**. La primera versión los aceptaba todos y se auto-engañaba: ver el apéndice al final,
+  es el error que hizo que Max siguiera repitiendo el $2.850.
 
 ### Qué hace cuando lo agarra
 
