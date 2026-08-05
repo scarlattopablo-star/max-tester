@@ -40,6 +40,13 @@ const STOP_BUSQUEDA = new Set([
   "cuestan", "vale", "valen", "sale", "salen", "modelo", "modelos", "marca", "marcas",
   "camioneta", "camionetas", "pickup", "coche", "hola", "buenas", "gracias", "favor",
   "que", "cual", "cuales", "una", "unas", "unos", "los", "las", "este", "esta", "estos", "estas",
+  // Terminaciones/materiales que describen el producto, no el auto. Si se exigen, la
+  // búsqueda se va a los productos de OTRAS marcas que comparten la terminación
+  // ("cubrevolante byd cuero carbono" traía los cubrevolantes de Fiat y Citroën).
+  "carbono", "genuino", "agarre", "vinilo", "polipropileno", "sport",
+  // "volante" es una CATEGORÍA (la filtra categoriaDe), no un dato del auto: exigirla
+  // dentro del título dejaba fuera los "Cubrevolante..." , que la traen pegada.
+  "volante", "volantes",
 ]);
 
 // Marcas de vehículo. Identifican menos que el MODELO y en los títulos de Mercado
@@ -58,6 +65,34 @@ const MARCAS = new Set([
 ]);
 
 const _normTxt = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+// Erratas REALES de los títulos de Mercado Libre. Importan porque la palabra del
+// producto es la que decide la categoría: "Alfomrba Vw Nivus" no entraba en el filtro
+// de "alfombra", así que al que pedía una alfombra para su Nivus Max le decía que no
+// había. Hoy son 9 publicaciones activas y 18 pausadas. Corregir el título en ML sigue
+// siendo lo correcto; esto es para que mientras tanto no se pierda la venta.
+const ERRATAS_ML = [
+  [/\b(alfomrba|alfombrra|alfomra|alombra|alfombrras)(s?)\b/g, "alfombra$2"],
+  [/\b(cuberasiento|curbeasiento|cubrasiento|cubreasinto)(s?)\b/g, "cubreasiento$2"],
+  [/\bchervolet\b/g, "chevrolet"],
+  [/\bhyudndai\b/g, "hyundai"],
+];
+// Título del producto, normalizado y con las erratas corregidas. Es el texto contra el
+// que se busca (los títulos NO se tocan en el catálogo: la corrección es solo acá).
+const _tituloDe = (n) => ERRATAS_ML.reduce((s, [re, ok]) => s.replace(re, ok), _normTxt(n));
+// ¿El título `m` contiene el término `d`? Además del texto tal cual, acepta los
+// modelos alfanuméricos ESCRITOS CON ESPACIO en la publicación: el cliente escribe
+// "hb20" y el título dice "Hb 20" (pasa igual con "ev4"/"EV 4", "t60"/"T 60").
+// Sin esto, "cubrevolante hb20" no encontraba el cubrevolante del HB20 y Max le
+// contestaba al cliente que no lo trabajábamos.
+// ⚠️ La forma con espacio se busca como PALABRA ENTERA. Sin eso, "s10" (Chevrolet
+// S10) matcheaba "kick*s 10*0 % goma" del Nissan Kicks, y "a3" (Audi A3) matcheaba
+// "bandej*a 3*d": le ofrecíamos al cliente el producto de otro auto.
+const _incluye = (m, d) => {
+  if (new RegExp(`\\b${d}\\b`).test(m)) return true;
+  const partido = d.replace(/^([a-z]{1,4})(\d{1,4})$/, "$1 $2");
+  return partido !== d && new RegExp(`\\b${partido}\\b`).test(m);
+};
 const _mapProd = (item) => ({ id: item.id, nombre: item.n, precio: item.p, precio_lista: item.l, moneda: item.usd ? "USD" : "UYU", img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
 // Formatea un precio con su símbolo de moneda. USD => "US$ 60"; UYU => "$ 8.010".
 const _fmtPrecio = (precio, moneda) => `${moneda === "USD" ? "US$ " : "$ "}${Number(precio).toLocaleString("es-UY")}`;
@@ -193,13 +228,32 @@ const SINONIMOS_MODELO = { freedom: "strada", volcano: "strada" };
 // `lista` permite buscar sobre otro conjunto que no sea el catálogo de venta: lo usa
 // buscarAgotado() para revisar las publicaciones pausadas / sin stock.
 export function buscarPrecio(consulta, lista = null) {
-  const palabras = _normTxt(consulta)
+  const r = _buscar(consulta, lista);
+  if (r.length) return r;
+  // Última pasada: el cliente separa el modelo que en el título va junto ("hb 20" por
+  // "Hb20", "ev 4" por "EV4"). Se pega y se busca de nuevo. Va al final a propósito:
+  // si la consulta ya encontró algo, no se toca (así "vw up 2 asientos" no se
+  // convierte en un "up2" que no existe).
+  const limpia = _normTxt(consulta);
+  const pegada = limpia.replace(/\b([a-z]{1,2}) (\d{1,2})\b/g, "$1$2");
+  return pegada === limpia ? r : _buscar(pegada, lista);
+}
+
+function _buscar(consulta, lista = null) {
+  // La consulta pasa por la MISMA corrección de erratas que los títulos: si Max copia
+  // el nombre de una publicación mal escrita ("Alfomrba Vw Nivus"), tiene que seguir
+  // encontrándola.
+  const palabras = _tituloDe(consulta)
     // La puntuación se saca ANTES de cortar en palabras: si no, "hola, necesito algo
     // para mi montana" busca la palabra "hola," dentro de los títulos y no encuentra
     // nada. Los títulos quedan como están: acá solo se limpia lo que escribe el cliente.
     .replace(/[^a-z0-9]+/g, " ")
+    // Los números que CUENTAN algo ("4 puertas", "2 asientos", "10 mm") describen el
+    // producto, no el modelo: se sacan para que no se confundan con el número del
+    // vehículo (Tiggo 2, Yuan 3), que sí manda.
+    .replace(/\b\d{1,3} ?(puertas?|asientos?|butacas?|piezas?|plazas?|pasajeros?|mm|cm)\b/g, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 1)
+    .filter((w) => w.length > 1 || /\d/.test(w)) // el "2" de "Tiggo 2" es una palabra
     .map((w) => SINONIMOS_MODELO[w] || w);
   if (!palabras.length) return [];
   const distintivas = palabras.filter((w) => !STOP_BUSQUEDA.has(w)); // modelo, marca, etc.
@@ -208,7 +262,7 @@ export function buscarPrecio(consulta, lista = null) {
   const cab = cabinaDe(consulta); // filtro suave por cabina simple/doble
   const carr = carroceriaDe(consulta); // filtro suave por sedán/hatch
   const base0 = lista || productosML();
-  let pool = catFiltro ? base0.filter((item) => catFiltro(_normTxt(item.n))) : base0;
+  let pool = catFiltro ? base0.filter((item) => catFiltro(_tituloDe(item.n))) : base0;
   // Filtro DURO por variante: si el cliente nombró una (Yuan PRO), sacamos del pozo
   // todo lo que sea de OTRA (Yuan PLUS). A diferencia de los filtros de cabina o
   // carrocería, este NO se afloja cuando no quedan resultados: preferimos decirle
@@ -233,34 +287,38 @@ export function buscarPrecio(consulta, lista = null) {
     // "fuertes" = términos identificatorios (modelo/marca): con letras y largo >=3.
     // Los años/números sueltos (ej "2020") quedan como opcionales para no excluir de más.
     // Modelos cortos alfanuméricos (q5, x3, a3, t5, c3...) también identifican: son obligatorios.
-    const esModeloCorto = (w) => /^[a-z]+\d+$|^\d+[a-z]+$/.test(w);
+    // Un número de UNA cifra es el número del MODELO (Tiggo 2, Tiggo 7, Serie 3), no un
+    // año: es obligatorio, o le ofrecemos al del Tiggo 2 la alfombra del Tiggo 7. De dos
+    // cifras para arriba se deja opcional: ahí ya son años ("un tucson 21", "modelo 2020").
+    const esModeloCorto = (w) => /^[a-z]+\d+$|^\d+[a-z]+$|^\d$/.test(w);
     const fuertes = distintivas.filter((w) => (w.length >= 3 && /[a-z]/.test(w)) || esModeloCorto(w));
     const obligatorias = fuertes.length ? fuertes : distintivas;
-    // ESTRICTO: el producto DEBE contener TODAS las obligatorias. Sin comodín a genéricos.
-    const buscarCon = (exigidas) => {
-      const res = pool
-        .filter((item) => { const m = _normTxt(item.n); return exigidas.every((d) => m.includes(d)); })
-        .map((item) => ({ item, sc: distintivas.filter((d) => _normTxt(item.n).includes(d)).length }))
-        .sort((a, b) => b.sc - a.sc) // más específicos primero
-        .map((x) => x.item);
-      return aplicarCab(res).slice(0, 6).map(_mapProd);
-    };
-    const res = buscarCon(obligatorias);
-    if (res.length) return res;
-    // 2° intento: la MARCA deja de ser obligatoria (sigue sumando puntaje, así que lo
-    // que sí la trae queda primero). Exigirla dejaba en cero búsquedas que el catálogo
-    // sí tiene —"alfombra chevrolet montana", porque los títulos activos dicen
-    // "Montana" a secas y "Chervolet"— y de ahí Max caía en la lista de agotados y le
-    // decía al cliente que no había stock. El MODELO no se afloja nunca.
-    const sinMarca = obligatorias.filter((w) => !MARCAS.has(w));
-    if (sinMarca.length && sinMarca.length < obligatorias.length) return buscarCon(sinMarca);
-    return res;
+    // La MARCA no se exige mientras el cliente haya nombrado también el MODELO: en los
+    // títulos de Mercado Libre la marca es opcional ("Alfombra Hb20 Bandeja 3d Negro",
+    // "Alfombra Montana Bandeja Negro") y a veces está mal escrita ("Chervolet",
+    // "Hyudndai"). Exigirla dejaba fuera productos que SÍ tenemos: "cubreasiento
+    // hyundai hb20" mostraba 1 solo de los 3, y "alfombra chevrolet montana" ninguno de
+    // los 2 (y de ahí Max se iba a la lista de agotados y decía que no había stock).
+    // La marca sigue sumando puntaje, así que lo que sí la trae queda primero.
+    // El MODELO no se afloja nunca: es lo que evita ofrecer el producto de otro auto.
+    // ⚠️ Solo se afloja si lo que queda son términos FUERTES (`fuertes.length`). Si el
+    // modelo es corto y débil —"vw up"— la marca sigue siendo obligatoria: sin ella,
+    // "up" solo ya matchea la "Fiat Strada Pik Up".
+    const sinMarca = fuertes.length ? obligatorias.filter((w) => !MARCAS.has(w)) : [];
+    const exigidas = sinMarca.length ? sinMarca : obligatorias;
+    // ESTRICTO: el producto DEBE contener TODAS las exigidas. Sin comodín a genéricos.
+    const res = pool
+      .filter((item) => { const m = _tituloDe(item.n); return exigidas.every((d) => _incluye(m, d)); })
+      .map((item) => ({ item, sc: distintivas.filter((d) => _incluye(_tituloDe(item.n), d)).length }))
+      .sort((a, b) => b.sc - a.sc) // más específicos primero
+      .map((x) => x.item);
+    return aplicarCab(res).slice(0, 6).map(_mapProd);
   }
 
   // Sin palabras distintivas (ej: "alfombra" sin modelo): si hay tipo, devolvemos ese tipo;
   // si no, match por todas las palabras.
   if (catFiltro) return aplicarCab(pool).slice(0, 6).map(_mapProd);
-  const base = pool.filter((item) => { const m = _normTxt(item.n); return palabras.every((p) => m.includes(p)); });
+  const base = pool.filter((item) => { const m = _tituloDe(item.n); return palabras.every((p) => m.includes(p)); });
   return aplicarCab(base).slice(0, 6).map(_mapProd);
 }
 

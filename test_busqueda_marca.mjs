@@ -59,6 +59,38 @@ caso(
   JSON.stringify(buscarPrecio("alfombra montaña").map((x) => x.id)) === JSON.stringify(buscarPrecio("alfombra montana").map((x) => x.id)),
 );
 
+// ── 4 bis) HB20: la marca no puede ESCONDER productos ─────────────────────
+// Reporte del 5 de agosto: "le piden para hb20 que también hay en stock y dice que no
+// hay". Con la marca obligatoria, "cubreasiento hyundai hb20" mostraba 1 solo de los 3
+// (el único cuyo título dice "Hyundai") y escondía las dos opciones a medida.
+const hb20 = productos().filter((p) => /hb ?20/i.test(p.n));
+if (hb20.length >= 3) {
+  const conMarca = buscarPrecio("cubreasiento hyundai hb20");
+  const sinMarca = buscarPrecio("cubreasiento hb20");
+  caso("con marca y sin marca traen lo mismo", conMarca.length === sinMarca.length && conMarca.length > 1, `${conMarca.length} vs ${sinMarca.length}`);
+  caso("y el que sí dice Hyundai queda primero", /hyundai/i.test(conMarca[0]?.nombre || ""), conMarca[0]?.nombre);
+  for (const q of ["alfombra hb20", "alfombra hyundai hb20", "alfombra hb 20", "alfombras para hb 20"]) {
+    caso(`"${q}" encuentra alfombras`, buscarPrecio(q).length > 0, "no devolvió nada");
+  }
+  // El cliente escribe el modelo junto y el título lo tiene separado ("Cubrevolante Hb 20").
+  const vol = buscarAgotado("cubrevolante hb20");
+  caso("\"cubrevolante hb20\" reconoce el agotado (no dice que no lo trabajamos)", !!vol && /hb ?20/i.test(vol.nombre), vol?.nombre || "(nada)");
+}
+
+// ── 4 ter) Títulos con la palabra del producto mal escrita ────────────────
+// "Alfomrba Vw Nivus", "Alombra Changan Cs55", "Cuberasiento Toyota Hilux": si la
+// errata deja al producto fuera del filtro de categoría, al cliente que pide una
+// alfombra le decimos que no hay.
+const conErrata = productos().filter((p) => /alfomrba|alfombrra|alfomra|alombra|cuberasiento|curbeasiento/i.test(p.n));
+if (conErrata.length) {
+  const perdidos = conErrata.filter((p) => {
+    const cat = /cuberasiento|curbeasiento/i.test(p.n) ? "cubreasiento" : "alfombra";
+    const modelo = p.n.replace(/^\S+\s+/, "").split(/\s+/).slice(0, 2).join(" ");
+    return !buscarPrecio(`${cat} ${modelo}`).some((x) => x.id === p.id);
+  });
+  caso(`los ${conErrata.length} activos con la palabra mal escrita se encuentran igual`, perdidos.length === 0, perdidos.map((p) => p.n).join(" | "));
+}
+
 // ── 5) Lo que NO se aflojó: el modelo sigue mandando ──────────────────────
 // Aflojar la marca no puede reabrir el cruce de variantes (Yuan PRO ≠ Yuan PLUS).
 const hayVariantes = [...productos(), ...agotados()].some((p) => /yuan plus/i.test(p.n)) && [...productos(), ...agotados()].some((p) => /yuan pro/i.test(p.n));
@@ -74,6 +106,19 @@ if (hayVariantes) {
 // no puede convertir cualquier consulta en una venta.
 const inventado = buscarPrecio("alfombra ferrari testarossa");
 caso("un vehículo que no trabajamos sigue sin resultados", inventado.length === 0, inventado.map((x) => x.nombre).join(" | "));
+
+// Aflojar la marca tampoco puede cruzar modelos parecidos: el número del modelo y las
+// palabras enteras son lo que separa un auto de otro.
+const cruces = [
+  ["alfombra chery tiggo 2", /tiggo ?[4789]/i, "no trae un Tiggo de otro número"],
+  ["alfombra bmw x1", /\bix1\b/i, "el X1 no trae el iX1 (son autos distintos)"],
+  ["alfombra citroen c4", /xc40/i, "el C4 no trae el Volvo XC40"],
+  ["alfombra volkswagen gol", /golf/i, "el Gol no trae el Golf"],
+];
+for (const [q, prohibido, nombre] of cruces) {
+  const r = buscarPrecio(q).filter((x) => prohibido.test(x.nombre));
+  caso(nombre, r.length === 0, r.map((x) => x.nombre).join(" | "));
+}
 
 // Y el que está pausado de verdad sigue marcándose como agotado (no lo tapamos).
 const cajaPausada = pausadasMontana.some((p) => /de caja/i.test(p.n));
