@@ -187,6 +187,21 @@ que haya en ese momento, y avisa si el snapshot está vacío en vez de dar un ve
   MLU726518848, MLU727107392, MLU650913337, MLU911278612, MLU693369035, MLU693423729,
   MLU694588907 y MLU1472721464.
 
+## ⚠️ Nada de esto corre hasta que se despliegue
+
+El bot de producción (`max-tester.onrender.com`) se despliega desde **`main`**. Mientras estos
+commits vivan solo en la rama, Max sigue contestando con el código viejo: un cliente que vuelva a
+preguntar por lo mismo va a recibir la misma respuesta equivocada. **Hay que mergear a `main`.**
+
+Dos cosas más, para que el despliegue cierre de verdad los casos ya abiertos:
+
+- **Max no puede repetirse de memoria.** Si en la misma charla ya dijo "no hay", el prompt ahora le
+  prohíbe repetirlo sin volver a llamar a la herramienta: el stock se sincroniza cada 30 minutos y
+  su respuesta anterior pudo ser un error. Manda la herramienta, no lo que él mismo dijo antes.
+- **`GET /api/esperas?clave=NOTIFY_TOKEN`** (nuevo): quiénes quedaron anotados esperando y qué
+  buscaban. Son los clientes a los que se les dijo "no hay" — con la lista se los puede llamar y
+  recuperar la venta. Acepta `?q=montana` para filtrar por producto.
+
 ## Cómo mirar la conversación real
 
 Las charlas viven en Neon, no en el repo. Con el `NOTIFY_TOKEN`:

@@ -13,6 +13,7 @@ import { cargarLecciones, programarAprendizaje, analizarAhora, estadoAprendizaje
 import { sleep, delayEscritura } from "./humano.js";
 import { programarSync, haySyncML, ultimaSync, sincronizar } from "./sync_ml.js";
 import { infoCatalogo, productos, agotados } from "./catalogo_vivo.js";
+import { esperasPendientes } from "./esperas.js";
 import { hayMercadoPago } from "./pagos.js";
 import { proveedorIA } from "./config.js";
 import { enviarAviso, enviarTexto, enviarTextoA, formatearCupon, hayWhatsApp, linkWa } from "./notificador.js";
@@ -143,6 +144,18 @@ app.get("/api/agotados", (req, res) => {
   const lista = agotados();
   const filtrada = q ? lista.filter((p) => String(p.n || "").toLowerCase().includes(q)) : lista;
   res.json({ total: lista.length, encontrados: filtrada.length, resultados: filtrada.slice(0, 100) });
+});
+
+// Clientes anotados esperando que un producto vuelva. Sirve para RECUPERAR VENTAS: si
+// a alguien se le dijo "no hay" por error, acá está su teléfono y qué buscaba, y se lo
+// puede llamar. Antes esta lista solo vivía en la base y no había forma de mirarla.
+// Solo lectura. Misma autenticación que /api/metricas.
+app.get("/api/esperas", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const q = String(req.query.q || "").trim().toLowerCase();
+  const lista = await esperasPendientes();
+  const filtrada = q ? lista.filter((e) => String(e.titulo || "").toLowerCase().includes(q)) : lista;
+  res.json({ total: lista.length, encontrados: filtrada.length, resultados: filtrada });
 });
 
 // Lista de transferencias recientes (una fila por gestión, con monto) para el
