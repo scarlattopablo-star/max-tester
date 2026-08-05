@@ -20,6 +20,16 @@ const activos = productos();
 const porId = new Map([...activos, ...agotados()].map((p) => [p.id, p.n]));
 const ids = (q) => new Set((buscarPrecio(q) || []).map((p) => p.id));
 const titulo = (id) => porId.get(id) || id;
+// Palabras del producto/color: no son el nombre del auto, así que juntarlas o separarlas
+// no dice nada ("bandeja"+"rigida" → "bandejarigida" no es un modelo).
+const STOP = new Set(`alfombra alfombras cubreasiento cubreasientos cubre cubrevolante volante asiento asientos
+funda fundas negro negra gris rojo azul blanco beige cuero cuerina ecologico ecologica premium alta gama capitoneado
+impermeable impermeables medida medidas para del con set juego completo auto autos vehiculo original originales goma
+engomado engomadas latex bandeja bandejas rigida rigidas rigido baul caja socalo socalos cubresocalos vinilo resina
+maxima resistencia resitencia calidad piezas colocado colocados cabina simple doble puertas sedan hatch hatchback
+antiderrame antiderrames polipropileno propileno tela tapiceria neopreno logo bordado espesor delantero trasero
+universal nuevo nueva modelo marca kit conversion paragolpes espejo pisadera lluvero gotero carga tira empuja
+flexibilidad pasajeros adel adelante parte inferior recta`.split(/\s+/));
 
 // ── 1. El modelo separado, con guión o pegado son EL MISMO auto ───────────────
 // El cliente escribe "Uni-T" porque así se llama el auto; el título dice "Unit".
@@ -76,6 +86,42 @@ for (const p of activos) {
 }
 ok(perdidas.length === 0,
   `los ${revisados} modelos alfanuméricos se encuentran con espacio, con guión y pegados${perdidas.length ? "\n     PERDIDAS:\n     - " + perdidas.slice(0, 12).join("\n     - ") : ""}`);
+
+// ── 3bis. El MISMO modelo escrito con el espacio en otro lado, dentro del catálogo ──
+// No es solo el cliente: Mercado Libre tiene el mismo auto cargado de dos formas
+// ("Changan Unit" y "Changan U-nit"). Si la búsqueda las toma por autos distintos, el
+// que pregunta ve la mitad de lo que hay. Esto barre el catálogo buscando ese caso, así
+// no hay que ir descubriéndolos de a uno.
+console.log("\n── el catálogo escribe el mismo modelo de dos formas ──");
+const tokens = new Map(); // token pegado -> ids que lo traen pegado
+const partidos = new Map(); // token pegado -> ids que lo traen partido en dos
+for (const p of activos) {
+  const t = norm(p.n).split(" ");
+  for (const w of t) {
+    if (w.length < 4 || !/^[a-z]+$/.test(w) || STOP.has(w)) continue;
+    if (!tokens.has(w)) tokens.set(w, new Set());
+    tokens.get(w).add(p.id);
+  }
+  for (let i = 0; i < t.length - 1; i++) {
+    const junto = t[i] + t[i + 1];
+    if (junto.length < 4 || !/^[a-z]+$/.test(junto) || STOP.has(junto)) continue;
+    if (!partidos.has(junto)) partidos.set(junto, new Set());
+    partidos.get(junto).add(p.id);
+  }
+}
+let paresRevisados = 0;
+for (const [w, conJunto] of tokens) {
+  const conPartido = partidos.get(w);
+  if (!conPartido) continue;
+  const todos = new Set([...conJunto, ...conPartido]);
+  if (todos.size < 2) continue;
+  paresRevisados++;
+  const res = ids(`alfombra ${w}`);
+  const faltan = [...todos].filter((id) => !res.has(id));
+  ok(faltan.length === 0,
+    `"${w}": las ${todos.size} publicaciones del mismo modelo salen juntas${faltan.length ? " → falta " + faltan.map(titulo).join(" / ") : ""}`);
+}
+if (!paresRevisados) console.log("   (el catálogo no tiene ningún modelo escrito de las dos formas)");
 
 // ── 4. La palabra del PRODUCTO no dice qué auto tiene el cliente ───────────────
 // Si no sabemos el vehículo hay que preguntarlo, no tirar el producto de cualquier auto.

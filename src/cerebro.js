@@ -90,6 +90,11 @@ const ERRATAS_ML = [
   // consulta se partía en "uni" + "t", la "t" se caía por corta y la búsqueda daba CERO:
   // Max le contestaba que no había teniendo stock (caso real del 5 ago 2026).
   [/\buni ([tk])\b/g, "uni$1"],
+  // El mismo Uni-T está cargado en ML de las DOS formas ("Changan Unit" y "Changan
+  // U-nit"): sin juntarlo eran dos autos distintos y el que preguntaba veía la mitad de
+  // lo que hay. Igual la marca Dongfeng, que en algunos títulos va separada ("Dong Feng").
+  [/\bu nit\b/g, "unit"],
+  [/\bdong feng\b/g, "dongfeng"],
 ];
 
 // Palabras que describen el PRODUCTO, no el auto. Van aparte de STOP_BUSQUEDA porque
