@@ -85,7 +85,23 @@ const ERRATAS_ML = [
   // sola palabra para que la "up" suelta del Saveiro y de la Strada no le salga al
   // cliente que pidió un cubreasiento para su Up.
   [/\bpi(?:k|ck) ?c?up\b/g, "pickup"],
+  // El Changan Uni-T / Uni-K: en Mercado Libre el título lo escribe pegado ("Changan
+  // Unit") y el cliente lo escribe como se llama el auto ("Uni-T"). Sin juntarlo, la
+  // consulta se partía en "uni" + "t", la "t" se caía por corta y la búsqueda daba CERO:
+  // Max le contestaba que no había teniendo stock (caso real del 5 ago 2026).
+  [/\buni ([tk])\b/g, "uni$1"],
 ];
+
+// Palabras que describen el PRODUCTO, no el auto. Van aparte de STOP_BUSQUEDA porque
+// ahí sí separan productos distintos del mismo vehículo (la alfombra "de caja" no es la
+// "de bandeja") y volverlas vacías le daría al cliente la que no pidió. Lo único que no
+// pueden hacer es contar como si fueran el MODELO: con "quiero una alfombra antiderrame"
+// no sabemos qué auto tiene, y hay que preguntárselo antes de cotizar nada.
+const NO_ES_AUTO = new Set([
+  "antiderrame", "antiderrames", "latex", "bandejas", "3d", "5d", "baul", "baules",
+  "caja", "cajas", "socalo", "socalos", "cubresocalos", "cubresocalo", "pisadera",
+  "pisaderas", "lluvero", "lluveros", "gotero", "goteros",
+]);
 // Título del producto, normalizado, sin puntuación y con las erratas corregidas. Es el
 // texto contra el que se busca — la MISMA cocina que se le aplica a la consulta, para
 // que "T-Cross" y "t cross" sean la misma cosa. Los títulos del catálogo no se tocan.
@@ -282,10 +298,46 @@ function modelosNumericos() {
   return mapa;
 }
 
+// Modelos que se distinguen por una LETRA SOLA: el Geely Geometry C y el Geometry E son
+// autos distintos, igual que el Yuan Pro y el Yuan Plus. La letra suelta se descartaba
+// por corta, así que las dos variantes eran la misma cosa y al del C le salía PRIMERO el
+// del E. Se saca del catálogo y no de una lista a mano, para que se mantenga solo cuando
+// cambie el stock. Solo cuenta si la misma palabra aparece con DOS letras distintas: eso
+// es lo que prueba que la letra separa variantes y no es una preposición suelta del
+// título ("Cuero A Medida", "Impermeable Y Lavable").
+let _letraCache = null;
+function modelosLetra() {
+  const lista = [...productosML(), ...agotadosML()];
+  const clave = `${lista.length}|${lista[0]?.id}|${lista[lista.length - 1]?.id}`;
+  if (_letraCache && _letraCache.clave === clave) return _letraCache.mapa;
+  const porBase = new Map(); // palabra -> Set(letras que la siguen)
+  for (const p of lista) {
+    const t = _tituloDe(p.n).split(" ");
+    for (let i = 0; i < t.length - 1; i++) {
+      const base = t[i], letra = t[i + 1];
+      if (base.length < 3 || !/^[a-z]+$/.test(base) || STOP_BUSQUEDA.has(base) || MARCAS.has(base)) continue;
+      if (!/^[a-z]$/.test(letra) || ["y", "o", "u"].includes(letra)) continue; // conjunciones
+      if (!porBase.has(base)) porBase.set(base, new Set());
+      porBase.get(base).add(letra);
+    }
+  }
+  const mapa = new Map([...porBase].filter(([, letras]) => letras.size >= 2));
+  _letraCache = { clave, mapa };
+  return mapa;
+}
+
 // Términos de la consulta que identifican al AUTO aunque la lista de genéricas los
 // tape: las frases de MODELOS_TAPADOS y los números que el catálogo usa como modelo.
 function modelosEnConsulta(crudas) {
   const rescatadas = new Set();
+  // La letra que viene detrás de un modelo que el catálogo ofrece en dos variantes es
+  // parte del nombre del auto: sin ella le damos el de la otra letra.
+  const porLetra = modelosLetra();
+  for (let i = 0; i < crudas.length - 1; i++) {
+    if (!porLetra.get(crudas[i])?.has(crudas[i + 1])) continue;
+    rescatadas.add(crudas[i]);
+    rescatadas.add(crudas[i + 1]);
+  }
   for (const frase of MODELOS_TAPADOS) {
     for (let i = 0; i + frase.length <= crudas.length; i++) {
       if (!frase.every((w, k) => crudas[i + k] === w)) continue;
@@ -325,7 +377,12 @@ function _terminos(consulta) {
     // es el EV4. Se pega SIEMPRE, para que la consulta identifique el auto desde el
     // principio: si no, "hyundai hb 20" se quedaba solo con "hyundai" y le ofrecía al
     // cliente el Tucson y el Creta. Los años no se tocan (4 cifras).
-    .replace(/\b([a-z]{1,2}) (\d{1,2})\b/g, "$1$2")
+    // Hasta TRES cifras: la Mitsubishi L-200, la Chevrolet N400 y la Nissan NP300 se
+    // escriben separadas y quedaban en cero ("l 200" perdía la "l" por corta y el "200"
+    // pasaba por año). Dos cosas NO se pegan: el 100, que sale de "100 % goma" y no es un
+    // modelo, y el número que va detrás de una MARCA, que es el modelo entero y va suelto
+    // ("jac 42" es el JAC 42, no un "jac42" que no existe en ningún título).
+    .replace(/\b([a-z]{1,2}) (\d{1,3})\b/g, (t, l, n) => (n === "100" || MARCAS.has(l) ? t : l + n))
     .split(/\s+/)
     .filter(Boolean)
     .map((w) => SINONIMOS_MODELO[w] || w);
@@ -351,7 +408,7 @@ function _terminos(consulta) {
 // mi Peugeot" no dice si es un 208 o un 3008, y cotizarle uno cualquiera es mentirle.
 // Lo usan las herramientas para que Max PREGUNTE el modelo en vez de tirar un precio.
 export function identificaModelo(consulta) {
-  return _terminos(consulta).fuertes.some((w) => !MARCAS.has(w));
+  return _terminos(consulta).fuertes.some((w) => !MARCAS.has(w) && !NO_ES_AUTO.has(w));
 }
 
 // Busca productos del catálogo priorizando el MODELO/marca (no las palabras genéricas).
