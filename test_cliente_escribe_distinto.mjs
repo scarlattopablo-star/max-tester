@@ -103,6 +103,34 @@ if (caja.length) {
   console.log("   (saltado: no hay alfombra de caja de Montana a la venta)");
 }
 
+// ── 6. El ACABADO que el título no nombra no puede dejar la venta en cero ─────
+// La bandeja rígida de la Montana está publicada como "Alfombra Montana Bandeja", sin
+// el "3d". El cliente pidió "alfombra 3d para montana 25", el título no traía la palabra
+// y Max le dijo que estaba agotada teniéndola (caso real del 5 ago 2026).
+console.log("\n── el acabado (3d, antiderrame) no puede tapar lo que sí hay ──");
+for (const [q, auto] of [["alfombra 3d para montana 25", "montana"], ["alfombra antiderrame para montana", "montana"]]) {
+  const res = [...ids(q)].map(titulo);
+  const hayDelAuto = activos.some((p) => new RegExp(`\\b${auto}\\b`).test(norm(p.n)) && /alfombra/i.test(norm(p.n)));
+  if (!hayDelAuto) { console.log(`   (saltado: no hay alfombras de ${auto} a la venta)`); continue; }
+  ok(res.length > 0, `"${q}" devuelve lo que hay del auto en vez de decir que no hay`);
+  ok(res.every((n) => new RegExp(`\\b${auto}\\b`).test(norm(n))),
+    `"${q}" no se va a otro auto → ${res.join(" / ") || "(nada)"}`);
+}
+
+// Pero la PIEZA sí manda: la de caja no es la de bandeja, y cambiársela al cliente es
+// venderle lo que no pidió. Esto no puede aflojarse junto con el acabado.
+console.log("\n── la PIEZA (caja / baúl / socalo) sigue siendo obligatoria ──");
+for (const pieza of ["caja", "baul", "cubresocalos"]) {
+  const conPieza = activos.filter((p) => new RegExp(`\\b${pieza}\\b`).test(norm(p.n)));
+  if (!conPieza.length) { console.log(`   (saltado: no hay ninguna de ${pieza} a la venta)`); continue; }
+  // La consulta es el título de la propia publicación: así identifica el auto sin que el
+  // test tenga que adivinar el modelo. Si la pieza dejara de exigirse, volverían también
+  // las del MISMO auto que no la llevan, y eso es lo que acá tiene que fallar.
+  const res = [...ids(conPieza[0].n)].map(titulo);
+  ok(res.length > 0 && res.every((n) => new RegExp(`\\b${pieza}\\b`).test(norm(n))),
+    `pidiendo "${conPieza[0].n}" vuelven solo las de ${pieza} → ${res.join(" / ") || "(nada)"}`);
+}
+
 console.log("");
 if (fallos.length) {
   console.log(`❌ ${pasaron} pasaron, ${fallos.length} fallaron\n`);

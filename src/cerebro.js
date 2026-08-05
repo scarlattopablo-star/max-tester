@@ -102,6 +102,15 @@ const NO_ES_AUTO = new Set([
   "caja", "cajas", "socalo", "socalos", "cubresocalos", "cubresocalo", "pisadera",
   "pisaderas", "lluvero", "lluveros", "gotero", "goteros",
 ]);
+
+// El ACABADO del producto: nombra la MISMA pieza que el título a veces escribe de otra
+// forma. La bandeja rígida de la Montana está publicada como "Alfombra Montana Bandeja",
+// sin el "3d", así que exigir la palabra dejaba la búsqueda en cero y Max le decía al
+// cliente que estaba agotada teniéndola (caso real del 5 ago 2026). Suma puntaje pero no
+// filtra, igual que la marca: lo que la trae queda primero.
+// ⚠️ NO entran acá "caja", "baul" ni "socalo". Esas son PIEZAS distintas del mismo auto y
+// cambiárselas al cliente es venderle lo que no pidió: siguen siendo obligatorias.
+const ACABADO_PRODUCTO = new Set(["3d", "5d", "antiderrame", "antiderrames", "latex"]);
 // Título del producto, normalizado, sin puntuación y con las erratas corregidas. Es el
 // texto contra el que se busca — la MISMA cocina que se le aplica a la consulta, para
 // que "T-Cross" y "t cross" sean la misma cosa. Los títulos del catálogo no se tocan.
@@ -457,7 +466,12 @@ export function buscarPrecio(consulta, lista = null) {
     // modelo es corto y débil —"vw up"— la marca sigue siendo obligatoria: sin ella,
     // "up" solo ya matchea la "Fiat Strada Pik Up".
     const sinMarca = fuertes.length ? obligatorias.filter((w) => !MARCAS.has(w)) : [];
-    const exigidas = sinMarca.length ? sinMarca : obligatorias;
+    // El ACABADO tampoco se exige mientras quede algo que identifique el AUTO: el título
+    // de Mercado Libre no siempre lo escribe ("Alfombra Montana Bandeja" ES la bandeja
+    // rígida 3D) y pedirlo dejaba en cero una venta que estaba a la venta. La PIEZA
+    // (caja, baúl, socalo) no está acá: esa se sigue exigiendo.
+    const sinAcabado = sinMarca.filter((w) => !ACABADO_PRODUCTO.has(w));
+    const exigidas = sinAcabado.length ? sinAcabado : (sinMarca.length ? sinMarca : obligatorias);
     // ESTRICTO: el producto DEBE contener TODAS las exigidas. Sin comodín a genéricos.
     const res = pool
       .filter((item) => { const m = _tituloDe(item.n); return exigidas.every((d) => _incluye(m, d)); })
