@@ -1640,10 +1640,17 @@ export function filtrarPrecios(texto, acciones = [], textoCharla = "") {
   const original = String(texto || "");
   if (!original.trim()) return { texto: original, inventado: null };
   const permitidos = _preciosPermitidos(_preciosDeAcciones(acciones));
-  // Los precios que YA estaban en la charla pasaron por este control cuando se dijeron.
+  // Un precio que ya estaba en la charla se acepta SOLO si es un precio REAL del catálogo,
+  // tal cual. No alcanza con que estuviera dicho: si no, un precio inventado en un mensaje
+  // anterior se auto-autoriza para siempre y Max lo repite toda la conversación — que es
+  // exactamente lo que pasó con el $2.850 del HB20 ("tal como te comenté recién").
+  // Sobre lo que devolvió la herramienta EN ESTE TURNO sí se aceptan derivaciones
+  // (descuento, sumas), porque ahí el número salió del catálogo hace un segundo.
+  const delCatalogo = new Set();
+  for (const p of [...productosML(), ...agotadosML()]) for (const v of [p.p, p.l]) if (Number.isFinite(v) && v > 0) delCatalogo.add(v);
   for (const m of String(textoCharla || "").matchAll(_PRECIO_EN_TEXTO)) {
     const v = _aNumero(m[1] ?? m[2]);
-    if (Number.isFinite(v)) for (const p of _preciosPermitidos(new Set([v]))) permitidos.add(p);
+    if (Number.isFinite(v) && delCatalogo.has(v)) permitidos.add(v);
   }
   const malos = [];
   for (const m of original.matchAll(_PRECIO_EN_TEXTO)) {

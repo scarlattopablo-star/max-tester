@@ -58,6 +58,20 @@ const sinBuscar = filtrarPrecios("Sí, la alfombra para tu HB20 está disponible
 ok(sinBuscar.inventado === 2850, "sin resultados de herramienta, cualquier precio es inventado");
 ok(!/2\.?850/.test(sinBuscar.texto), "no le llega el número al cliente");
 
+// ── Un invento anterior NO se auto-autoriza ──────────────────────────────────
+// Pasó en vivo: con el control ya puesto, Max seguía repitiendo el $2.850 en ESA charla,
+// porque el número estaba escrito de antes y el propio control lo daba por bueno. Un
+// precio de la charla vale solo si es un precio REAL del catálogo, tal cual.
+console.log("\n── un precio inventado antes no se hereda ──");
+const CHARLA_SUCIA = "Cliente: hola tenes para hb20 / Max: la alfombra bandeja rígida para tu HB20 está disponible, sale $2.850. / Cliente: tenes alfomrba para hb20 ?";
+const repite = filtrarPrecios("Sí, tal como te comenté recién, tenemos la alfombra bandeja rígida negra para tu HB20 a $2.850.", [], CHARLA_SUCIA);
+ok(repite.inventado === 2850, "no lo deja repetir solo porque ya lo había dicho");
+ok(!/2\.?850/.test(repite.texto), `y no vuelve a salir → ${JSON.stringify(repite.texto.slice(0, 70))}`);
+// Pero un precio REAL sí se puede repetir sin volver a buscar.
+const CHARLA_OK = "Max: la alfombra bandeja 3D para tu HB20 sale $3.360.";
+const bueno = filtrarPrecios("Sí, te confirmo: $3.360.", [], CHARLA_OK);
+ok(bueno.inventado === null, "un precio REAL del catálogo sí se puede repetir");
+
 console.log("\n── no puede confundir un precio con otro número ──");
 for (const [t, motivo] of [
   ["El espesor es de 8 mm y la garantía es de 1 año.", "medidas y garantía"],

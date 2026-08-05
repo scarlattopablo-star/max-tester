@@ -36,6 +36,10 @@ const PUBLIC = join(__dirname, "..", "public");
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+// Momento en que arrancó ESTE proceso. Lo publica /api/estado: si no cambió después de
+// un push, el deploy no subió (pasó el 5 ago 2026 y se dio por desplegado lo que no lo
+// estaba, porque se miraba la hora de la última sincronización con ML, que se mueve sola).
+const ARRANQUE = new Date().toISOString().replace("T", " ").slice(0, 19);
 app.use(express.json({ limit: "15mb" })); // permite fotos en base64
 app.use(express.static(PUBLIC));
 
@@ -115,6 +119,11 @@ app.get("/api/estado", async (_req, res) => {
       keepAlive: !!(process.env.APP_URL || "").trim(),
     },
     catalogo: infoCatalogo(), syncML: haySyncML(), ultimaSync: ultimaSync(), mlUsuario: await hayUsuarioML(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model },
+    // QUÉ CÓDIGO está corriendo. Sin esto no había forma honesta de saber si un deploy
+    // subió: se usaba `ultimaSync`, que cambia SOLA cada 30 minutos con la sincronización
+    // de Mercado Libre, así que daba por desplegado lo que seguía viejo. `commit` se
+    // compara con el `git log -1` local; `arranque` dice desde cuándo vive este proceso.
+    build: { commit: (process.env.RENDER_GIT_COMMIT || "").slice(0, 7) || "desconocido", arranque: ARRANQUE },
   });
 });
 
