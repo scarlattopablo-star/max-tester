@@ -30,6 +30,31 @@ const STOP_BUSQUEDA = new Set([
   "universal", "universales", "automotriz", "resistencia", "maxima", "calidad", "piezas", "instalado", "colocado",
   "cabina", "cabinas", "simple", "sencilla", "doble", "puertas", "scab", "dcab", "economico", "economica", "barato", "barata",
   "sedan", "hatch", "hatchback", "cross",
+  // Palabras con las que el cliente ARMA la pregunta. No están en ningún título, así
+  // que exigirlas dejaba la búsqueda en cero: "artículos para montaña" no encontraba
+  // nada y Max le contestaba que estaba agotado (caso real del 5 ago 2026).
+  "articulo", "articulos", "accesorio", "accesorios", "producto", "productos", "cosa", "cosas",
+  "algo", "algun", "alguna", "alguno", "algunos", "algunas", "hay", "tenes", "tienes", "tiene",
+  "tienen", "tengo", "tendran", "venden", "vende", "vendes", "quiero", "necesito", "busco",
+  "buscando", "consulta", "consultar", "precio", "precios", "cuanto", "cuanta", "cuesta",
+  "cuestan", "vale", "valen", "sale", "salen", "modelo", "modelos", "marca", "marcas",
+  "camioneta", "camionetas", "pickup", "coche", "hola", "buenas", "gracias", "favor",
+  "que", "cual", "cuales", "una", "unas", "unos", "los", "las", "este", "esta", "estos", "estas",
+]);
+
+// Marcas de vehículo. Identifican menos que el MODELO y en los títulos de Mercado
+// Libre son inestables: a veces no están ("Alfombra Montana Bandeja Negro") y a veces
+// están mal escritas ("Alfombra Chervolet Montana"). Por eso, si la búsqueda estricta
+// no devuelve nada, la marca deja de ser obligatoria (ver buscarPrecio). El modelo
+// nunca se afloja: es lo que evita ofrecerle el producto de otro auto.
+// ⚠️ Quedan AFUERA a propósito las que también son el nombre del vehículo (ram) o
+// que como texto suelto matchean cualquier cosa (ora, mg).
+const MARCAS = new Set([
+  "chevrolet", "chervolet", "volkswagen", "vw", "toyota", "ford", "fiat", "renault", "peugeot",
+  "citroen", "nissan", "hyundai", "kia", "honda", "suzuki", "chery", "byd", "jac", "jmc", "jmev",
+  "geely", "haval", "changan", "dongfeng", "jetour", "mitsubishi", "mazda", "subaru", "isuzu",
+  "bmw", "mercedes", "benz", "audi", "jeep", "dodge", "chrysler", "foton", "omoda", "jaecoo",
+  "exeed", "maxus", "baic", "faw", "gac", "skoda", "opel", "tesla",
 ]);
 
 const _normTxt = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -169,6 +194,10 @@ const SINONIMOS_MODELO = { freedom: "strada", volcano: "strada" };
 // buscarAgotado() para revisar las publicaciones pausadas / sin stock.
 export function buscarPrecio(consulta, lista = null) {
   const palabras = _normTxt(consulta)
+    // La puntuación se saca ANTES de cortar en palabras: si no, "hola, necesito algo
+    // para mi montana" busca la palabra "hola," dentro de los títulos y no encuentra
+    // nada. Los títulos quedan como están: acá solo se limpia lo que escribe el cliente.
+    .replace(/[^a-z0-9]+/g, " ")
     .split(/\s+/)
     .filter((w) => w.length > 1)
     .map((w) => SINONIMOS_MODELO[w] || w);
@@ -208,13 +237,24 @@ export function buscarPrecio(consulta, lista = null) {
     const fuertes = distintivas.filter((w) => (w.length >= 3 && /[a-z]/.test(w)) || esModeloCorto(w));
     const obligatorias = fuertes.length ? fuertes : distintivas;
     // ESTRICTO: el producto DEBE contener TODAS las obligatorias. Sin comodín a genéricos.
-    let res = pool
-      .filter((item) => { const m = _normTxt(item.n); return obligatorias.every((d) => m.includes(d)); })
-      .map((item) => ({ item, sc: distintivas.filter((d) => _normTxt(item.n).includes(d)).length }))
-      .sort((a, b) => b.sc - a.sc) // más específicos primero
-      .map((x) => x.item);
-    res = aplicarCab(res).slice(0, 6);
-    return res.map(_mapProd);
+    const buscarCon = (exigidas) => {
+      const res = pool
+        .filter((item) => { const m = _normTxt(item.n); return exigidas.every((d) => m.includes(d)); })
+        .map((item) => ({ item, sc: distintivas.filter((d) => _normTxt(item.n).includes(d)).length }))
+        .sort((a, b) => b.sc - a.sc) // más específicos primero
+        .map((x) => x.item);
+      return aplicarCab(res).slice(0, 6).map(_mapProd);
+    };
+    const res = buscarCon(obligatorias);
+    if (res.length) return res;
+    // 2° intento: la MARCA deja de ser obligatoria (sigue sumando puntaje, así que lo
+    // que sí la trae queda primero). Exigirla dejaba en cero búsquedas que el catálogo
+    // sí tiene —"alfombra chevrolet montana", porque los títulos activos dicen
+    // "Montana" a secas y "Chervolet"— y de ahí Max caía en la lista de agotados y le
+    // decía al cliente que no había stock. El MODELO no se afloja nunca.
+    const sinMarca = obligatorias.filter((w) => !MARCAS.has(w));
+    if (sinMarca.length && sinMarca.length < obligatorias.length) return buscarCon(sinMarca);
+    return res;
   }
 
   // Sin palabras distintivas (ej: "alfombra" sin modelo): si hay tipo, devolvemos ese tipo;
