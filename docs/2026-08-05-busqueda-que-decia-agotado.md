@@ -187,11 +187,11 @@ que haya en ese momento, y avisa si el snapshot está vacío en vez de dar un ve
   MLU726518848, MLU727107392, MLU650913337, MLU911278612, MLU693369035, MLU693423729,
   MLU694588907 y MLU1472721464.
 
-## ⚠️ Nada de esto corre hasta que se despliegue
+## ✅ Desplegado
 
-El bot de producción (`max-tester.onrender.com`) se despliega desde **`main`**. Mientras estos
-commits vivan solo en la rama, Max sigue contestando con el código viejo: un cliente que vuelva a
-preguntar por lo mismo va a recibir la misma respuesta equivocada. **Hay que mergear a `main`.**
+El bot de producción (`max-tester.onrender.com`) se despliega desde **`main`**. Todo esto se mergeó
+y está EN VIVO desde el 5 de agosto de 2026 (`e6a0750`). Lo que siguió después está al final, en
+"Segunda tanda".
 
 Dos cosas más, para que el despliegue cierre de verdad los casos ya abiertos:
 
@@ -213,3 +213,108 @@ https://<url-del-bot>/api/agotados?clave=TU_NOTIFY_TOKEN&q=montana
 
 La primera trae las últimas charlas completas (para buscar la de "montaña"); la segunda confirma,
 en producción, qué publicaciones de Montana están caídas en este momento.
+
+---
+
+# Segunda tanda, mismo día: seguía diciendo "no hay"
+
+Con lo de arriba ya en producción, Max **seguía** contestando que no había con mercadería en stock.
+La causa de fondo no eran los casos sueltos sino **el punto ciego de las pruebas**:
+
+> Los test armaban la consulta **copiando el título de la publicación**. Nunca probaban lo único que
+> pasa en la vida real: que el cliente escribe el modelo de otra forma que la cargada en Mercado
+> Libre, o directamente lo escribe mal. Por eso todo daba verde y el error seguía vivo.
+
+## Lo que faltaba (5 arreglos más)
+
+| # | Qué pasaba | Ejemplo real | Commit |
+|---|---|---|---|
+| 1 | El modelo con **guión o espacio** daba cero | el título dice `Changan Unit`, el cliente escribe `Uni-T`; `L200` vs `L 200` | `ecc1a8f` |
+| 2 | Modelos que se distinguen por **una letra** se cruzaban | al del `Geometry C` le salía PRIMERO el `Geometry E` | `ecc1a8f` |
+| 3 | La palabra del producto tapaba el `falta_modelo` | "quiero una alfombra antiderrame" cotizaba sin saber el auto | `ecc1a8f` |
+| 4 | El **acabado** que al título le falta dejaba la venta en cero | "alfombra **3d** para montana" → la bandeja está publicada como `Alfombra Montana Bandeja`, sin el "3d" | `252bb29` |
+| 5 | El catálogo tiene **el mismo auto cargado de dos formas** | `Changan Unit` y `Changan U-nit`; la marca `Dong Feng` separada | `79c6b9c` |
+| 6 | El cliente que **escribe mal** no encontraba nada | `alfonbra`, `hylux`, `montanna`, `chebrolet`, `hiundai` | `83a5864` |
+
+### Las decisiones que no son obvias
+
+- **`NO_ES_AUTO` va aparte de `STOP_BUSQUEDA`.** Las palabras del producto no pueden contar como el
+  modelo, pero en la búsqueda sí separan productos del mismo vehículo: si se vacían, al que pide la
+  alfombra **de caja** le sale la **de bandeja**.
+- **`ACABADO_PRODUCTO` (3d, 5d, antiderrame, latex) suma puntaje pero NO filtra**, igual que la
+  marca. La **PIEZA** (caja, baúl, socalo) sí se sigue exigiendo: son partes distintas y cambiárselas
+  al cliente es venderle lo que no pidió.
+- **Los modelos por letra salen del CATÁLOGO, no de una lista a mano.** Una palabra cuenta como
+  variante solo si aparece con dos letras distintas: eso separa un modelo real ("Geometry C/E") de
+  una preposición del título ("Cuero **A** Medida").
+- **Un número detrás de una MARCA no se pega**: `jac 42` es el JAC 42, no un "jac42" inexistente.
+  El `100` tampoco: sale de "100 % goma".
+- **El corrector de tipeos va contra el vocabulario del propio catálogo**, con dos candados, porque
+  acá el riesgo es al revés —empujar la palabra al auto más parecido sería venderle el de otro:
+  1. solo se toca lo que **no existe en ningún título** (un modelo real nunca se corrige);
+  2. solo si hay **un único candidato** a esa distancia; con empate no se toca.
+  Los alfanuméricos quedan afuera (`l200`, `c4`, `208`, `hb20`, `Geometry C`): ahí una cifra o una
+  letra **es otro auto**. Por eso `alfombra para ferrari` sigue dando cero, que es lo correcto.
+  Costo medido: ~7 ms por búsqueda.
+
+## Las pruebas nuevas (lo más importante de esta tanda)
+
+Ninguna elige casos a mano: **barren el catálogo**, así que si mañana entra una publicación con el
+mismo problema, fallan solas.
+
+```
+node test_cliente_escribe_distinto.mjs   # el cliente escribe el modelo distinto a como está en ML
+node test_cliente_escribe_mal.mjs        # el cliente escribe MAL (una letra cambiada en cada modelo)
+node test_no_ofrecer_otro_auto.mjs       # la regla sobre el catálogo entero
+```
+
+`test_cliente_escribe_distinto` encontró sola los casos `Changan U-nit` y `Dong Feng`, mirando qué
+token aparece pegado en un título y partido en otro. `test_cliente_escribe_mal` le cambia una letra
+a cada modelo del catálogo y exige que se siga encontrando; verificado contra producción: **147
+modelos, 371 de 381 variantes con una letra cambiada devuelven exactamente lo mismo** (los 10
+restantes no son modelos, son palabras del producto truncadas en los títulos).
+
+⚠️ `test_variantes_modelo` usa la IA real: no es determinístico, la redacción de Max varía entre
+corridas. Los de arriba corren sin red y sin IA.
+
+## Verificación en producción
+
+Las cuatro consultas reales de los dos clientes a los que se les dijo que no había, contra el
+catálogo vivo:
+
+| Cliente preguntó | Max le dijo | Ahora |
+|---|---|---|
+| `tenes para montana` | "está agotado, no tenemos en stock" | ✅ 4 productos |
+| `tenes alfomrba montana` | "la tenemos agotada" | ✅ 4 productos |
+| `Alfombra 3d para montana 25` | "la tenemos agotada" | ✅ 2 productos |
+| `ALFOMBRA HB20` | "está agotado, no tenemos en stock" | ✅ 5 productos |
+
+## 📞 Clientes a los que se les dijo "no hay" habiendo stock
+
+Salieron de barrer las 100 conversaciones y cruzarlas con el catálogo activo. **`/api/esperas` NO
+alcanza para esto**: solo tiene 31 anotados y de esos uno solo tiene producto disponible hoy — a los
+del error Max no los anotó, los derivó o se fueron.
+
+| Teléfono | Preguntó por | Qué había |
+|---|---|---|
+| 098 047 499 | Montana (3 veces) y HB20 | 4 y 5 productos activos |
+| 095 563 501 | alfombra 3D para Montana 2025 | 2 activos; se fue tras preguntar por tarjetas |
+| 099 522 361 | Peugeot 2008 | había un `Cubreasiento Peugeot 2008 Allure`, y Max le ofreció el **208** |
+
+## Pendiente en Mercado Libre (no es código)
+
+- **9 activas con la palabra del producto mal escrita.** Max ya las encuentra, pero **ML no**: no
+  aparecen cuando alguien busca "alfombra" ahí. `MLU650874169`, `MLU726518848`, `MLU727107392`,
+  `MLU650913337`, `MLU911278612`, `MLU693369035`, `MLU693423729`, `MLU694588907`, `MLU1472721464`.
+  Más `MLU715663846` ("Chervolet") y `MLU613492709` ("Hyudndai", pausada).
+- **Publicaciones pausadas con mercadería en el local.** Montana tiene 5 pausadas y el HB20 9. Max
+  se guía por el estado en ML: mientras estén pausadas va a decir "agotado" de esas, correctamente.
+  Si la mercadería está, hay que reactivarlas.
+
+## Cómo verificar un deploy de Max
+
+`/api/estado` → si `ultimaSync.cuando` salta a una hora nueva, el proceso reinició con el build
+nuevo (queda unos segundos en `null` en el medio). Render despliega desde `main` por un git hook
+**pre-push local**: mergear un PR en GitHub NO lo dispara.
+
+⚠️ Los test versionados están en `.gitignore` (`test_*.mjs`): se agregan con `git add -f`.
