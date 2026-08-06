@@ -6,6 +6,7 @@ import { makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMes
 import qrcode from "qrcode-terminal";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { rm } from "fs/promises";
 import { procesarMensaje } from "./handler.js";
 import { NEGOCIO } from "./config.js";
 import { sleep, delayEscritura } from "./humano.js";
@@ -13,7 +14,7 @@ import { registrarSock, desregistrarSock, enviarTexto, linkWa } from "./notifica
 import { agregar, cargarConversaciones } from "./memoria.js";
 import { registrarMensajeMax } from "./metricas.js";
 import { linkTurno } from "./confirmacion_turno.js";
-import { useDBAuthState } from "./auth_db.js";
+import { useDBAuthState, resetearSesion } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import { cargarEstado, esHumano, marcarHumano, liberar } from "./previas.js";
 import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder, documentoDelMensaje, dijoQueTransfirio } from "./ws_mensaje.js";
@@ -28,6 +29,38 @@ const noopLogger = { level: "silent", child: () => noopLogger, trace() {}, debug
 
 // Evita apilar reconexiones (varias "close" seguidas crearían varios sockets a la vez).
 let reconectando = false;
+// Última vez que se limpió sola la sesión cerrada, para no entrar en un loop de
+// borrados si WhatsApp rechaza el pareo una y otra vez.
+let ultimaLimpieza = 0;
+const ESPERA_ENTRE_LIMPIEZAS = 5 * 60 * 1000;
+
+// Cuando WhatsApp CIERRA la sesión (te desvinculan el dispositivo desde el celular,
+// o caduca), las credenciales guardadas quedan muertas: con ellas Baileys ya no
+// puede conectar NI pedir un QR nuevo, así que Max quedaba mudo hasta que alguien
+// entraba a mano a /api/wa-reset. Las borramos solos y volvemos a arrancar: al no
+// haber sesión, Baileys emite un QR nuevo que aparece en /qr para escanear.
+async function limpiarSesionCerrada() {
+  if (Date.now() - ultimaLimpieza < ESPERA_ENTRE_LIMPIEZAS) {
+    console.log("🔌 Sesión cerrada otra vez muy rápido: no la borro de nuevo. Escaneá el QR en /qr.");
+    return false;
+  }
+  ultimaLimpieza = Date.now();
+  try {
+    if (process.env.DATABASE_URL) {
+      const filas = await resetearSesion();
+      console.log(`🧹 Sesión cerrada por WhatsApp: borré la sesión guardada (${filas} filas de wa_auth).`);
+    } else {
+      await rm(AUTH_DIR, { recursive: true, force: true });
+      console.log("🧹 Sesión cerrada por WhatsApp: borré la carpeta auth_baileys/.");
+    }
+    diag("conexion", { estado: "sesion_cerrada", limpieza: "ok" });
+    return true;
+  } catch (e) {
+    console.log("⚠ no pude borrar la sesión cerrada:", e.message);
+    diag("conexion", { estado: "sesion_cerrada", limpieza: "error", error: String(e.message || e) });
+    return false;
+  }
+}
 
 async function iniciar() {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -93,7 +126,13 @@ async function iniciar() {
       }
       setConectado(false);
       if (cerroSesion) {
-        console.log("🔌 Sesión cerrada: reescaneá el QR en /qr (o borrá auth_baileys/) y volvé a vincular.");
+        console.log("🔌 Sesión cerrada por WhatsApp. Preparo un QR nuevo: entrá a /qr?clave=<NOTIFY_TOKEN> y escaneá.");
+        if (reconectando) return; // ya hay un arranque programado
+        reconectando = true;
+        limpiarSesionCerrada().then((ok) => {
+          if (!ok) { reconectando = false; return; } // sin limpiar, reintentar no sirve
+          setTimeout(() => { reconectando = false; iniciar(); }, 2000);
+        });
         return;
       }
       // Reconexión con BACKOFF (como Sofi): si fue conflicto/reinicio (440/515/503)

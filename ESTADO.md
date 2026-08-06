@@ -2,7 +2,36 @@
 
 Bot de WhatsApp para La Casa del Cubreasiento. Asistente **Max** (antes Vale). Carpeta: `agente_ia/`.
 
-## 🚫🚫 SESIÓN 31 jul — MAX NO INVENTA (LO MÁS NUEVO, RETOMAR ACÁ)
+## 📲 SESIÓN 6 ago — SE CERRÓ LA SESIÓN DE WHATSAPP: QR NUEVO SOLO (LO MÁS NUEVO, RETOMAR ACÁ)
+
+**Pasó:** se cerró la sesión de WhatsApp Web de Max (lo desvincularon desde el celular o caducó) y
+hay que escanear un QR nuevo.
+
+**Para revincular AHORA (2 minutos, lo hace el usuario — Claude no entra a Render):**
+1. Abrir `https://max-tester.onrender.com/qr?clave=<NOTIFY_TOKEN>` (el token está en Render →
+   Environment). Ojo con el arranque en frío de Render Free: puede tardar ~1 min la 1ª carga.
+2. Si la página se queda en *"Generando código…"* más de 1 minuto, la sesión vieja está trabando el
+   QR → abrir `https://max-tester.onrender.com/api/wa-reset?clave=<NOTIFY_TOKEN>` (borra `wa_auth` y
+   reinicia) y volver a `/qr`.
+3. En el celular del chip de Max: **WhatsApp → Configuración → Dispositivos vinculados → Vincular un
+   dispositivo** → escanear. La página dice **"✅ ¡Conectado!"** sola.
+4. Verificar: `/api/estado` (`whatsapp.conectado`) y escribirle desde otro teléfono.
+   ⚠️ Si `/api/estado` dice `conectado:false` pero Max contesta, es el glitch cosmético conocido.
+5. Si el QR no aparece nunca, chequear en Render que esté `WHATSAPP_ON=1` y que `WA_PROVIDER` NO
+   esté en `meta` (con `meta` Baileys ni arranca — ver `src/start.js`).
+
+**Arreglo de fondo (código, esta sesión):** `whatsapp.js` ahora **se recupera solo** de la sesión
+cerrada. Antes, con `DisconnectReason.loggedOut` solo se logueaba un mensaje y se cortaba: las
+credenciales muertas seguían en Neon, así que Baileys no podía conectar NI emitir un QR nuevo, y Max
+quedaba mudo hasta que alguien entrara a mano a `/api/wa-reset`. Ahora borra la sesión guardada
+(`resetearSesion()` en Neon, o la carpeta `auth_baileys/` si corre local) y vuelve a arrancar →
+**el QR nuevo aparece solo en `/qr`**, sin tocar nada. Guarda de 5 min entre limpiezas para no entrar
+en loop de borrados si WhatsApp rechaza el pareo, y queda registrado en `/api/diag`
+(`conexion` → `estado: "sesion_cerrada"`).
+
+---
+
+## 🚫🚫 SESIÓN 31 jul — MAX NO INVENTA
 
 **Pedido de Pablo:** *"Max no puede inventar. Hoy mandó un mensaje diciendo que le podían hacer la
 alfombra a medida, y eso no existe. Y en el caso de no poder resolver, que lo derive a un trabajador."*
