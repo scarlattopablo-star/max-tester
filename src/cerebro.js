@@ -231,17 +231,47 @@ function categoriaDe(consulta) {
 
 // Detecta si el cliente especificó tipo de CABINA (camionetas): simple o doble.
 // Devuelve "simple" | "doble" | null. Se usa como filtro suave (solo si hay coincidencias).
-function cabinaDe(consulta) {
+export function cabinaDe(consulta) {
   const q = _normTxt(consulta);
   if (/(doble cabina|cabina doble|doble cab|d ?cab|cuatro puertas|4 puertas)/.test(q)) return "doble";
-  if (/(cabina simple|simple cabina|cab simple|s ?cab|cabina sencilla|dos puertas|2 puertas)/.test(q)) return "simple";
+  // "2 asientos" es como el cliente (y el catálogo) nombran la cabina simple de una
+  // chata. Sin esto, quien decía "es la de 2 asientos" no filtraba nada.
+  // ⚠️ En SINGULAR también: `corregirTipeo` lleva "asientos" a la palabra del catálogo
+  // ("asiento"), así que dentro de buscarPrecio la consulta llega ya normalizada y un
+  // regex que exija la "s" final no matchea nunca.
+  if (/(cabina simple|simple cabina|cab simple|s ?cab|cabina sencilla|dos puertas|2 puertas|\b(?:2|dos) ?asientos?\b|2 plazas)/.test(q)) return "simple";
+  return null;
+}
+
+// Qué cabina declara el TÍTULO de una publicación (o null si no dice nada).
+// ⚠️ Esto es lo que estaba roto: el filtro buscaba "doble cabina" y "cabina simple",
+// pero el catálogo escribe "D Cabina" y "Pik Up 2 Asientos". Como el filtro es SUAVE
+// (solo aplica si algo coincide), nunca coincidía nada y nunca filtraba: "strada doble
+// cabina", "strada cabina simple" y "strada 2 asientos" devolvían los mismos 6
+// resultados que "strada" a secas. Verificado el 7 ago 2026.
+export function cabinaDelProducto(nombre) {
+  const m = _normTxt(nombre);
+  if (/(doble cabina|cabina doble|doble cab|\bd ?\.? ?cabina\b|\bdc\b)/.test(m)) return "doble";
+  if (/(cabina simple|cab simple|cabina sencilla|\b(?:2|dos) ?asientos?\b|pik ?up 2)/.test(m)) return "simple";
   return null;
 }
 function _matchCabina(nombre, cab) {
-  const m = _normTxt(nombre);
-  if (cab === "simple") return /(cabina simple|cab simple|simple|sencilla)/.test(m);
-  if (cab === "doble") return /(doble cabina|cabina doble|doble cab|doble)/.test(m);
-  return true;
+  const c = cabinaDelProducto(nombre);
+  // Sin marca en el título, la publicación sirve para cualquiera: no se descarta.
+  return c === null || c === cab;
+}
+
+// ¿Los resultados mezclan cabina simple y doble? Entonces son vehículos DISTINTOS y
+// no se puede cotizar sin saber cuál tiene el cliente. Es el caso de la Strada: la de
+// "Pik Up 2 Asientos" ($6.500) y la "D Cabina" ($6.486) conviven en la búsqueda, y
+// ofrecerle la de 2 asientos a una Freedom es venderle algo que no le entra.
+export function mezclaCabinas(resultados = []) {
+  const vistas = new Set();
+  for (const p of resultados) {
+    const c = cabinaDelProducto(p?.nombre || p?.n || "");
+    if (c) vistas.add(c);
+  }
+  return vistas.size > 1;
 }
 // Carrocería (sedán / hatchback) — filtro suave, igual que cabina.
 function carroceriaDe(consulta) {
@@ -263,7 +293,10 @@ function _matchCarroceria(nombre, carr) {
 // una bandeja del Yuan PLUS.
 // ⚠️ "max" queda AFUERA a propósito: es el nombre del asistente y aparece en todas
 // las charlas ("te habla Max"), así que como marcador de variante daría falsos.
-const VARIANTES = ["pro", "plus", "gt", "turbo", "hybrid", "sport"];
+// ⚠️ Son DOS listas y las dos tienen que nombrar la variante: esta la DETECTA en un
+// texto, y VERSIONES_AUTO decide cuáles son "otro auto". "track" estaba en la segunda
+// y no en esta, así que el Polo Track no se detectaba y el aviso nunca salía.
+const VARIANTES = ["pro", "plus", "gt", "turbo", "hybrid", "sport", "track"];
 function variantesEn(texto) {
   const t = _normTxt(texto);
   return new Set(VARIANTES.filter((v) => new RegExp(`\\b${v}\\b`).test(t)));
@@ -521,7 +554,12 @@ export function buscarPrecio(consulta, lista = null) {
   // Sobre el texto YA CORREGIDO: si el cliente escribe "alfonbra", el filtro no la
   // reconocía como alfombra y le mezclaba los cubreasientos con lo que pidió.
   const catFiltro = categoriaDe(texto);
-  const cab = cabinaDe(texto); // filtro suave por cabina simple/doble
+  // ⚠️ La cabina se lee de la consulta ORIGINAL, no de `texto`. _terminos() borra a
+  // propósito los números que cuentan ("2 asientos", "4 puertas", "10 mm") para que no
+  // se confundan con el número del modelo (Tiggo 2, Yuan 3)... que son exactamente las
+  // frases que este filtro busca. Los dos tenían razón por separado y se anulaban: por
+  // eso "strada 2 asientos" devolvía lo mismo que "strada" a secas (7 ago 2026).
+  const cab = cabinaDe(consulta); // filtro suave por cabina simple/doble
   const carr = carroceriaDe(texto); // filtro suave por sedán/hatch
   const base0 = lista || productosML();
   let pool = catFiltro ? base0.filter((item) => catFiltro(_tituloDe(item.n))) : base0;
@@ -584,7 +622,10 @@ export function buscarPrecio(consulta, lista = null) {
 // VERSIONES de un modelo que son OTRO AUTO (Yuan Pro ≠ Yuan Plus, Tiggo 7 ≠ Tiggo 7
 // Pro). ⚠️ "sport" queda afuera de esta lista aunque sea una variante de búsqueda: en
 // los títulos es la LÍNEA de tapizado ("Cuero Sport"), no la versión del vehículo.
-const VERSIONES_AUTO = new Set(["pro", "plus", "gt", "turbo", "hybrid"]);
+// "track": el VW Polo Track es OTRO auto que el Polo común (7 ago 2026: a un cliente
+// con Polo Comfortline le salió $11.610, que es el precio del Polo Track 2024 — la
+// única publicación de Polo que hay — sin aclararle nunca que era de esa versión).
+const VERSIONES_AUTO = new Set(["pro", "plus", "gt", "turbo", "hybrid", "track"]);
 // Si el cliente no dijo la versión y TODO lo que encontramos es de una, hay que
 // confirmársela antes de venderle: es lo que pasó con el Yuan Pro y el Yuan Plus.
 // Devuelve las versiones encontradas, o null si no hay nada que confirmar.
@@ -1223,11 +1264,31 @@ const DERIVACION_DIRECTA = new Set(["pide_humano", "reclamo", "mayorista", "alto
 // el cliente pidió alfombra para el Yuan PRO, Max buscó "alfombra yuan" a secas y el
 // catálogo le contestó con una del Yuan PLUS.
 function conVarianteDelCliente(consulta, textoCliente) {
+  let out = consulta;
   const varCliente = variantesEn(textoCliente || "");
-  if (!varCliente.size) return consulta;
-  const varConsulta = variantesEn(consulta);
-  const faltantes = [...varCliente].filter((v) => !varConsulta.has(v));
-  return faltantes.length ? `${consulta} ${faltantes.join(" ")}`.trim() : consulta;
+  if (varCliente.size) {
+    const varConsulta = variantesEn(out);
+    const faltantes = [...varCliente].filter((v) => !varConsulta.has(v));
+    if (faltantes.length) out = `${out} ${faltantes.join(" ")}`.trim();
+  }
+  // Lo mismo con la CABINA: el cliente dice "es doble cabina" o "la de 2 asientos" en
+  // su mensaje, y Max arma la búsqueda sin eso ("cubreasiento strada"). Si no se la
+  // devolvemos, el filtro no tiene con qué trabajar y vuelven las dos cabinas juntas.
+  const cabCliente = cabinaDe(textoCliente || "");
+  if (cabCliente && !cabinaDe(out)) out = `${out} ${cabCliente === "doble" ? "doble cabina" : "2 asientos"}`.trim();
+  return out;
+}
+
+// Cuando la búsqueda trae cabina simple Y doble, y ni Max ni el cliente dijeron cuál
+// es, no se cotiza: se pregunta. Son vehículos distintos y el precio cambia.
+function faltaCabina(encontrados, consulta, textoCliente) {
+  if (cabinaDe(consulta) || cabinaDe(textoCliente || "")) return null;
+  if (!mezclaCabinas(encontrados)) return null;
+  return {
+    encontrado: false,
+    falta_cabina: true,
+    mensaje: "Para este vehículo tenemos productos de CABINA SIMPLE (2 asientos) y de DOBLE CABINA, que son autos distintos y no valen lo mismo. NO le des precio ni le nombres productos todavía: preguntale, corto y natural, si la suya es cabina simple (2 asientos) o doble cabina. Con la respuesta volvé a buscar.",
+  };
 }
 
 // Herramientas con las que Max MIRA el producto. Alcanza cualquiera de ellas para
@@ -1239,10 +1300,28 @@ const HERRAMIENTAS_DE_PRODUCTO = new Set([
   "mostrar_cuero_sport", "descripcion_oficial",
 ]);
 
+// Herramientas que ponen PLATA de por medio: cotizar, cobrar o anotar el pedido.
+// Ninguna puede correr mientras no se sepa QUÉ línea eligió el cliente.
+const CIERRAN_VENTA = new Set(["crear_link_pago", "tomar_pedido", "confirmar_transferencia", "consultar_precio"]);
+
 async function ejecutarHerramienta(nombre, input, ctx = {}) {
   // Estado del TURNO (se reinicia en cada mensaje del cliente, lo crea responder()).
   const turno = ctx._turno || (ctx._turno = { busco: false });
   if (HERRAMIENTAS_DE_PRODUCTO.has(nombre)) turno.busco = true;
+  // ⛔ El cliente eligió por COLOR y ese color existe en más de una línea de las que
+  // se le mostraron: no se cotiza ni se cobra hasta saber cuál es. Es el caso de
+  // Vanessa (7 ago 2026): eligió "ocre" con el capitoneado y el eco cuero los dos
+  // sobre la mesa, Max supuso el barato y le cobró $3.279 de menos.
+  if (CIERRAN_VENTA.has(nombre)) {
+    const amb = eleccionAmbigua(ctx._ultimoUsuario, ctx.textoCharla);
+    if (amb.ambigua) {
+      turno.ambiguedad = amb;
+      return {
+        ok: false,
+        mensaje: `(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) Todavía no sabés qué línea eligió: el ${amb.color} está en ${amb.lineas.join(" y en ")}, y no valen lo mismo. NO des precio, NO armes link de pago y NO anotes el pedido hasta que te lo diga. Preguntáselo con estas palabras: "${amb.pregunta}"`,
+      };
+    }
+  }
   try {
     if (nombre === "mostrar_capitoneado") {
       const m = CUBREASIENTOS.capitoneado.muestras || {};
@@ -1322,6 +1401,10 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       // Si no sabemos QUÉ AUTO tiene, lo que encontramos es de un modelo cualquiera:
       // darle ese precio es mentirle. Se le pregunta el vehículo primero.
       if (!identificaModelo(consulta)) return { encontrado: false, falta_modelo: true, mensaje: "Todavía no sabés qué vehículo tiene, así que NO le des precio ni le nombres productos: lo que encontré es de otros modelos y le estarías cotizando cualquier cosa. Preguntale marca y modelo (y el año si es camioneta) en una frase corta y amable, y recién ahí volvé a buscar." };
+      // Cabina simple y doble son autos distintos: si vinieron las dos y nadie dijo
+      // cuál, se pregunta antes de cotizar (7 ago 2026, Strada Freedom).
+      const sinCabina = faltaCabina(encontrados, consulta, ctx._ultimoUsuario);
+      if (sinCabina) return sinCabina;
       const version = versionSinConfirmar(consulta, encontrados);
       if (version) return { encontrado: true, moneda: "UYU", resultados: encontrados, confirmar_version: version, instruccion: `⚠️ TODO lo que encontré es de la versión ${version.join(" / ")} de ese modelo, y el cliente nunca dijo cuál tiene. El ${version[0]} es otro auto: si le vendés esto y tiene la versión común, no le calza. Pasale el precio aclarando la versión y CONFIRMÁSELA antes de cerrar ("es para la versión ${version[0]}, ¿esa tenés?").` };
       return { encontrado: true, moneda: "UYU", resultados: encontrados };
@@ -1347,10 +1430,26 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
       // Mismo criterio que consultar_precio: sin saber el vehículo, las fotos serían de
       // otro auto. Antes de mostrar nada, se pregunta el modelo.
       if (!identificaModelo(consulta)) return { ok: false, falta_modelo: true, mensaje: "Todavía no sabés qué vehículo tiene: las fotos que encontré son de otros modelos y mostrárselas lo confunde. Preguntale marca y modelo en una frase corta y amable, y después buscá de nuevo." };
+      // Las fotos van con el PRECIO en el caption, así que mostrar las dos cabinas
+      // juntas es cotizarle las dos: mismo guard que en consultar_precio.
+      const sinCab = faltaCabina(hallados, consulta, ctx._ultimoUsuario);
+      if (sinCab) return { ok: false, ...sinCab };
       const encontrados = hallados.filter((x) => x.img);
       if (!encontrados.length) return { ok: false, mensaje: "No tengo foto exacta de eso; pedí más datos del modelo." };
       const elegidas = encontrados.slice(0, 4); // hasta 4 fotos (opciones del modelo)
-      return { ok: true, enviadas: elegidas.length, fotos: elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio, moneda: x.moneda })) };
+      const fotos = elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio, moneda: x.moneda }));
+      // El caption de cada foto lleva el PRECIO, así que mandar fotos ES cotizar. Si
+      // todo lo que hay es de otra VERSIÓN del modelo, vale el mismo aviso que en
+      // consultar_precio — y hacía falta acá, porque para el Polo (7 ago 2026) Max
+      // resolvió con enviar_foto y pasó los $11.610 del Polo Track sin nombrarlo.
+      const ver = versionSinConfirmar(consulta, elegidas);
+      if (ver) {
+        return {
+          ok: true, enviadas: fotos.length, fotos, confirmar_version: ver,
+          instruccion: `⚠️ TODO lo que encontré es de la versión ${ver.join(" / ")} de ese modelo, y el cliente nunca dijo cuál tiene. El ${ver[0]} es otro auto: si le vendés esto y tiene la versión común, no le calza. Nombrá la versión al pasarle el precio y CONFIRMÁSELA antes de cerrar ("es para la versión ${ver[0]}, ¿esa tenés?").`,
+        };
+      }
+      return { ok: true, enviadas: fotos.length, fotos };
     }
     if (nombre === "solicitar_turno") return await solicitarTurno(input);
     if (nombre === "tomar_pedido") {
@@ -1670,6 +1769,74 @@ export function filtrarPrecios(texto, acciones = [], textoCharla = "") {
   return { texto: [limpio, FRASE_CONSULTO].filter(Boolean).join("\n\n"), inventado: malos[0].v };
 }
 
+// ── El COLOR solo no dice qué línea eligió el cliente ────────────────────────
+// El 7 ago 2026 (Vanessa Leites, chat 59898785444) Max le mostró el capitoneado con su
+// precio correcto ($9.765 para la Strada Freedom) y después el eco cuero con sus
+// costuras. El cliente eligió señalando la foto y escribiendo "Ocre": Max le cobró
+// $6.486, el precio del eco cuero LISO, y le armó el link de Mercado Pago por ese
+// monto. $3.279 de menos, cobrados y pagados.
+//
+// No es un precio inventado — $6.486 existe en el catálogo, así que filtrarPrecios lo
+// deja pasar con razón. El problema es que "ocre", "azul" y "blanca" son costuras del
+// ECO CUERO y a la vez colores del CAPITONEADO: cuando en la charla se mostraron las
+// dos líneas, el color solo no alcanza y Max desambigua para el lado barato.
+//
+// Las líneas y los colores NO se hardcodean acá: se leen de los captions de las fotos
+// que Max realmente mandó, que el código deja anotados en el historial (handler.js).
+// Así, si mañana se agrega un color o una línea, esto lo toma solo.
+const _RE_NOTA_FOTOS = /\[Contexto interno — opciones que le mostr[ée] al cliente con foto, numeradas:([^\]]*)\]/gi;
+// Las dos líneas que se eligen POR COLOR (las otras dos, tela y Sport, no tienen muestras).
+const _LINEAS_POR_COLOR = [
+  { clave: "capitoneado premium", enCaption: /capitoneado/i, laNombra: /capiton\w+|premium/i },
+  { clave: "eco cuero", enCaption: /eco\s*cuero/i, laNombra: /eco\s*cuero|ecocuero|econom\w+|\bliso\b|sin\s+capiton\w+/i },
+];
+const _COLORES_MUESTRA = [
+  { clave: "ocre", re: /\bocres?\b|\bnaranjas?\b/i },
+  { clave: "azul", re: /\bazul(?:es)?\b/i },
+  { clave: "blanca", re: /\bblanc[ao]s?\b/i },
+  { clave: "negro", re: /\bnegr[ao]s?\b/i },
+  { clave: "rojo", re: /\brojos?\b/i },
+];
+
+// Devuelve { ambigua, color, lineas, pregunta }. ambigua = el cliente eligió por COLOR
+// y ese color existe en más de una de las líneas que se le mostraron con foto.
+export function eleccionAmbigua(textoUsuario, textoCharla = "") {
+  const nada = { ambigua: false, color: null, lineas: [], pregunta: "" };
+  const dicho = String(textoUsuario || "").trim();
+  if (!dicho) return nada;
+
+  // Qué color nombró el cliente (si nombró varios, no está eligiendo: está preguntando).
+  const colores = _COLORES_MUESTRA.filter((c) => c.re.test(dicho));
+  if (colores.length !== 1) return nada;
+  const color = colores[0];
+
+  // Si YA dijo la línea, no hay nada que preguntar.
+  if (_LINEAS_POR_COLOR.some((l) => l.laNombra.test(dicho))) return nada;
+
+  // Captions de TODAS las fotos que Max mandó en la charla.
+  const captions = [];
+  for (const m of String(textoCharla || "").matchAll(_RE_NOTA_FOTOS)) {
+    for (const op of m[1].split(";")) {
+      const nombre = op.replace(/^\s*\d+\)\s*/, "").replace(/\s*-\s*\$[\d.,]+\s*$/, "").trim();
+      if (nombre) captions.push(nombre);
+    }
+  }
+  if (!captions.length) return nada;
+
+  // Las líneas que TIENEN ese color entre las fotos mostradas.
+  const lineas = _LINEAS_POR_COLOR
+    .filter((l) => captions.some((c) => l.enCaption.test(c) && color.re.test(c)))
+    .map((l) => l.clave);
+  if (lineas.length < 2) return nada;
+
+  return {
+    ambigua: true,
+    color: color.clave,
+    lineas,
+    pregunta: `Una cosa antes de seguir, para no pasarte un precio equivocado: el ${color.clave} lo tenés en ${lineas.join(" y en ")}, y no valen lo mismo. ¿Cuál de las dos es la que te gustó?`,
+  };
+}
+
 // Saca las palabras de ADENTRO que se le escapan a Max. Al cliente no le dice nada
 // que algo esté "publicado" o que "figure en el catálogo": eso es de nuestro sistema
 // y suena a excusa. El prompt se lo prohíbe, pero se le escapa igual, así que se
@@ -1747,6 +1914,29 @@ function armarRespuesta(texto, acciones, ctx = {}) {
   // peor que no dar precio: o perdemos plata sosteniéndolo, o le quedamos mal.
   const { texto: sinPrecios, inventado } = filtrarPrecios(limpio, acciones, ctx.textoCharla);
   limpio = sinPrecios;
+  // ANTI-LÍNEA-EQUIVOCADA: si el cliente eligió por color y ese color está en más de
+  // una línea, el guard de las herramientas ya le negó cotizar. Pero el modelo puede
+  // escribir el precio igual, de memoria, sin llamar a nada: acá se le cae la frase y
+  // se le pone la pregunta que corresponde. Es la misma lección de siempre — cuando
+  // algo se le escapa al modelo, se resuelve por código, en la salida.
+  const ambiguo = eleccionAmbigua(ctx._ultimoUsuario, ctx.textoCharla);
+  if (ambiguo.ambigua) {
+    const { texto: sinCotizar } = filtrarPrecios(limpio, [], "");
+    // Se caen TODOS los párrafos que nombren alguna de las líneas en disputa, por dos
+    // motivos que se resuelven con el mismo corte:
+    //   · la pregunta se la damos al modelo TEXTUAL en la nota de la herramienta, así
+    //     que la copia y al cliente le llegaría DOS VECES;
+    //   · y si afirma una sola línea ("tenemos la opción en eco cuero") está haciendo
+    //     justo lo que no puede hacer: adivinar. Contradice a la pregunta que sigue.
+    // Lo que no habla de líneas (el saludo, el sí a "¿sirve para la Freedom?") queda.
+    const base = sinCotizar
+      .replace(FRASE_CONSULTO, "")
+      .split(/\n\s*\n/)
+      .filter((p) => !ambiguo.lineas.some((l) => p.toLowerCase().includes(l)))
+      .join("\n\n")
+      .trim();
+    limpio = [base, ambiguo.pregunta].filter(Boolean).join("\n\n");
+  }
   // Y si Max le dijo al cliente que lo consulta / lo pasa con un asesor pero se
   // olvidó de llamar la herramienta, la derivación se registra igual: nadie queda
   // esperando una respuesta que el equipo nunca vio.

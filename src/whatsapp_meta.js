@@ -17,6 +17,7 @@ import { linkTurno } from "./confirmacion_turno.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
 import { registrarTransporte, enviarTexto, linkWa } from "./notificador.js";
 import { registrarCliente } from "./clientes.js";
+import { recordarEnviado, marcaDeCita } from "./citas.js";
 import { diag } from "./diag.js";
 import {
   enviarTextoMeta, enviarImagenMeta, enviarVideoMeta, enviarPlantillaMeta,
@@ -39,9 +40,12 @@ function numeroPropio() {
   return aWaId(process.env.NUMERO_BOT || process.env.NUMERO_AVISOS || "");
 }
 
-function marcarEnviado(resp) {
+// caption: si el mensaje que se envió era una FOTO o un VIDEO de un producto, se
+// recuerda cuál era, para poder resolver la cita cuando el cliente le responda.
+function marcarEnviado(resp, caption = "") {
   const id = resp?.messages?.[0]?.id;
   if (!id) return;
+  if (caption) recordarEnviado(id, caption);
   enviadosPorMax.add(id);
   if (enviadosPorMax.size > 500) {
     for (const v of enviadosPorMax) { enviadosPorMax.delete(v); if (enviadosPorMax.size <= 500) break; }
@@ -128,13 +132,13 @@ async function procesar(tel) {
     for (const f of imagenesEnviar) {
       try {
         await sleep(900 + Math.floor(Math.random() * 900));
-        marcarEnviado(await enviarImagenMeta(tel, f.url, f.caption || ""));
+        marcarEnviado(await enviarImagenMeta(tel, f.url, f.caption || ""), f.caption || "");
       } catch (e) { console.log("⚠ no pude enviar foto:", e.message); }
     }
     for (const v of videosEnviar) {
       try {
         await sleep(900 + Math.floor(Math.random() * 900));
-        marcarEnviado(await enviarVideoMeta(tel, v.url, v.caption || ""));
+        marcarEnviado(await enviarVideoMeta(tel, v.url, v.caption || ""), v.caption || "");
       } catch (e) { console.log("⚠ no pude enviar video:", e.message); }
     }
     diag("respondido", { jid: tel, resumen: String(respuesta).slice(0, 80) });
@@ -294,9 +298,15 @@ async function procesarEntrante(msg, value) {
 
   const contacto = { nombre, tel };
 
+  // ¿Está RESPONDIENDO a un mensaje nuestro? La Cloud API manda el id del citado en
+  // `context.id`. Es la forma natural de elegir entre varias fotos ("Este me gusta"),
+  // y hasta el 7 ago 2026 la ignorábamos: Max tenía que adivinar cuál era y adivinó
+  // mal (le cobró el eco cuero liso a quien había elegido el capitoneado ocre).
+  const cita = marcaDeCita(msg.context?.id);
+
   // ── Según el tipo de mensaje ──
   if (msg.type === "text") {
-    let texto = msg.text?.body || "";
+    let texto = cita + (msg.text?.body || "");
     if (anuncio) texto = anuncio.ctx + (texto || "Hola, vengo del anuncio y quiero más información.");
     diag("recibido", { jid: tel, anuncio: anuncio ? (anuncio.fuente || anuncio.titulo || "sí") : null, tieneTexto: !!texto, tieneFoto: false, tel });
     console.log(`📩 ${tel}: ${texto}`);
@@ -306,7 +316,7 @@ async function procesarEntrante(msg, value) {
 
   if (msg.type === "image") {
     const dataUri = msg.image?.id ? await mediaComoDataUri(msg.image.id) : null;
-    let texto = msg.image?.caption || "";
+    let texto = cita + (msg.image?.caption || "");
     if (anuncio) texto = anuncio.ctx + texto;
     diag("recibido", { jid: tel, anuncio: !!anuncio, tieneTexto: !!texto, tieneFoto: true, tel });
     console.log(`📩 ${tel}: [foto]${texto ? " " + texto : ""}`);
