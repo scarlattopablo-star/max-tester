@@ -2,7 +2,56 @@
 
 Bot de WhatsApp para La Casa del Cubreasiento. Asistente **Max** (antes Vale). Carpeta: `agente_ia/`.
 
-## 🚫🚫 SESIÓN 31 jul — MAX NO INVENTA (LO MÁS NUEVO, RETOMAR ACÁ)
+> ⚠️ **CÓMO LEER ESTE ARCHIVO.** Abajo hay secciones HISTÓRICAS que se contradicen entre sí
+> (hubo una migración a Meta, una vuelta a Baileys y otra vez a Meta). **No decidas nada mirando
+> una sección suelta.** El 14 ago 2026 una de ellas ("el canal es BAILEYS de nuevo", del 10 jul,
+> revertida el 22 jul) casi provocó que se borrara el canal que estaba corriendo.
+> **La verdad se chequea contra producción:** `GET /api/estado` → `build.commit`, y
+> `GET /webhook` → **403** significa que el webhook de Meta está montado (404 sería que no).
+
+## 📡 CANAL (14 ago 2026) — ESTO ES LO VIGENTE
+
+**Max atiende ÚNICAMENTE por la Cloud API de Meta vía 360dialog** (`src/whatsapp_meta.js`,
+webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
+
+**Baileys se ELIMINÓ** (commit `c0a9448`, −697 líneas): se fueron `src/whatsapp.js`,
+`src/auth_db.js`, `src/qr_estado.js`, `reset_sesion.mjs`, los endpoints `/qr`, `/qr.png`,
+`/api/qr` y `/api/wa-reset`, y las dependencias `baileys`/`qrcode`/`qrcode-terminal`.
+Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
+QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
+
+## 💸 SESIÓN 14 ago — LAS TRANSFERENCIAS VOLVÍAN A AVISAR (LO MÁS NUEVO)
+
+Dos bugs de la migración a Meta del 22 jul, los dos por lo mismo: **la lógica estaba duplicada
+en los dos transportes y se copió incompleta.**
+
+1. **El aviso mudo** (`be4148d`): `whatsapp_meta.js` avisaba derivación, pedido y turno pero
+   **no `confirmar_transferencia`**, y no tenía la red de seguridad `dijoQueTransfirio`.
+   3 semanas sin avisos, 32 gestiones. Era invisible porque el registro lo hace `cerebro.js`
+   y las filas seguían apareciendo en `/admin`.
+2. **El comprobante perdido** (`af00e9e`, peor): el tipo de mensaje `document` **no existía**
+   en `whatsapp_meta.js` → el PDF del banco se ignoraba en silencio. Max ni contestaba.
+
+**Fixes:** los avisos viven UNA sola vez en `src/avisos_equipo.js`; `TIPOS_QUE_ATIENDE` está
+atado al comportamiento (un tipo declarado que llegue al fallback se loguea como bug);
+y hay 3 disparadores del aviso, 2 por código: la herramienta, el texto del cliente, y
+**que haya llegado un PDF** (`04938b7` — el caso más común es el PDF sin texto).
+
+**Auditoría:** `GET /api/comprobantes-perdidos?desde=&hasta=` (`874f58e`) cruza las
+conversaciones contra las transferencias registradas. Si devuelve algo, hay plata sin seguir.
+⚠️ Los PDF perdidos **no dejaron rastro**: el endpoint señala DÓNDE mirar en el celular, no
+reconstruye lo perdido.
+
+**Aviso de envío** (`0ce5dcc`): al cerrar una venta con envío el CÓDIGO agrega
+*"El pedido se despacha dentro de los 2 o 3 días"* (`AVISO_ENVIO` en `config.js`). Es plazo de
+**despacho, no de entrega**. Se dispara por el campo `entrega` de `tomar_pedido`, nunca por la
+charla. De paso se corrigió un bug viejo: el filtro que saca la paráfrasis del modelo trabajaba
+por párrafo y borraba el mensaje ENTERO (afectaba también al aviso de colocación); ahora va por
+oración (`_sacarOraciones`).
+
+`npm test` corre los tests (26 verdes).
+
+## 🚫🚫 SESIÓN 31 jul — MAX NO INVENTA
 
 **Pedido de Pablo:** *"Max no puede inventar. Hoy mandó un mensaje diciendo que le podían hacer la
 alfombra a medida, y eso no existe. Y en el caso de no poder resolver, que lo derive a un trabajador."*
