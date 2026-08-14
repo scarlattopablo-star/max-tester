@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_AGOTADO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, AVISO_AGOTADO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -146,6 +146,42 @@ const _incluye = (m, d) => {
 const _mapProd = (item) => ({ id: item.id, nombre: item.n, precio: item.p, precio_lista: item.l, moneda: item.usd ? "USD" : "UYU", img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
 // Formatea un precio con su símbolo de moneda. USD => "US$ 60"; UYU => "$ 8.010".
 const _fmtPrecio = (precio, moneda) => `${moneda === "USD" ? "US$ " : "$ "}${Number(precio).toLocaleString("es-UY")}`;
+
+// Saca del texto del modelo las ORACIONES que pisan un aviso oficial (el de
+// colocación o el del plazo de envío), y deja el resto.
+//
+// ⚠️ Va por ORACIÓN, no por párrafo. Para cuando corre esto, la respuesta ya viene
+// colapsada en un solo párrafo, así que filtrar "el párrafo que habla de X" borraba
+// el mensaje ENTERO: el cliente recibía solo el texto oficial, sin el "¡Listo, te
+// anoté el pedido!". Se ve feo y parece un bot.
+function _sacarOraciones(texto, re) {
+  return String(texto || "")
+    .split(/\n\s*\n/)
+    .map((parrafo) =>
+      parrafo
+        .split(/(?<=[.!?…])\s+/)          // corta por oración, conservando el signo
+        .filter((oracion) => !re.test(oracion))
+        .join(" ")
+        .trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+}
+
+// ¿La venta que se está cerrando va POR ENVÍO? (pedido de Pablo, 14 ago 2026)
+// A propósito mira SOLO lo que el modelo declaró al llamar la herramienta (entrega
+// y notas), NO la charla entera: Max dice "hacemos envíos a todo el país" en
+// cualquier consulta, así que buscarlo en la charla le mandaría el plazo de la
+// encomienda a gente que pasa a retirar por el local. Ante la duda NO se manda:
+// un aviso de menos molesta menos que un plazo que no corresponde.
+export function esVentaConEnvio(...partes) {
+  const declarado = _normTxt(partes.filter(Boolean).join(" "));
+  if (!declarado) return false;
+  // "Retira en el local" gana: si el cliente pasa a buscarlo no hay plazo que avisar,
+  // aunque en algún momento de la charla se haya mencionado el envío.
+  if (/\bretir|pasa (por|a)|lo busca|en el local\b/.test(declarado)) return false;
+  return /envi[oa]|\bdac\b|agencia|encomienda|despach/.test(declarado);
+}
 
 // ¿La venta que se está cerrando es de un cubreasiento COLOCABLE?
 // Colocables: capitoneado, tela y cuero Sport. El ECO CUERO es solo venta (no se
@@ -1135,6 +1171,7 @@ const TOOLS = [
           nombre: { type: "string" },
           telefono: { type: "string" },
           medioPago: { type: "string", description: "Medio de pago que prefiere el cliente" },
+          entrega: { type: "string", enum: ["envio", "retiro"], description: "SIEMPRE que lo sepas: 'envio' si se lo mandamos por agencia (DAC), 'retiro' si pasa a buscarlo por el local. Si es envío, el sistema le avisa solo cuánto demora la encomienda." },
           notas: { type: "string" },
         },
         required: ["producto"],
@@ -1454,19 +1491,26 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
     if (nombre === "solicitar_turno") return await solicitarTurno(input);
     if (nombre === "tomar_pedido") {
       const r = registrarPedido(input);
+      // Venta CON ENVÍO => el sistema agrega el plazo de la encomienda TAL CUAL
+      // (ver AVISO_ENVIO en config.js). Se acumula con el de colocación si van los dos.
+      const conEnvio = esVentaConEnvio(input.entrega, input.notas);
+      const extra = conEnvio
+        ? { avisoEnvio: AVISO_ENVIO, instruccion: "El sistema ya le avisa al cliente cuánto demora el ENVÍO. NO inventes ni repitas plazos de entrega vos." }
+        : {};
       // Cierre de venta de un cubreasiento colocable => el sistema agrega el aviso
       // de colocación TAL CUAL (ver AVISO_COLOCACION en config.js).
       if (esCubreasientoColocable(input.producto, input.notas, ctx.textoCharla)) {
-        return { ...r, avisoColocacion: AVISO_COLOCACION, instruccion: "El sistema ya le manda al cliente el aviso de COLOCACIÓN (que va aparte, que la coordina el equipo y que no se acerque al local hasta tener fecha y hora confirmadas). NO lo repitas ni lo resumas vos: como mucho una frase corta aparte." };
+        return { ...r, ...extra, avisoColocacion: AVISO_COLOCACION, instruccion: `El sistema ya le manda al cliente el aviso de COLOCACIÓN (que va aparte, que la coordina el equipo y que no se acerque al local hasta tener fecha y hora confirmadas). NO lo repitas ni lo resumas vos: como mucho una frase corta aparte.${conEnvio ? " También le manda solo el plazo del ENVÍO: no inventes plazos." : ""}` };
       }
-      return r;
+      return { ...r, ...extra };
     }
     if (nombre === "confirmar_transferencia") {
       const r = await registrarTransferencia({ ...input, chatId: ctx.chatId, nombre: input.nombre || ctx.contacto?.nombre, telefono: input.telefono || ctx.contacto?.tel });
+      const extra = esVentaConEnvio(input.detalle) ? { avisoEnvio: AVISO_ENVIO } : {};
       if (esCubreasientoColocable(input.detalle, ctx.textoCharla)) {
-        return { ...r, avisoColocacion: AVISO_COLOCACION, instruccion: "El sistema ya le manda al cliente el aviso de COLOCACIÓN. NO lo repitas ni lo resumas vos." };
+        return { ...r, ...extra, avisoColocacion: AVISO_COLOCACION, instruccion: "El sistema ya le manda al cliente el aviso de COLOCACIÓN. NO lo repitas ni lo resumas vos." };
       }
-      return r;
+      return { ...r, ...extra };
     }
     if (nombre === "derivar_a_humano") {
       // ⛔ NO se deriva a ciegas por un producto. Max venía mandando al asesor sin
@@ -1867,7 +1911,7 @@ export function limpiarJerga(texto) {
 
 // Arma la respuesta final: texto + fotos numeradas sin duplicados (compartido por ambos caminos).
 // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption.
-function armarRespuesta(texto, acciones, ctx = {}) {
+export function armarRespuesta(texto, acciones, ctx = {}) {
   const CON_FOTOS = new Set(["enviar_foto", "mostrar_capitoneado", "mostrar_ecocuero", "mostrar_cuero_sport"]);
   let fotosCrudas = acciones
     .filter((a) => CON_FOTOS.has(a.herramienta) && a.resultado?.ok)
@@ -1902,6 +1946,9 @@ function armarRespuesta(texto, acciones, ctx = {}) {
   // colocable, para que salga siempre igual. Una sola vez aunque se dispare en
   // tomar_pedido y confirmar_transferencia en el mismo turno.
   const avisoColocacion = acciones.some((a) => a.resultado?.avisoColocacion) ? AVISO_COLOCACION : null;
+  // Plazo del ENVÍO: mismo criterio que el de colocación (lo pone el código, una sola
+  // vez aunque se dispare en tomar_pedido y confirmar_transferencia en el mismo turno).
+  const avisoEnvio = acciones.some((a) => a.resultado?.avisoEnvio) ? AVISO_ENVIO : null;
   let limpio = limpiarJerga(corregirSaludo((texto || "").trim()));
   // ANTI-INVENTO: si Max prometió algo que el negocio NO hace (típico: "te hacemos
   // la alfombra a medida"), se le borra esa frase, se le dice al cliente que lo
@@ -1960,13 +2007,11 @@ function armarRespuesta(texto, acciones, ctx = {}) {
   // PARAFRASEA (le pedimos que no lo escriba, pero igual lo hace) y el cliente
   // recibiría el mismo aviso dos veces. Sacamos los párrafos suyos que hablen de
   // colocación: lo que haga falta decir ya va en el texto oficial de abajo.
-  if (avisoColocacion) {
-    limpio = limpio
-      .split(/\n\s*\n/)
-      .filter((p) => !/colocaci[oó]n|colocarlo|colocar el|coloc[aá]rtelo/i.test(p))
-      .join("\n\n")
-      .trim();
-  }
+  if (avisoColocacion) limpio = _sacarOraciones(limpio, /colocaci[oó]n|colocarlo|colocar el|coloc[aá]rtelo/i);
+  // Ídem con el plazo del envío: si el modelo ya escribió su propio "llega en X días",
+  // esa frase se va. El plazo bueno es el del código; dos plazos distintos en el mismo
+  // mensaje es justo lo que no queremos.
+  if (avisoEnvio) limpio = _sacarOraciones(limpio, /\b\d+\s*(a|y|-|hasta)\s*\d+\s*d[ií]as?\b|demora|tarda|plazo de entrega|llega en|llegar[ií]a/i);
   // PRODUCTO AGOTADO: el texto lo pone el CÓDIGO (AVISO_AGOTADO de config.js), igual
   // que el de colocación, para que SIEMPRE salga igual — es lo que pidió el dueño.
   // Y como el modelo igual lo parafrasea, le sacamos sus propios párrafos que hablen
@@ -2002,7 +2047,7 @@ function armarRespuesta(texto, acciones, ctx = {}) {
       .join(" ")
       .trim();
   }
-  const textoFinal = [limpio, ...oficiales, avisoColocacion, avisoAgotado].filter(Boolean).join("\n\n")
+  const textoFinal = [limpio, ...oficiales, avisoColocacion, avisoEnvio, avisoAgotado].filter(Boolean).join("\n\n")
     || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
   // Acá se resuelve la derivación que quedó pendiente, con el mensaje final a la
   // vista: si Max terminó PREGUNTÁNDOLE al cliente si quiere el asesor, no se deriva
