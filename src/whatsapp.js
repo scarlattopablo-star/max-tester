@@ -9,16 +9,15 @@ import { dirname, join } from "path";
 import { procesarMensaje } from "./handler.js";
 import { NEGOCIO } from "./config.js";
 import { sleep, delayEscritura } from "./humano.js";
-import { registrarSock, desregistrarSock, enviarTexto, linkWa } from "./notificador.js";
+import { registrarSock, desregistrarSock } from "./notificador.js";
 import { agregar, cargarConversaciones } from "./memoria.js";
 import { registrarMensajeMax } from "./metricas.js";
-import { linkTurno } from "./confirmacion_turno.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import { cargarEstado, esHumano, marcarHumano, liberar } from "./previas.js";
-import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder, documentoDelMensaje, dijoQueTransfirio } from "./ws_mensaje.js";
+import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder, documentoDelMensaje } from "./ws_mensaje.js";
 import { diag } from "./diag.js";
-import { registrarTransferencia } from "./transferencias.js";
+import { avisarAcciones } from "./avisos_equipo.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AUTH_DIR = join(__dirname, "..", "auth_baileys");
@@ -120,8 +119,6 @@ async function iniciar() {
   // del asesor y Max retoma solo si el cliente vuelve a escribir (ver previas.js).
   const enviadosPorMax = new Set(); // IDs de mensajes que mandó Max (para distinguirlos del humano)
   const idsVistos = new Set(); // IDs de mensajes ya procesados (anti-duplicados al reconectar)
-  const pedidosAvisados = new Set(); // ids de pedido ya avisados al equipo (no duplicar)
-  const turnosAvisados = new Set(); // ids de solicitud de turno ya avisados al equipo
   const contactoCliente = new Map(); // jid -> { nombre, tel } para armar el link en los avisos
   const jidEnvioDe = new Map(); // jid entrante -> jid al que responder (mapea @lid -> número real)
   const vaciosAvisados = new Map(); // jid -> ts del último saludo por mensaje vacío/no-legible (anti-spam)
@@ -193,129 +190,11 @@ async function iniciar() {
       diag("respondido", { jid, jidEnvio, resumen: String(respuesta).slice(0, 80) });
       console.log(`📤 ${jid}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
       for (const a of acciones) console.log(`   ⚙ ${a.herramienta} → ${JSON.stringify(a.resultado)}`);
-      // Link a la conversación del cliente para que el asesor entre directo.
-      // Mejor teléfono disponible: el capturado del mensaje (contacto), o el que pasó la herramienta.
-      const linkBase = (telExtra) =>
-        linkWa(contacto.tel || telExtra)
-          ? `👉 ${linkWa(contacto.tel || telExtra)}`
-          : "Buscá la conversación del cliente en el WhatsApp del negocio.";
-      const linkConversacion = linkBase();
-      const lineaCliente = contacto.nombre ? `👤 ${contacto.nombre}` : "";
-
-      // DERIVACIÓN: aviso DIFERENCIADO según el motivo, con link a la conversación.
-      for (const a of acciones) {
-        if (a.herramienta !== "derivar_a_humano") continue;
-        try {
-          const d = a.resultado?.derivacion || a.input || {}; // motivo, resumen, nombre, telefono
-          const linkConversacion = linkBase(d.telefono); // si la herramienta trajo teléfono, lo usamos
-          let lineas;
-          if (d.motivo === "pide_humano") {
-            lineas = [
-              "🙋 UN CLIENTE PIDE HABLAR CON UN ASESOR",
-              d.resumen ? `📝 ${d.resumen}` : "",
-              lineaCliente,
-              `💬 Entrá a la conversación: ${linkConversacion}`,
-            ];
-          } else {
-            lineas = [
-              "❓ MAX NO PUDO RESOLVER — necesita un asesor",
-              `Motivo: ${d.motivo || "otro"}${d.resumen ? ` · ${d.resumen}` : ""}`,
-              lineaCliente,
-              `💬 Entrá a la conversación: ${linkConversacion}`,
-            ];
-          }
-          await enviarTexto(lineas.filter(Boolean).join("\n"));
-        } catch (e) {
-          console.log(`⚠ No pude avisar la derivación al negocio: ${e.message}`);
-        }
-      }
-      // VENTA: cuando Max toma un pedido (cliente que decidió comprar / dijo que
-      // pagó por transferencia), avisamos al equipo con link a la conversación.
-      // (El pago por Mercado Pago se avisa aparte, desde el webhook, al acreditarse.)
-      for (const a of acciones) {
-        if (a.herramienta !== "tomar_pedido") continue;
-        const p = a.resultado?.pedido;
-        if (!p || pedidosAvisados.has(p.id)) continue;
-        pedidosAvisados.add(p.id);
-        try {
-          const lineas = [
-            "🛒 NUEVA VENTA — Max cerró un pedido",
-            `Producto: ${p.producto || "?"}${p.modeloVehiculo ? ` · ${p.modeloVehiculo}` : ""}`,
-            p.medioPago ? `💳 Pago: ${p.medioPago}` : "",
-            lineaCliente || ([p.nombre, p.telefono].filter(Boolean).length ? `👤 ${[p.nombre, p.telefono].filter(Boolean).join(" · ")}` : ""),
-            p.notas ? `📝 ${p.notas}` : "",
-            `💬 Verificá el pago y coordiná la entrega: ${linkConversacion}`,
-          ].filter(Boolean);
-          await enviarTexto(lineas.join("\n"));
-        } catch (e) {
-          console.log(`⚠ No pude avisar el pedido al negocio: ${e.message}`);
-        }
-      }
-      // TRANSFERENCIA: el cliente avisó que transfirió o mandó el comprobante.
-      // Aviso SIEMPRE (aunque el pedido ya se haya avisado antes): es el momento
-      // en que el equipo tiene que ir a verificar la plata en la cuenta.
-      const avisarTransferencia = async (t) => {
-        const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
-        const datosCliente = [t.nombre, t.telefono].filter(Boolean).join(" · ");
-        const lineas = [
-          t.comprobante
-            ? "🏦 COMPROBANTE DE TRANSFERENCIA RECIBIDO — verificá que la plata esté en la cuenta"
-            : "🏦 UN CLIENTE AVISA QUE TRANSFIRIÓ — verificá que la plata esté en la cuenta",
-          t.monto ? `💵 Monto: ${fmt(t.monto)}` : "",
-          t.detalle ? `📝 ${t.detalle}` : "",
-          datosCliente ? `👤 ${datosCliente}` : lineaCliente,
-          "⚠️ Max no ve la cuenta bancaria: el pago hay que confirmarlo a mano y avisarle al cliente.",
-          `💬 Entrá a la conversación: ${linkBase(t.telefono)}`,
-        ].filter(Boolean);
-        await enviarTexto(lineas.join("\n"));
-      };
-      let transferenciaAvisada = false;
-      for (const a of acciones) {
-        if (a.herramienta !== "confirmar_transferencia") continue;
-        try {
-          await avisarTransferencia(a.resultado?.transferencia || a.input || {});
-          transferenciaAvisada = true;
-        } catch (e) {
-          console.log(`⚠ No pude avisar la transferencia al negocio: ${e.message}`);
-        }
-      }
-      // RED DE SEGURIDAD determinística: si el cliente dijo claramente que YA
-      // transfirió pero el modelo NO llamó la herramienta (le pasaba), registramos
-      // y avisamos igual por código. Mejor un aviso de más que una venta perdida.
-      if (!transferenciaAvisada && dijoQueTransfirio(texto)) {
-        try {
-          const t = { chatId: jid, nombre: contacto.nombre, telefono: contacto.tel, detalle: texto.slice(0, 140), comprobante: /comprobante/i.test(texto) };
-          await registrarTransferencia(t);
-          await avisarTransferencia(t);
-          console.log(`🏦 ${jid}: aviso de transferencia por red de seguridad (el modelo no llamó la herramienta)`);
-        } catch (e) {
-          console.log(`⚠ No pude avisar la transferencia (red de seguridad): ${e.message}`);
-        }
-      }
-      // TURNO: el cliente quiere ir al local. Max NO confirma: avisa al equipo
-      // con los datos para que el EQUIPO confirme el día y la hora.
-      for (const a of acciones) {
-        if (a.herramienta !== "solicitar_turno") continue;
-        const tr = a.resultado?.turno;
-        if (!tr || turnosAvisados.has(tr.id)) continue;
-        turnosAvisados.add(tr.id);
-        try {
-          const cuando = [tr.fecha, tr.hora].filter(Boolean).join(" ");
-          const lineas = [
-            "🗓️ SOLICITUD DE TURNO — confirmá el día y la hora con el cliente",
-            `👤 ${[tr.nombre, tr.telefono].filter(Boolean).join(" · ") || "(sin datos)"}`,
-            tr.servicio ? `🔧 ${tr.servicio}` : "",
-            tr.vehiculo ? `🚗 ${tr.vehiculo}` : "",
-            cuando ? `📅 Prefiere: ${cuando}` : "📅 Sin preferencia de horario",
-            `💬 Entrá a la conversación: ${linkConversacion}`,
-            `✅ Cuando lo coordines con el cliente, confirmalo acá: ${linkTurno(tr.id, "confirmado")}`,
-            `❌ Cancelar el turno: ${linkTurno(tr.id, "cancelado")}`,
-          ].filter(Boolean);
-          await enviarTexto(lineas.join("\n"));
-        } catch (e) {
-          console.log(`⚠ No pude avisar la solicitud de turno: ${e.message}`);
-        }
-      }
+      // AVISOS AL EQUIPO (derivación / venta / transferencia / turno): la lógica
+      // vive en avisos_equipo.js, COMPARTIDA con el transporte de Meta. Estaba
+      // duplicada y las dos copias se desincronizaron (las transferencias dejaron
+      // de avisarse por la Cloud API durante 3 semanas). No volver a copiarla acá.
+      await avisarAcciones({ acciones, contacto, texto, chatId: jid });
     } catch (e) {
       diag("error", { jid, jidEnvio, detalle: e.message });
       console.log(`⚠ Error respondiendo a ${jid}: ${e.message}`);

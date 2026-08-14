@@ -13,9 +13,9 @@ import { procesarMensaje } from "./handler.js";
 import { sleep, delayEscritura } from "./humano.js";
 import { agregar, cargarConversaciones } from "./memoria.js";
 import { registrarMensajeMax } from "./metricas.js";
-import { linkTurno } from "./confirmacion_turno.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
-import { registrarTransporte, enviarTexto, linkWa } from "./notificador.js";
+import { registrarTransporte } from "./notificador.js";
+import { avisarAcciones, pideAtencionDelEquipo } from "./avisos_equipo.js";
 import { registrarCliente } from "./clientes.js";
 import { recordarEnviado, marcaDeCita } from "./citas.js";
 import { diag } from "./diag.js";
@@ -29,8 +29,6 @@ const buffers = new Map(); // tel -> { textos:[], imagenes:[], timer, contacto, 
 const procesando = new Set();
 const idsVistos = new Set(); // anti-duplicados (Meta puede reentregar el webhook)
 const enviadosPorMax = new Set(); // ids de mensajes que mandó Max (para no confundir el eco en coexistence)
-const pedidosAvisados = new Set();
-const turnosAvisados = new Set();
 let ultimaConfirmacionAvisos = 0; // para confirmar el canal de avisos a lo sumo cada 12 h
 
 // Número propio (el 091 dentro de la WABA): en coexistence, los mensajes que el
@@ -114,9 +112,7 @@ async function procesar(tel) {
     // SIN LEER a propósito: así el equipo lo encuentra resaltado en la bandeja
     // (antes Max lo marcaba leído y el aviso era imposible de ubicar). El costo es
     // que el "escribiendo…" arranca después de pensar, durante las pausas de tipeo.
-    const pideEquipo = (acciones || []).some((a) =>
-      ["derivar_a_humano", "tomar_pedido", "solicitar_turno"].includes(a.herramienta));
-    if (!pideEquipo) await marcarLeidoEscribiendo(msgId);
+    if (!pideAtencionDelEquipo(acciones, texto)) await marcarLeidoEscribiendo(msgId);
 
     // Envío HUMANO: la respuesta se parte en mensajitos (bloques separados por
     // línea en blanco) y cada uno sale con su pausa de tipeo, como chatea una
@@ -144,7 +140,10 @@ async function procesar(tel) {
     diag("respondido", { jid: tel, resumen: String(respuesta).slice(0, 80) });
     console.log(`📤 ${tel}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
 
-    await avisarAcciones(acciones, contacto);
+    await avisarAcciones({
+      acciones, contacto, texto, chatId: tel,
+      fallbackConversacion: "Buscá la conversación en la bandeja de Meta Business Suite.",
+    });
   } catch (e) {
     diag("error", { jid: tel, detalle: e.message });
     console.log(`⚠ Error respondiendo a ${tel}: ${e.message}`);
@@ -156,57 +155,9 @@ async function procesar(tel) {
   }
 }
 
-// Avisos al equipo (derivación / venta / turno). Mismo contenido que en Baileys;
-// se mandan por el transporte registrado (Meta) a NUMERO_AVISOS. Ver nota de las
-// 24 h en META_SETUP.md: el número de avisos debe ser de un asesor (no el del bot).
-async function avisarAcciones(acciones, contacto) {
-  const lineaCliente = contacto.nombre ? `👤 ${contacto.nombre}` : "";
-  const linkConversacion = linkWa(contacto.tel) ? `👉 ${linkWa(contacto.tel)}` : "Buscá la conversación en la bandeja de Meta Business Suite.";
-
-  for (const a of acciones) {
-    try {
-      if (a.herramienta === "derivar_a_humano") {
-        const d = a.resultado?.derivacion || a.input || {};
-        const link = linkWa(d.telefono) ? `👉 ${linkWa(d.telefono)}` : linkConversacion;
-        const lineas = d.motivo === "pide_humano"
-          ? ["🙋 UN CLIENTE PIDE HABLAR CON UN ASESOR", d.resumen ? `📝 ${d.resumen}` : "", lineaCliente, `💬 Entrá a la conversación: ${link}`]
-          : ["❓ MAX NO PUDO RESOLVER — necesita un asesor", `Motivo: ${d.motivo || "otro"}${d.resumen ? ` · ${d.resumen}` : ""}`, lineaCliente, `💬 Entrá a la conversación: ${link}`];
-        await enviarTexto(lineas.filter(Boolean).join("\n"));
-      } else if (a.herramienta === "tomar_pedido") {
-        const p = a.resultado?.pedido;
-        if (!p || pedidosAvisados.has(p.id)) continue;
-        pedidosAvisados.add(p.id);
-        const lineas = [
-          "🛒 NUEVA VENTA — Max cerró un pedido",
-          `Producto: ${p.producto || "?"}${p.modeloVehiculo ? ` · ${p.modeloVehiculo}` : ""}`,
-          p.medioPago ? `💳 Pago: ${p.medioPago}` : "",
-          lineaCliente || ([p.nombre, p.telefono].filter(Boolean).length ? `👤 ${[p.nombre, p.telefono].filter(Boolean).join(" · ")}` : ""),
-          p.notas ? `📝 ${p.notas}` : "",
-          `💬 Verificá el pago y coordiná la entrega: ${linkConversacion}`,
-        ].filter(Boolean);
-        await enviarTexto(lineas.join("\n"));
-      } else if (a.herramienta === "solicitar_turno") {
-        const tr = a.resultado?.turno;
-        if (!tr || turnosAvisados.has(tr.id)) continue;
-        turnosAvisados.add(tr.id);
-        const cuando = [tr.fecha, tr.hora].filter(Boolean).join(" ");
-        const lineas = [
-          "🗓️ SOLICITUD DE TURNO — confirmá el día y la hora con el cliente",
-          `👤 ${[tr.nombre, tr.telefono].filter(Boolean).join(" · ") || "(sin datos)"}`,
-          tr.servicio ? `🔧 ${tr.servicio}` : "",
-          tr.vehiculo ? `🚗 ${tr.vehiculo}` : "",
-          cuando ? `📅 Prefiere: ${cuando}` : "📅 Sin preferencia de horario",
-          `💬 Entrá a la conversación: ${linkConversacion}`,
-          `✅ Confirmá: ${linkTurno(tr.id, "confirmado")}`,
-          `❌ Cancelar: ${linkTurno(tr.id, "cancelado")}`,
-        ].filter(Boolean);
-        await enviarTexto(lineas.join("\n"));
-      }
-    } catch (e) {
-      console.log(`⚠ no pude avisar al equipo (${a.herramienta}): ${e.message}`);
-    }
-  }
-}
+// Los avisos al equipo (derivación / venta / TRANSFERENCIA / turno) viven en
+// avisos_equipo.js, compartidos con Baileys. Antes había acá una copia propia que
+// se quedó sin el aviso de transferencias durante 3 semanas: no volver a duplicar.
 
 // ── Parseo del webhook entrante de Meta ───────────────────────────────────────
 // Extrae el contexto de un anuncio Click-to-WhatsApp (referral). Reemplaza todo el
@@ -360,7 +311,7 @@ export function montarWebhook(app) {
   cargarEstado();
   cargarConversaciones();
 
-  // Avisos al equipo (derivación/venta/turno) salen por la Cloud API.
+  // Avisos al equipo (derivación/venta/TRANSFERENCIA/turno) salen por la Cloud API.
   // ⚠️ VENTANA DE 24 h: el texto libre SOLO se entrega si el número de avisos le
   // escribió a Max en las últimas 24 h; si no, Meta lo descarta EN SILENCIO (la API
   // acepta el envío y después llega un status "failed" code 131047 al webhook).
