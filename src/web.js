@@ -332,6 +332,66 @@ app.get("/api/conversacion", (req, res) => {
   res.json({ chatId: id, mensajes });
 });
 
+// AUDITORÍA: charlas donde el cliente MUY probablemente pagó pero no quedó
+// registrada ninguna transferencia. Nació para recuperar los comprobantes que se
+// perdieron entre el 22 jul y el 14 ago 2026 (la Cloud API descartaba en silencio
+// los mensajes de tipo "document", que es como llega el PDF del banco), pero sirve
+// igual como control periódico: si esto devuelve algo, hay plata sin seguir.
+// Solo lectura. GET /api/comprobantes-perdidos?desde=2026-07-22&hasta=2026-08-15
+app.get("/api/comprobantes-perdidos", async (req, res) => {
+  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
+  const desde = String(req.query.desde || "").trim() || "2026-07-22";
+  const hasta = String(req.query.hasta || "").trim() || new Date().toISOString().slice(0, 10);
+  try {
+    const [convs, transf, nombreDe] = await Promise.all([
+      conversacionesEntre(`${desde}T00:00:00Z`, `${hasta}T23:59:59Z`),
+      listarTransferencias({ dias: 120, limite: 100 }),
+      nombresClientes(),
+    ]);
+    const conTransf = new Set(transf.map((t) => String(t.chatId)));
+    // Señal dura: Max (o un asesor) pasó los DATOS REALES de la cuenta.
+    const RE_CUENTA = /5022900|everbox/i;
+    // Señal dura: el cliente dijo que ya pagó o que manda el comprobante.
+    const RE_CLIENTE_PAGO = /comprobante|ya (?:te )?(?:transfer|hice|pas[eé]|mand[eé]|depos)|transferencia (?:hecha|realizada|enviada)|ya est[aá] (?:hecha|hecho|pago|pag[ao])/i;
+
+    const candidatos = [];
+    for (const c of convs) {
+      const chatId = String(c.chatId || "");
+      if (conTransf.has(chatId)) continue;            // esa charla SÍ quedó registrada
+      const msgs = Array.isArray(c.mensajes) ? c.mensajes : [];
+      if (!msgs.length) continue;
+      const dioCuenta = msgs.some((m) => m.role === "assistant" && RE_CUENTA.test(String(m.content || "")));
+      const clienteDijoPago = msgs.some((m) => m.role === "user" && RE_CLIENTE_PAGO.test(String(m.content || "")));
+      if (!dioCuenta && !clienteDijoPago) continue;
+      const senales = [dioCuenta && "max_paso_la_cuenta", clienteDijoPago && "el_cliente_dijo_que_pago"].filter(Boolean);
+      candidatos.push({
+        chatId,
+        nombre: nombreDe.get(chatId) || "",
+        actualizado: c.actualizado,
+        senales,
+        // Las dos señales juntas = casi seguro que hay plata en el aire.
+        prioridad: senales.length === 2 ? "alta" : "media",
+        link: linkWa(chatId),
+        ultimos: msgs.slice(-8).map((m) => ({
+          de: m.role === "user" ? "cliente" : "max",
+          texto: String(m.content || "").split("⁣")[0].trim().slice(0, 300),
+        })).filter((m) => m.texto),
+      });
+    }
+    const orden = { alta: 0, media: 1 };
+    candidatos.sort((a, b) => (orden[a.prioridad] - orden[b.prioridad]) || String(b.actualizado).localeCompare(String(a.actualizado)));
+    res.json({
+      desde, hasta,
+      conversacionesRevisadas: convs.length,
+      transferenciasRegistradas: conTransf.size,
+      encontrados: candidatos.length,
+      candidatos,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
 // Devuelve el archivo (imagen/PDF) de un comprobante guardado, por id.
 app.get("/api/comprobante/:id", async (req, res) => {
   if (!qrAutorizado(req)) return res.status(401).send("no autorizado");
