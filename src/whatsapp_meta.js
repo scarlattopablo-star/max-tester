@@ -16,6 +16,7 @@ import { registrarMensajeMax } from "./metricas.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
 import { registrarTransporte } from "./notificador.js";
 import { avisarAcciones, pideAtencionDelEquipo } from "./avisos_equipo.js";
+import { esPdf, notaDocumento } from "./ws_mensaje.js";
 import { registrarCliente } from "./clientes.js";
 import { recordarEnviado, marcaDeCita } from "./citas.js";
 import { diag } from "./diag.js";
@@ -25,6 +26,11 @@ import {
 } from "./meta_api.js";
 
 const VENTANA_MS = 3500; // junta mensajes seguidos del cliente y responde UNA vez
+const PDF_MAX_BYTES = 5 * 1024 * 1024; // los comprobantes pesan pocos KB
+// Tipos de mensaje entrante que Max ATIENDE. Los que no están acá se ignoran en
+// silencio, así que agregar uno es una decisión consciente: un comprobante que
+// llegue en un tipo no contemplado se pierde entero (pasó con "document").
+export const TIPOS_QUE_ATIENDE = Object.freeze(["text", "image", "document", "audio"]);
 const buffers = new Map(); // tel -> { textos:[], imagenes:[], timer, contacto, ctxAnuncio }
 const procesando = new Set();
 const idsVistos = new Set(); // anti-duplicados (Meta puede reentregar el webhook)
@@ -275,6 +281,22 @@ async function procesarEntrante(msg, value) {
     return;
   }
 
+  // DOCUMENTO adjunto (PDF del banco, casi siempre el COMPROBANTE de una
+  // transferencia). Hasta el 14 ago 2026 este tipo NO estaba contemplado acá y
+  // caía en "otros tipos": se ignoraba EN SILENCIO. El cliente mandaba el
+  // comprobante y no pasaba nada — ni respuesta, ni registro, ni aviso al equipo.
+  if (msg.type === "document") {
+    const doc = { nombre: msg.document?.filename || "", mime: msg.document?.mime_type || "" };
+    const grande = Number(msg.document?.file_size || 0) > PDF_MAX_BYTES;
+    const dataUri = (esPdf(doc) && !grande && msg.document?.id) ? await mediaComoDataUri(msg.document.id) : null;
+    const nota = notaDocumento({ ...doc, legible: !!dataUri });
+    const texto = cita + [msg.document?.caption || "", nota].filter(Boolean).join("\n");
+    diag("recibido", { jid: tel, anuncio: !!anuncio, tieneTexto: true, tieneDocumento: true, tel });
+    console.log(`📎 ${tel}: documento${doc.nombre ? ` "${doc.nombre}"` : ""}${dataUri ? " (PDF legible para el cerebro)" : ""}`);
+    encolar(tel, { texto, imagenes: dataUri ? [dataUri] : [], contacto, msgId: msg.id });
+    return;
+  }
+
   if (msg.type === "audio") {
     // Max no procesa audios: pedimos que lo escriban (igual que en Baileys).
     try {
@@ -288,6 +310,14 @@ async function procesarEntrante(msg, value) {
       console.log(`🎤 ${tel}: audio → le pedí que lo escriba`);
     } catch (e) { console.log("⚠ no pude responder al audio:", e.message); }
     return;
+  }
+
+  // Si un tipo que DECIMOS atender llegó hasta acá, es un bug nuestro: le falta la
+  // rama de arriba y el mensaje se estaría tirando. Que se vea fuerte en el log y
+  // en /api/diag en vez de perderse (así se perdían los comprobantes en PDF).
+  if (TIPOS_QUE_ATIENDE.includes(msg.type)) {
+    diag("tipo_sin_rama", { jid: tel, formato: msg.type });
+    console.log(`🚨 BUG: "${msg.type}" figura en TIPOS_QUE_ATIENDE pero no tiene rama — mensaje de ${tel} PERDIDO`);
   }
 
   // Otros tipos (sticker, ubicación, contacto, etc.): si vino de un anuncio sin

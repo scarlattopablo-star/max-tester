@@ -15,7 +15,7 @@ import { registrarMensajeMax } from "./metricas.js";
 import { useDBAuthState } from "./auth_db.js";
 import { setQR, setConectado } from "./qr_estado.js";
 import { cargarEstado, esHumano, marcarHumano, liberar } from "./previas.js";
-import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder, documentoDelMensaje } from "./ws_mensaje.js";
+import { contenidoReal, textoDelMensaje, anuncioDelMensaje, telDeMsg, jidParaResponder, documentoDelMensaje, esPdf, notaDocumento } from "./ws_mensaje.js";
 import { diag } from "./diag.js";
 import { avisarAcciones } from "./avisos_equipo.js";
 
@@ -331,12 +331,8 @@ async function iniciar() {
       const doc = documentoDelMensaje(msg);
       let pdfAdjunto = null; // data-URI del PDF, viaja al cerebro junto con las imágenes
       if (doc) {
-        const esPdf = /pdf/i.test(doc.mime || "") || /\.pdf$/i.test(doc.nombre || "");
-        if (esPdf && (!doc.bytes || doc.bytes <= PDF_MAX_BYTES)) pdfAdjunto = await pdfComoDataUri(msg);
-        const queEs = `un archivo adjunto${doc.nombre ? ` ("${doc.nombre}")` : ""}${doc.mime ? ` de tipo ${doc.mime}` : ""}`;
-        const nota = pdfAdjunto
-          ? `[El cliente te mandó ${queEs} y LO TENÉS ADJUNTO: leelo. Si es un comprobante de transferencia/giro/depósito, extraé el IMPORTE exacto (y banco y fecha si se ven) y registralo con confirmar_transferencia (comprobante=true, monto=el importe leído). Decile que el equipo verifica el pago y le confirma a la brevedad. ⛔ NO digas que el pago ya llegó o se acreditó.]`
-          : `[El cliente te mandó ${queEs}. No podés abrirlo. Si están en medio de un pago o ya le pasaste los datos de la cuenta, es casi seguro el COMPROBANTE de la transferencia: registralo con confirmar_transferencia (comprobante=true) y decile que el equipo verifica el pago y le confirma.]`;
+        if (esPdf(doc) && (!doc.bytes || doc.bytes <= PDF_MAX_BYTES)) pdfAdjunto = await pdfComoDataUri(msg);
+        const nota = notaDocumento({ ...doc, legible: !!pdfAdjunto });
         texto = texto ? `${texto}\n${nota}` : nota;
         console.log(`📎 ${jid}: documento adjunto${doc.nombre ? ` "${doc.nombre}"` : ""}${pdfAdjunto ? " (PDF legible para el cerebro)" : ""}`);
       }

@@ -63,6 +63,23 @@ export function documentoDelMensaje(msg) {
   return { nombre: d.fileName || "", mime: d.mimetype || "", bytes: Number(d.fileLength) || 0 };
 }
 
+/** ¿El adjunto es un PDF? (el comprobante del banco casi siempre lo es) */
+export function esPdf({ nombre = "", mime = "" } = {}) {
+  return /pdf/i.test(mime) || /\.pdf$/i.test(nombre);
+}
+
+/** Nota que se le mete al cerebro cuando el cliente manda un ARCHIVO ADJUNTO.
+ *  Casi siempre es el COMPROBANTE de una transferencia: sin esta nota el mensaje
+ *  cae como "no legible", Max contesta cualquier cosa y el equipo nunca se entera.
+ *  COMPARTIDA por los dos transportes (Baileys y Cloud API): la Cloud API ni
+ *  siquiera miraba los documentos y los comprobantes en PDF se perdían enteros. */
+export function notaDocumento({ nombre = "", mime = "", legible = false } = {}) {
+  const queEs = `un archivo adjunto${nombre ? ` ("${nombre}")` : ""}${mime ? ` de tipo ${mime}` : ""}`;
+  return legible
+    ? `[El cliente te mandó ${queEs} y LO TENÉS ADJUNTO: leelo. Si es un comprobante de transferencia/giro/depósito, extraé el IMPORTE exacto (y banco y fecha si se ven) y registralo con confirmar_transferencia (comprobante=true, monto=el importe leído). Decile que el equipo verifica el pago y le confirma a la brevedad. ⛔ NO digas que el pago ya llegó o se acreditó.]`
+    : `[El cliente te mandó ${queEs}. No podés abrirlo. Si están en medio de un pago o ya le pasaste los datos de la cuenta, es casi seguro el COMPROBANTE de la transferencia: registralo con confirmar_transferencia (comprobante=true) y decile que el equipo verifica el pago y le confirma.]`;
+}
+
 // ¿El cliente dice (EN PASADO) que YA hizo la transferencia / mandó el comprobante?
 // Red de seguridad de los avisos al equipo: si el modelo no llama a la herramienta
 // confirmar_transferencia, whatsapp.js registra y avisa igual por código.
