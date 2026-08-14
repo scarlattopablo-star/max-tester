@@ -1,9 +1,9 @@
-// Aviso de venta web al WhatsApp del negocio. El sock de Baileys se registra
-// desde whatsapp.js cuando la conexión abre; sin sock => 503 (la web no insiste).
+// Aviso de venta web al WhatsApp del negocio. Sale por el transporte que registra
+// whatsapp_meta.js (Cloud API); sin transporte => 503 (la web no insiste).
 import "./env.js";
 
 let sockActivo = null;
-let alEnviar = null; // callback de whatsapp.js: registra los IDs de los mensajes que manda el bot
+let alEnviar = null; // callback del transporte: registra los IDs de los mensajes que manda el bot
 // Transporte alternativo (Cloud API de Meta): una función async (texto)=>{} que
 // manda al WhatsApp del negocio. Lo registra whatsapp_meta.js cuando WA_PROVIDER=meta.
 // Así enviarTexto/enviarAviso funcionan IGUAL con Baileys o con la API oficial.

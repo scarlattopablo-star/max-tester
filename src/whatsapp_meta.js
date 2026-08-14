@@ -3,11 +3,8 @@
 // (POST /webhook) y nosotros respondemos por HTTP (meta_api.js). El CEREBRO de Max
 // (handler.js → cerebro.js) es el MISMO: este archivo es solo la cañería nueva.
 //
-// Se monta sobre el server web (web.js) con montarWebhook(app), solo cuando
-// WA_PROVIDER=meta. Mientras tanto, Baileys (whatsapp.js) sigue funcionando igual.
-//
-// Ventajas vs Baileys: no se cae, no hay QR, los clics de anuncios llegan nativos
-// (con su `referral`, sin el parche del @lid) y se puede hacer broadcast legal.
+// Se monta sobre el server web (web.js) con montarWebhook(app), cuando
+// WA_PROVIDER=meta. Es el ÚNICO canal: Baileys se eliminó el 14 ago 2026.
 import "./env.js";
 import { procesarMensaje } from "./handler.js";
 import { sleep, delayEscritura } from "./humano.js";

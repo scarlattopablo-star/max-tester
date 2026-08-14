@@ -38,7 +38,7 @@ async function asegurarTabla() {
 
 /** Registra una gestión de transferencia (aviso del cliente o comprobante recibido).
  *  La llama la herramienta `confirmar_transferencia` del cerebro. Devuelve el
- *  registro para que whatsapp.js arme el aviso al equipo. */
+ *  registro para que avisos_equipo.js arme el aviso al equipo. */
 export async function registrarTransferencia({ chatId, monto, nombre, telefono, detalle, comprobante } = {}) {
   const t = {
     chatId: chatId || "",

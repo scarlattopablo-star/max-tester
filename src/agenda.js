@@ -1,6 +1,6 @@
 // Agenda de turnos del local (Paysandú 944), guardada en Neon (sobrevive a los
 // deploys/reinicios de Render). Max NO confirma turnos por su cuenta: registra
-// la SOLICITUD (estado "pendiente") y el equipo la confirma. Ver whatsapp.js
+// la SOLICITUD (estado "pendiente") y el equipo la confirma. Ver avisos_equipo.js
 // (aviso al equipo) y cerebro.js (herramienta solicitar_turno).
 import "./env.js";
 import { neon } from "@neondatabase/serverless";
@@ -58,7 +58,7 @@ export async function solicitarTurno({ nombre, telefono, servicio, vehiculo, fec
               ${turno.vehiculo}, ${turno.fecha}, ${turno.hora}, ${turno.estado})`;
   } catch (e) {
     console.log("⚠ no pude guardar la solicitud de turno:", e.message);
-    // Igual devolvemos ok: el aviso al equipo (whatsapp.js) sigue saliendo.
+    // Igual devolvemos ok: el aviso al equipo (avisos_equipo.js) sigue saliendo.
   }
   return { ok: true, turno };
 }

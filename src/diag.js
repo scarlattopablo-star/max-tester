@@ -1,6 +1,6 @@
 // Diagnóstico en vivo del canal de WhatsApp: un registro circular en memoria con los
 // últimos eventos de mensajes entrantes (¿llegó?, ¿era de un anuncio?, ¿se respondió?,
-// ¿hubo error?). Lo llena whatsapp.js y lo sirve web.js en /api/diag para entender,
+// ¿hubo error?). Lo llena whatsapp_meta.js y lo sirve web.js en /api/diag para entender,
 // sin pelear con los logs de Render, por qué Max no contesta algo. Es solo memoria:
 // se vacía al reiniciar (suficiente para diagnosticar acá y ahora).
 const MAX = 60;

@@ -20,8 +20,6 @@ import { enviarAviso, enviarTexto, enviarTextoA, formatearCupon, hayWhatsApp, li
 import { urlAutorizacion, conectarConCode, hayUsuarioML, infoUsuarioML } from "./ml_user.js";
 import { descontarVenta } from "./ml_stock.js";
 import { ordenesML } from "./ml_ordenes.js";
-import { estadoQR } from "./qr_estado.js";
-import { resetearSesion } from "./auth_db.js";
 import { resumenMensajes } from "./metricas.js";
 import { resumenTransferencias, listarTransferencias, importarTransferencias, borrarTransferencias, marcarVerificada } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
@@ -29,7 +27,6 @@ import { obtenerMedia } from "./comprobantes.js";
 import { esHumano, marcarHumano, liberar, liberarTodo } from "./previas.js";
 import { enviarTextoMeta, metaConfigurado } from "./meta_api.js";
 import { listarClientes } from "./clientes.js";
-import QRCode from "qrcode";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(__dirname, "..", "public");
@@ -105,17 +102,16 @@ app.post("/api/reset", (req, res) => {
 // Estado rápido del bot (catálogo, sync ML, Mercado Pago, cerebro IA) para chequear la config en vivo.
 app.get("/api/estado", async (_req, res) => {
   const ia = proveedorIA();
-  const qr = estadoQR();
   res.json({
-    // Estado de WhatsApp: lo más importante para saber por qué Max no contesta.
-    //  on        → WHATSAPP_ON=1 (el bot arranca el módulo de WhatsApp)
-    //  conectado → el socket de Baileys está vivo AHORA
-    //  hayQr     → hay un QR pendiente de escanear (sesión caída: hay que reescanear)
-    //  keepAlive → APP_URL configurada (sin esto Render Free duerme y desconecta)
+    // Estado de WhatsApp. Max atiende por la Cloud API de Meta (vía 360dialog):
+    //  on        → el webhook de Meta está montado (WA_PROVIDER=meta)
+    //  conectado → hay transporte vivo para hablarle al equipo
+    //  keepAlive → APP_URL configurada (sin esto Render Free se duerme)
+    // `hayQr` se mantiene en false por compatibilidad: era de Baileys, que ya no existe.
     whatsapp: {
-      on: process.env.WHATSAPP_ON === "1",
+      on: process.env.WA_PROVIDER === "meta",
       conectado: hayWhatsApp(),
-      hayQr: !!qr.qr,
+      hayQr: false,
       keepAlive: !!(process.env.APP_URL || "").trim(),
     },
     catalogo: infoCatalogo(), syncML: haySyncML(), ultimaSync: ultimaSync(), mlUsuario: await hayUsuarioML(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model },
@@ -805,31 +801,8 @@ async function reenvioAutomaticoVentas() {
   }
 }
 
-app.get("/api/qr", (req, res) => {
-  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
-  const e = estadoQR();
-  // No mandamos el string del QR al navegador: solo si HAY uno y el estado.
-  res.json({ conectado: e.conectado, hayQr: !!e.qr, ts: e.ts, whatsappOn: process.env.WHATSAPP_ON === "1" });
-});
-
-// Resetea la sesión de WhatsApp (Baileys): borra wa_auth en Neon y reinicia el
-// proceso para re-vincular con OTRO número (Baileys arranca sin sesión → QR nuevo).
-// Protegido con ?clave=<NOTIFY_TOKEN>. Se usa cuando el número cambió (ej: se sacó
-// de Meta y se re-registró en el celular) y la sesión vieja impide el QR.
-app.get("/api/wa-reset", async (req, res) => {
-  if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
-  try {
-    const filas = await resetearSesion();
-    res.json({ ok: true, filasBorradas: filas, msg: "Sesión borrada. Reiniciando para pedir un QR nuevo…" });
-    console.log(`🧹 wa_auth borrada (${filas} filas) por /api/wa-reset → reinicio para QR nuevo`);
-    setTimeout(() => process.exit(0), 800); // Render reinicia el servicio → Baileys sin sesión → QR nuevo
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e) });
-  }
-});
-
 // Libera TODAS las conversaciones pausadas por "asesor" (útil tras un misfire de
-// handoffs, ej: al vincular Baileys a un celular en uso). Protegido con ?clave=<NOTIFY_TOKEN>.
+// handoffs). Protegido con ?clave=<NOTIFY_TOKEN>.
 app.get("/api/reset-handoffs", async (req, res) => {
   if (!qrAutorizado(req)) return res.status(401).json({ error: "no autorizado" });
   try {
@@ -839,68 +812,6 @@ app.get("/api/reset-handoffs", async (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
-});
-
-// El QR como IMAGEN PNG generada en el servidor (no depende de nada del navegador).
-app.get("/qr.png", async (req, res) => {
-  if (!qrAutorizado(req)) return res.status(401).end();
-  const { qr } = estadoQR();
-  if (!qr) return res.status(404).end();
-  try {
-    const buf = await QRCode.toBuffer(qr, { width: 320, margin: 1, errorCorrectionLevel: "M" });
-    res.set("Content-Type", "image/png");
-    res.set("Cache-Control", "no-store");
-    res.send(buf);
-  } catch {
-    res.status(500).end();
-  }
-});
-
-app.get("/qr", (req, res) => {
-  if (!qrAutorizado(req)) return res.status(401).send("No autorizado.");
-  const clave = encodeURIComponent(String(req.query.clave || ""));
-  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
-<title>Conectar WhatsApp · Max</title>
-<style>
-  body{margin:0;font-family:system-ui,sans-serif;background:#0d0d10;color:#fff;text-align:center;padding:28px 16px}
-  h1{font-size:20px;margin:0 0 4px} p{color:#bebec6;margin:6px auto;max-width:420px;line-height:1.5;font-size:14px}
-  #box{background:#fff;display:inline-block;padding:14px;border-radius:16px;margin-top:18px;min-width:300px;min-height:300px}
-  #box img{display:block;width:300px;height:300px}
-  #estado{margin-top:18px;font-size:15px;font-weight:700}
-  .ok{color:#2ecc71} .wait{color:#f0b429}
-  ol{text-align:left;max-width:420px;margin:18px auto;color:#bebec6;font-size:14px;line-height:1.7}
-</style></head>
-<body>
-  <h1>🤖 Conectar a Max por WhatsApp</h1>
-  <p>Escaneá este código con el celular del <b>chip dedicado</b> del bot.</p>
-  <div id="box"><img id="qr" alt="QR" src="/qr.png?clave=${clave}"></div>
-  <div id="estado" class="wait">Generando código…</div>
-  <ol>
-    <li>En el celular del chip de Max: WhatsApp → <b>⚙️ Configuración</b>.</li>
-    <li><b>Dispositivos vinculados</b> → <b>Vincular un dispositivo</b>.</li>
-    <li>Apuntá la cámara a este código.</li>
-  </ol>
-  <script>
-    var clave="${clave}";
-    async function tick(){
-      try{
-        var r=await fetch("/api/qr?clave="+clave,{cache:"no-store"});
-        var d=await r.json();
-        var est=document.getElementById("estado"), box=document.getElementById("box");
-        if(d.conectado){est.className="ok";est.textContent="✅ ¡Conectado! Ya podés cerrar esta página.";box.style.display="none";return;}
-        if(!d.whatsappOn){est.className="wait";est.textContent="⏳ Activando WhatsApp… esperá unos segundos.";}
-        else if(d.hayQr){
-          // refresca la imagen (el QR se renueva solo cada ~20s)
-          document.getElementById("qr").src="/qr.png?clave="+clave+"&t="+Date.now();
-          est.className="wait";est.textContent="📲 Escaneá el código (se renueva solo)";
-        } else {est.className="wait";est.textContent="⏳ Generando código…";}
-      }catch(e){}
-      setTimeout(tick,4000);
-    }
-    tick();
-  </script>
-</body></html>`);
 });
 
 // Diagnóstico: qué cuenta de ML quedó conectada (para verificar que sea EVERBOX).

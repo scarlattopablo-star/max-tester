@@ -1,5 +1,5 @@
 // Helpers puros para interpretar los mensajes entrantes de WhatsApp (Baileys).
-// Están acá (y no embebidos en whatsapp.js) para poder testearlos sin levantar el bot.
+// Están acá (y no embebidos en el transporte) para poder testearlos sin levantar el bot.
 
 // Algunos mensajes vienen ENVUELTOS en un contenedor y el contenido real está adentro:
 // mensajes que se autodestruyen (ephemeralMessage), "ver una vez" (viewOnce*),
@@ -82,7 +82,7 @@ export function notaDocumento({ nombre = "", mime = "", legible = false } = {}) 
 
 // ¿El cliente dice (EN PASADO) que YA hizo la transferencia / mandó el comprobante?
 // Red de seguridad de los avisos al equipo: si el modelo no llama a la herramienta
-// confirmar_transferencia, whatsapp.js registra y avisa igual por código.
+// confirmar_transferencia, avisos_equipo.js registra y avisa igual por código.
 // Calibrado con frases REALES de las conversaciones de producción. A propósito NO
 // matchea promesas a futuro ("ya te transfiero", "en un rato te giro la seña",
 // "cuando pueda hago el giro"): solo pasado inequívoco.
