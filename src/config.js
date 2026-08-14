@@ -180,15 +180,20 @@ Si esta opción es de su interés, por favor indíquenos la marca, modelo y año
 // ───────────────────────────────────────────────────────────────────
 // AVISO DE ENVÍO — texto EXACTO que el CÓDIGO agrega al cerrar una venta
 // que va POR ENVÍO. Pedido de Pablo (14 ago 2026): el cliente tiene que
-// saber cuánto demora la encomienda antes de quedarse esperando.
+// saber cuándo se despacha antes de quedarse esperando.
 // Lo manda el código, NO el modelo, para que el plazo salga siempre igual
 // (un plazo inventado por la IA es una promesa que el negocio no hizo).
 // Si Pablo cambia el plazo, se edita ACÁ y listo.
+//
+// ⚠️ El plazo es el del DESPACHO, no el de la entrega: el pedido SALE dentro
+// de los 2 o 3 días. Lo que tarde DAC después va por cuenta de la agencia y
+// el negocio no lo promete. Cuidado al reescribir este texto: decir "llega en
+// 2 o 3 días" es prometer algo distinto (y que no depende de la casa).
 // ───────────────────────────────────────────────────────────────────
 export const AVISO_ENVIO = `Sobre el ENVÍO:
 
 • Lo mandamos por DAC (agencia de encomiendas), a todo el país.
-• Desde que sale del local, la encomienda demora de 2 a 3 días como máximo en llegar.`;
+• El pedido se despacha dentro de los 2 o 3 días.`;
 
 export const AVISO_COLOCACION = `Importante sobre la COLOCACIÓN:
 

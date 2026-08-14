@@ -2011,7 +2011,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // Ídem con el plazo del envío: si el modelo ya escribió su propio "llega en X días",
   // esa frase se va. El plazo bueno es el del código; dos plazos distintos en el mismo
   // mensaje es justo lo que no queremos.
-  if (avisoEnvio) limpio = _sacarOraciones(limpio, /\b\d+\s*(a|y|-|hasta)\s*\d+\s*d[ií]as?\b|demora|tarda|plazo de entrega|llega en|llegar[ií]a/i);
+  if (avisoEnvio) limpio = _sacarOraciones(limpio, /\b\d+\s*(a|o|y|-|hasta)\s*\d+\s*d[ií]as?\b|demora|tarda|plazo de entrega|llega en|llegar[ií]a|despach/i);
   // PRODUCTO AGOTADO: el texto lo pone el CÓDIGO (AVISO_AGOTADO de config.js), igual
   // que el de colocación, para que SIEMPRE salga igual — es lo que pidió el dueño.
   // Y como el modelo igual lo parafrasea, le sacamos sus propios párrafos que hablen
