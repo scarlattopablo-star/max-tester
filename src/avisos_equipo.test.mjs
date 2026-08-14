@@ -62,6 +62,24 @@ test("RED DE SEGURIDAD: no duplica si la herramienta YA avisó", () => {
   assert.equal(transferenciaSinRegistrar, null);
 });
 
+// El caso más común de todos: el cliente manda el PDF del banco y NO escribe nada.
+// Si el modelo no llama la herramienta, sin este backstop no avisa nadie.
+test("PDF SOLO, sin texto: avisa igual aunque el modelo no llame la herramienta", () => {
+  const { avisos, transferenciaSinRegistrar } = armarAvisos({
+    acciones: [], contacto, texto: "", pdfRecibido: true, chatId: "59892173216",
+  });
+  assert.equal(avisos.length, 1, "llegó un comprobante en PDF y no avisó nadie");
+  assert.match(avisos[0], /COMPROBANTE DE TRANSFERENCIA RECIBIDO/);
+  assert.ok(transferenciaSinRegistrar?.comprobante, "un PDF ES el comprobante");
+});
+
+test("PDF + la herramienta: un solo aviso, no dos", () => {
+  const { avisos } = armarAvisos({
+    acciones: [EJEMPLOS.confirmar_transferencia()], contacto, pdfRecibido: true,
+  });
+  assert.equal(avisos.length, 1, "avisó dos veces el mismo comprobante");
+});
+
 test("una promesa a futuro NO dispara aviso", () => {
   const { avisos } = armarAvisos({ acciones: [], contacto, texto: "mañana te transfiero" });
   assert.equal(avisos.length, 0);

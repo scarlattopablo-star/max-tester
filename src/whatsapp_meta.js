@@ -84,10 +84,11 @@ async function procesarEcoEquipo(echo) {
   console.log(`🧑 el equipo respondió a ${cliente} desde la app → Max en pausa 3 h`);
 }
 
-function encolar(tel, { texto, imagenes = [], contacto, msgId }) {
-  const b = buffers.get(tel) || { textos: [], imagenes: [], timer: null, contacto: {}, msgId: null };
+function encolar(tel, { texto, imagenes = [], contacto, msgId, pdf = false }) {
+  const b = buffers.get(tel) || { textos: [], imagenes: [], timer: null, contacto: {}, msgId: null, pdf: false };
   if (texto) b.textos.push(texto);
   if (imagenes.length) b.imagenes.push(...imagenes);
+  if (pdf) b.pdf = true; // llegó un comprobante: lo recuerda hasta que se procese el turno
   if (contacto) b.contacto = { ...b.contacto, ...contacto };
   if (msgId) b.msgId = msgId;
   if (b.timer) clearTimeout(b.timer);
@@ -104,7 +105,8 @@ async function procesar(tel) {
   const imagenes = b.imagenes;
   const contacto = b.contacto || {};
   const msgId = b.msgId;
-  b.textos = []; b.imagenes = [];
+  const pdfRecibido = !!b.pdf;
+  b.textos = []; b.imagenes = []; b.pdf = false;
   procesando.add(tel);
   try {
     const { texto: respuesta, acciones, imagenesEnviar = [], videosEnviar = [] } =
@@ -147,7 +149,7 @@ async function procesar(tel) {
     console.log(`📤 ${tel}: ${respuesta}` + (imagenesEnviar.length ? ` (+${imagenesEnviar.length} foto)` : ""));
 
     await avisarAcciones({
-      acciones, contacto, texto, chatId: tel,
+      acciones, contacto, texto, chatId: tel, pdfRecibido,
       fallbackConversacion: "Buscá la conversación en la bandeja de Meta Business Suite.",
     });
   } catch (e) {
@@ -293,7 +295,7 @@ async function procesarEntrante(msg, value) {
     const texto = cita + [msg.document?.caption || "", nota].filter(Boolean).join("\n");
     diag("recibido", { jid: tel, anuncio: !!anuncio, tieneTexto: true, tieneDocumento: true, tel });
     console.log(`📎 ${tel}: documento${doc.nombre ? ` "${doc.nombre}"` : ""}${dataUri ? " (PDF legible para el cerebro)" : ""}`);
-    encolar(tel, { texto, imagenes: dataUri ? [dataUri] : [], contacto, msgId: msg.id });
+    encolar(tel, { texto, imagenes: dataUri ? [dataUri] : [], contacto, msgId: msg.id, pdf: esPdf(doc) });
     return;
   }
 

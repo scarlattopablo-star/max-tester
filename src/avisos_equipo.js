@@ -42,7 +42,7 @@ const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
  *  WhatsApp ni base de datos.
  *  Devuelve { avisos: [texto...], transferenciaSinRegistrar } — esto último es la
  *  transferencia que detectó la red de seguridad y que el llamador debe registrar. */
-export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId = "", fallbackConversacion = "" } = {}) {
+export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fallbackConversacion = "" } = {}) {
   const avisos = [];
   const lineaCliente = contacto.nombre ? `👤 ${contacto.nombre}` : "";
   const sinLink = fallbackConversacion || "Buscá la conversación del cliente en el WhatsApp del negocio.";
@@ -115,16 +115,21 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
     }
   }
 
-  // RED DE SEGURIDAD determinística: el cliente dijo claramente que YA transfirió
-  // pero el modelo no llamó la herramienta. Avisamos igual por código.
+  // RED DE SEGURIDAD determinística, para cuando el modelo NO llama la herramienta.
+  // Dos disparadores, los dos por código (no dependen de que la IA acierte):
+  //   1. el cliente dijo con todas las letras que YA transfirió;
+  //   2. llegó un PDF — el comprobante del banco es un PDF y casi nada más lo es.
+  // El (2) importa sobre todo porque el cliente suele mandar el PDF SOLO, sin
+  // escribir nada, y ahí el disparador (1) no tiene texto donde engancharse.
+  // Un aviso de más cuesta 10 segundos; una transferencia que nadie mira, una venta.
   let transferenciaSinRegistrar = null;
-  if (!transferenciaAvisada && dijoQueTransfirio(texto)) {
+  if (!transferenciaAvisada && (dijoQueTransfirio(texto) || pdfRecibido)) {
     transferenciaSinRegistrar = {
       chatId,
       nombre: contacto.nombre || "",
       telefono: contacto.tel || "",
       detalle: String(texto).slice(0, 140),
-      comprobante: /comprobante/i.test(texto),
+      comprobante: pdfRecibido || /comprobante/i.test(texto),
     };
     avisos.push(avisoTransferencia(transferenciaSinRegistrar));
   }
@@ -134,8 +139,8 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
 
 /** Arma y MANDA los avisos al WhatsApp del equipo. Un fallo en uno no tumba los
  *  otros: cada aviso se manda por separado y el error queda en el log. */
-export async function avisarAcciones({ acciones = [], contacto = {}, texto = "", chatId = "", fallbackConversacion = "" } = {}) {
-  const { avisos, transferenciaSinRegistrar } = armarAvisos({ acciones, contacto, texto, chatId, fallbackConversacion });
+export async function avisarAcciones({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fallbackConversacion = "" } = {}) {
+  const { avisos, transferenciaSinRegistrar } = armarAvisos({ acciones, contacto, texto, chatId, pdfRecibido, fallbackConversacion });
 
   if (transferenciaSinRegistrar) {
     try {

@@ -138,10 +138,11 @@ async function iniciar() {
     }
   }
 
-  function encolar(jid, texto, imagenes = []) {
-    const b = buffers.get(jid) || { textos: [], imagenes: [], timer: null };
+  function encolar(jid, texto, imagenes = [], pdf = false) {
+    const b = buffers.get(jid) || { textos: [], imagenes: [], timer: null, pdf: false };
     if (texto) b.textos.push(texto);
     if (imagenes.length) b.imagenes.push(...imagenes);
+    if (pdf) b.pdf = true; // llegó un comprobante: lo recuerda hasta que se procese el turno
     if (b.timer) clearTimeout(b.timer);
     b.timer = setTimeout(() => { b.timer = null; procesar(jid); }, VENTANA_MS);
     buffers.set(jid, b);
@@ -154,8 +155,10 @@ async function iniciar() {
 
     const texto = b.textos.join("\n"); // junta todo lo que escribió el cliente
     const imagenes = b.imagenes;
+    const pdfRecibido = !!b.pdf;
     b.textos = [];
     b.imagenes = [];
+    b.pdf = false;
     procesando.add(jid);
     // Nombre y teléfono del cliente capturados del mensaje: se usan para los avisos
     // al equipo (link a la conversación) y para recordar de quién es un link de pago.
@@ -194,7 +197,7 @@ async function iniciar() {
       // vive en avisos_equipo.js, COMPARTIDA con el transporte de Meta. Estaba
       // duplicada y las dos copias se desincronizaron (las transferencias dejaron
       // de avisarse por la Cloud API durante 3 semanas). No volver a copiarla acá.
-      await avisarAcciones({ acciones, contacto, texto, chatId: jid });
+      await avisarAcciones({ acciones, contacto, texto, chatId: jid, pdfRecibido });
     } catch (e) {
       diag("error", { jid, jidEnvio, detalle: e.message });
       console.log(`⚠ Error respondiendo a ${jid}: ${e.message}`);
@@ -444,7 +447,7 @@ async function iniciar() {
         console.log(`📩 ${jid}: ${texto}`);
       }
       if (pdfAdjunto) imagenes.push(pdfAdjunto); // el cerebro lo reconoce por el mime y lo manda como documento
-      encolar(jid, texto, imagenes);
+      encolar(jid, texto, imagenes, !!pdfAdjunto);
     }
   });
 }
