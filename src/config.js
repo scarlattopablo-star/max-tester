@@ -57,14 +57,22 @@ export const CUBREASIENTOS = {
     // El eco cuero económico NO tiene variación de color de material: es SIEMPRE
     // cuero ecológico NEGRO. Lo único que varía es el color del PESPUNTE (costura).
     colorUnico: "Cuero ecológico negro",
-    // Costuras REALES con foto (Pablo, 22 jul 2026): ocre (no decir "naranja"), azul y blanca.
-    pespuntes: ["Ocre", "Azul", "Blanco"],
-    // Fotos reales de las costuras: Max las muestra SIEMPRE que preguntan por
-    // colores o al describir el eco cuero (tool mostrar_ecocuero).
+    // Costuras REALES con foto (Pablo, 22 jul 2026): ocre (no decir "naranja"), azul y
+    // la clara, que desde el 17 ago 2026 se llama GRIS (en la muestra es gris plata).
+    pespuntes: ["Ocre", "Azul", "Gris"],
+    // ⚠️ NO HAY FOTOS PROPIAS DEL ECO CUERO (17 ago 2026). Los archivos de
+    // public/ecocuero/ son copias byte por byte de los de public/capitoneado/: son
+    // fotos del material CAPITONEADO. Se apunta directo al original del capitoneado por
+    // dos motivos: (1) el pie de la foto dice la verdad — "Capitoneado premium" — y Max
+    // tiene prohibido presentarlas como el eco cuero (ver mostrar_ecocuero en
+    // cerebro.js); (2) al ser la MISMA URL, armarRespuesta no manda la foto dos veces
+    // cuando se muestran las dos líneas juntas.
+    // 👉 Cuando Pablo pase fotos REALES del eco cuero, van a public/ecocuero/ y estas
+    //    tres URLs vuelven a apuntar ahí (y los pies vuelven a decir "Eco cuero").
     muestras: {
-      costuraOcre: `${process.env.APP_URL || "https://max-tester.onrender.com"}/ecocuero/costura-ocre.jpg`,
-      costuraAzul: `${process.env.APP_URL || "https://max-tester.onrender.com"}/ecocuero/costura-azul.jpg`,
-      costuraBlanca: `${process.env.APP_URL || "https://max-tester.onrender.com"}/ecocuero/costura-blanca.jpg`,
+      costuraOcre: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro-naranja.jpg`,
+      costuraAzul: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro-azul.jpg`,
+      costuraBlanca: `${process.env.APP_URL || "https://max-tester.onrender.com"}/capitoneado/negro-blanco.jpg`,
     },
     descripcion: "", // el económico NO necesita descripción extra del material
   },
@@ -75,7 +83,8 @@ export const CUBREASIENTOS = {
     costoColocacion: "se cotiza con un vendedor (consultar)",
     // ⚠️ Las costuras ocre/azul/blanca valen para el capitoneado Y para el eco
     // cuero (Pablo, 22 jul 2026). "Ocre", nunca "naranja".
-    coloresCapitoneado: ["Negro", "Rojo", "Negro con costura ocre", "Negro con costura azul", "Negro con costura blanca"],
+    // "Gris" y no "blanca": la costura clara de la muestra real es gris plata (Pablo, 17 ago 2026).
+    coloresCapitoneado: ["Negro", "Rojo", "Negro con costura ocre", "Negro con costura azul", "Negro con costura gris"],
     logoOpcional: true,
     coloresLogo: ["Rojo", "Negro", "Gris", "Azul"],
     // Fotos REALES de muestra del material (en public/capitoneado/). URLs absolutas

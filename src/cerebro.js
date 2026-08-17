@@ -971,11 +971,12 @@ Tené clara esta diferencia:
 - ECO CUERO (económico): ronda los $${CUBREASIENTOS.economico.precioDesde}–$${CUBREASIENTOS.economico.precioHasta}. Es SOLO VENTA: NO se coloca (no se ofrece colocación para esta línea). No necesita descripción extra del material.
   · ⚠️ COLOR (REGLA, no la rompas): el eco cuero económico NO tiene variación de color de material — es SIEMPRE ${CUBREASIENTOS.economico.colorUnico}. NUNCA ofrezcas otros colores de material (ej. NO ofrezcas "negro o rojo" como en el capitoneado). Lo ÚNICO que varía es el color del PESPUNTE (la costura): ${CUBREASIENTOS.economico.pespuntes.join(", ")}. Para cerrar la compra del eco cuero, preguntá qué color de pespunte prefiere (no preguntes color de material, que es uno solo).
   · MOSTRÁ LAS COSTURAS CON FOTOS (OBLIGATORIO): SIEMPRE que el cliente pregunte por los colores del eco cuero, o cuando le describas/ofrezcas esta línea, mandale las FOTOS REALES de las costuras vía "mostrar_ecocuero" (las tres, o la puntual si nombró una). ⚠️ El color de costura anaranjado se llama OCRE: decile siempre "ocre", NUNCA "naranja".
+  · ⛔ ESAS FOTOS SON DEL CAPITONEADO (REGLA DEL DUEÑO, 17 ago 2026 — no la rompas): las muestras de costura que manda "mostrar_ecocuero" son del material CAPITONEADO PREMIUM y van rotuladas "Capitoneado premium - Costura ocre/azul/gris". NUNCA las presentes como "así es el eco cuero" ni las llames "eco cuero": el eco cuero es OTRO artículo y otro precio, y si las mezclás el cliente compra una cosa creyendo que es la otra. Mandalas como muestra del COLOR de la costura, aclarando en una frase corta que la foto es del capitoneado. Si el cliente elige un color mirando esas fotos, confirmá primero qué línea quiere antes de dar precio.
   · ⚠️ NO HAY ECO CUERO PARA TODOS LOS MODELOS (REGLA, no la rompas): la línea económica de eco cuero existe solo para ALGUNOS vehículos. NUNCA des por hecho que hay eco cuero para el auto del cliente ni lo ofrezcas "de memoria". Guiate SIEMPRE por lo que devuelve el catálogo con "enviar_foto": ofrecé y nombrá únicamente las opciones que REALMENTE aparecen para ese modelo. Si para ese auto solo hay capitoneado, ofrecé solo capitoneado (sin mencionar un eco cuero que no existe); si solo hay eco cuero, ofrecé eso. ⛔ Si no hay eco cuero para el modelo, NO lo ofrezcas ni prometas, NO inventes precio: informá con sinceridad lo que sí tenemos para ese vehículo. Mejor informar correctamente que ofrecer algo que no hay.
 - CAPITONEADO (premium): es el de mayor gama. SÍ se puede COLOCAR (el costo de colocación se cotiza con un vendedor).
 - ⚙️ QUÉ LÍNEAS SE COLOCAN (actualizado 28 jul 2026): se colocan el CAPITONEADO, la TELA de tapicería y el CUERO SPORT. El ECO CUERO económico NO se coloca (es solo venta). En las tres que sí se colocan, el costo de la colocación va SIEMPRE aparte y lo cotiza un vendedor; el día y la hora los confirma el EQUIPO y el cliente NO debe acercarse al local hasta tener esa confirmación.
   · COLORES de capitoneado disponibles: ${CUBREASIENTOS.capitoneado.coloresCapitoneado.join(" o ")}.
-  · ⚠️ OBLIGATORIO (no lo saltees NUNCA): apenas el cliente ELIGE el capitoneado o pregunta por él, en esa MISMA respuesta: (1) usá "mostrar_capitoneado" para mandarle las FOTOS REALES del material en TODOS los colores (negro, rojo, y negro con costura ocre/azul/blanca — la costura anaranjada se llama OCRE, nunca digas "naranja"); (2) arrancá la explicación del material (2-3 puntos fuertes, como dice DESCRIPCIÓN abajo); (3) si el cliente TODAVÍA no dijo el color, preguntale cuál prefiere — pero si YA dijo el color en un mensaje anterior (ej. pidió "capitoneado negro"), NO se lo vuelvas a preguntar: confirmáselo ("Perfecto, en negro") y seguí. NO avances a año/logo/pago sin haber mostrado las fotos y explicado el material. Si pide ver el material/espuma de cerca, usá "mostrar_capitoneado" con que:"espuma".
+  · ⚠️ OBLIGATORIO (no lo saltees NUNCA): apenas el cliente ELIGE el capitoneado o pregunta por él, en esa MISMA respuesta: (1) usá "mostrar_capitoneado" para mandarle las FOTOS REALES del material en TODOS los colores (negro, rojo, y negro con costura ocre/azul/gris — la costura anaranjada se llama OCRE, nunca digas "naranja"; a la costura clara decile GRIS, no "blanca"); (2) arrancá la explicación del material (2-3 puntos fuertes, como dice DESCRIPCIÓN abajo); (3) si el cliente TODAVÍA no dijo el color, preguntale cuál prefiere — pero si YA dijo el color en un mensaje anterior (ej. pidió "capitoneado negro"), NO se lo vuelvas a preguntar: confirmáselo ("Perfecto, en negro") y seguí. NO avances a año/logo/pago sin haber mostrado las fotos y explicado el material. Si pide ver el material/espuma de cerca, usá "mostrar_capitoneado" con que:"espuma".
   · LOGO bordado OPCIONAL: se puede agregar el logo (o no). Si lo quiere, los colores de logo son: ${CUBREASIENTOS.capitoneado.coloresLogo.join(", ")}.
   · 📋 DESCRIPCIÓN OFICIAL DEL MATERIAL (REGLA DEL DUEÑO, no la rompas): SOLO cuando el cliente ELIGE el capitoneado DESPUÉS de ver las opciones ("el capitoneado me gustó", "quiero ese") o pregunta puntualmente de qué es / cómo es el material, llamá a "descripcion_oficial" con linea:"capitoneado" — el sistema le envía el texto oficial EXACTO del negocio (cuero ecológico premium, espuma 8 mm, impermeable, garantía 1 año, etc.). ⛔ NUNCA la mandes en el mismo mensaje en que recién le mostrás las opciones (primero elige, después la descripción — ver FLUJO EN DOS PASOS). ⛔ Vos NO escribas ni resumas esa descripción por tu cuenta: como mucho una frase corta de intro. Dala SOLO para el CAPITONEADO (no para el económico) y UNA sola vez por conversación.
     · MOSTRÁ LA CALIDAD CON FOTOS: mientras explicás el material, acompañá con las FOTOS REALES vía "mostrar_capitoneado" (los colores y, para evidenciar la calidad, el detalle de la espuma de 8 mm con que:"espuma"). Las fotos respaldan lo que contás: que el cliente VEA la terminación y el capitoneado, no solo que lo lea.
@@ -1182,7 +1183,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "mostrar_capitoneado",
-      description: "Manda al cliente las FOTOS REALES del material capitoneado premium: muestras de TODOS los colores disponibles (negro, rojo, y negro con costura ocre, azul o blanca) y detalle de la espuma de 8mm. Usar SIEMPRE que el cliente pregunte por colores del capitoneado o se interese por el cubreasiento capitoneado: mostrale las opciones.",
+      description: "Manda al cliente las FOTOS REALES del material capitoneado premium: muestras de TODOS los colores disponibles (negro, rojo, y negro con costura ocre, azul o gris) y detalle de la espuma de 8mm. Usar SIEMPRE que el cliente pregunte por colores del capitoneado o se interese por el cubreasiento capitoneado: mostrale las opciones.",
       parameters: {
         type: "object",
         properties: {
@@ -1196,11 +1197,11 @@ const TOOLS = [
     type: "function",
     function: {
       name: "mostrar_ecocuero",
-      description: "Manda al cliente las FOTOS REALES de las costuras del cubreasiento ECO CUERO (material siempre negro; costuras ocre, azul o blanca). Usar SIEMPRE que el cliente pregunte por los colores del eco cuero o cuando describís esa línea.",
+      description: "Manda al cliente las FOTOS REALES de las costuras (ocre, azul o gris) sobre material negro. ⚠️ Las fotos son del material CAPITONEADO PREMIUM y van rotuladas así: NO son fotos del eco cuero y no las presentes como tales (el eco cuero es otro artículo, con otro precio). Usar cuando el cliente pregunta por los colores de costura o cuando ofrecés la línea económica, aclarando que la muestra es del capitoneado.",
       parameters: {
         type: "object",
         properties: {
-          que: { type: "string", description: "Costura puntual a mostrar ('ocre', 'azul' o 'blanca'); vacío = las tres" },
+          que: { type: "string", description: "Costura puntual a mostrar ('ocre', 'azul' o 'gris'); vacío = las tres" },
         },
         required: [],
       },
@@ -1341,7 +1342,9 @@ const HERRAMIENTAS_DE_PRODUCTO = new Set([
 // Ninguna puede correr mientras no se sepa QUÉ línea eligió el cliente.
 const CIERRAN_VENTA = new Set(["crear_link_pago", "tomar_pedido", "confirmar_transferencia", "consultar_precio"]);
 
-async function ejecutarHerramienta(nombre, input, ctx = {}) {
+// Exportada para las pruebas: así se puede verificar qué manda cada herramienta
+// (los pies de las fotos, por ejemplo) sin gastar una llamada a la IA.
+export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   // Estado del TURNO (se reinicia en cada mensaje del cliente, lo crea responder()).
   const turno = ctx._turno || (ctx._turno = { busco: false });
   if (HERRAMIENTAS_DE_PRODUCTO.has(nombre)) turno.busco = true;
@@ -1369,7 +1372,7 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
         { img: m.rojo, nombre: "Capitoneado premium - Rojo", pide: ["rojo"] },
         { img: m.negroOcre, nombre: "Capitoneado premium - Negro con costura ocre", pide: ["ocre", "naranja"] },
         { img: m.negroAzul, nombre: "Capitoneado premium - Negro con costura azul", pide: ["azul"] },
-        { img: m.negroBlanco, nombre: "Capitoneado premium - Negro con costura blanca", pide: ["blanc", "gris"] },
+        { img: m.negroBlanco, nombre: "Capitoneado premium - Negro con costura gris", pide: ["blanc", "gris", "plat"] },
       ];
       let fotos = [];
       if (que.includes("espuma") || que.includes("detalle") || que.includes("material")) {
@@ -1381,23 +1384,35 @@ async function ejecutarHerramienta(nombre, input, ctx = {}) {
         const soloNegro = que.includes("negro") && pedidas.length === 1 && pedidas[0].pide[0] === "negro";
         fotos = (pedidas.length && (pedidas.length > 1 || soloNegro || pedidas[0].pide[0] !== "negro")) ? pedidas : catalogo;
       }
-      fotos = fotos.filter((f) => f.img).map(({ nombre: n, img }) => ({ nombre: n, img }));
+      fotos = fotos.filter((f) => f.img).map(({ nombre: n, img }) => ({ nombre: n, img, linea: "capitoneado premium" }));
       if (!fotos.length) return { ok: false, mensaje: "No hay fotos de muestra cargadas." };
       return { ok: true, enviadas: fotos.length, fotos };
     }
     if (nombre === "mostrar_ecocuero") {
-      // Fotos reales de las costuras del eco cuero (material siempre negro).
+      // ⚠️ Estas fotos son del material CAPITONEADO PREMIUM (los archivos son los
+      // mismos que los de /capitoneado/). Antes iban rotuladas "Eco cuero negro -
+      // Costura X" y el cliente entendía que el eco cuero ERA eso: el eco cuero es
+      // OTRO artículo y otro precio. Pablo (17 ago 2026): en estas fotos el rótulo
+      // dice SOLO "Capitoneado premium" + el color, nunca "eco cuero".
       const m = CUBREASIENTOS.economico.muestras || {};
       const que = _normTxt(input.que || "");
       const catalogo = [
-        { img: m.costuraOcre, nombre: "Eco cuero negro - Costura ocre", pide: ["ocre", "naranja"] },
-        { img: m.costuraAzul, nombre: "Eco cuero negro - Costura azul", pide: ["azul"] },
-        { img: m.costuraBlanca, nombre: "Eco cuero negro - Costura blanca", pide: ["blanc"] },
+        { img: m.costuraOcre, nombre: "Capitoneado premium - Costura ocre", pide: ["ocre", "naranja"] },
+        { img: m.costuraAzul, nombre: "Capitoneado premium - Costura azul", pide: ["azul"] },
+        { img: m.costuraBlanca, nombre: "Capitoneado premium - Costura gris", pide: ["blanc", "gris", "plat"] },
       ];
       const pedidas = catalogo.filter((c) => c.pide.some((p) => que.includes(p)));
-      let fotos = (pedidas.length ? pedidas : catalogo).filter((f) => f.img).map(({ nombre: n, img }) => ({ nombre: n, img }));
+      // linea: "eco cuero" NO se le muestra al cliente (el rótulo visible dice
+      // "Capitoneado premium"): es la marca interna que necesita eleccionAmbigua para
+      // no cobrar la línea equivocada cuando el cliente elige nombrando solo el color.
+      let fotos = (pedidas.length ? pedidas : catalogo).filter((f) => f.img).map(({ nombre: n, img }) => ({ nombre: n, img, linea: "eco cuero" }));
       if (!fotos.length) return { ok: false, mensaje: "No hay fotos de muestra cargadas." };
-      return { ok: true, enviadas: fotos.length, fotos };
+      return {
+        ok: true,
+        enviadas: fotos.length,
+        fotos,
+        instruccion: "Ojo: estas fotos son del material CAPITONEADO. Al mandarlas NO las llames 'eco cuero' ni digas que así es el eco cuero: el eco cuero económico es otro artículo, con otro precio. Si el cliente elige un color mirando estas fotos, confirmá primero QUÉ línea quiere (eco cuero económico o capitoneado premium) antes de pasarle precio o anotar el pedido.",
+      };
     }
     if (nombre === "descripcion_oficial") {
       const mapa = { tela: CUBREASIENTOS.tela, cuero_sport: CUBREASIENTOS.sport, sport: CUBREASIENTOS.sport, capitoneado: CUBREASIENTOS.capitoneado };
@@ -1837,7 +1852,7 @@ const _LINEAS_POR_COLOR = [
 const _COLORES_MUESTRA = [
   { clave: "ocre", re: /\bocres?\b|\bnaranjas?\b/i },
   { clave: "azul", re: /\bazul(?:es)?\b/i },
-  { clave: "blanca", re: /\bblanc[ao]s?\b/i },
+  { clave: "gris", re: /\bblanc[ao]s?\b|\bgris(?:es)?\b|\bplatead[ao]s?\b/i },
   { clave: "negro", re: /\bnegr[ao]s?\b/i },
   { clave: "rojo", re: /\brojos?\b/i },
 ];
@@ -1917,11 +1932,28 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
     .filter((a) => CON_FOTOS.has(a.herramienta) && a.resultado?.ok)
     .flatMap((a) => a.resultado.fotos || [])
     .filter((f) => f && f.img);
-  const _vistas = new Set();
-  fotosCrudas = fotosCrudas.filter((f) => { if (_vistas.has(f.img)) return false; _vistas.add(f.img); return true; });
+  // La MISMA foto puede venir de dos herramientas (las muestras de costura son los
+  // mismos archivos en capitoneado y en eco cuero): se manda UNA sola vez, pero se
+  // acumulan las líneas desde las que se mostró para la nota interna de abajo.
+  const _vistas = new Map();
+  fotosCrudas = fotosCrudas.filter((f) => {
+    const previa = _vistas.get(f.img);
+    if (previa) {
+      if (f.linea && !previa._lineas.includes(f.linea)) previa._lineas.push(f.linea);
+      return false;
+    }
+    f._lineas = f.linea ? [f.linea] : [];
+    _vistas.set(f.img, f);
+    return true;
+  });
   const imagenesEnviar = fotosCrudas.map((f, i) => ({
     url: f.img,
     caption: f.precio ? `${i + 1}) ${f.nombre} - ${_fmtPrecio(f.precio, f.moneda)}` : `${i + 1}) ${f.nombre}`,
+    // ⚠️ INTERNO: qué línea se estaba mostrando con esta foto. NO se le manda al
+    // cliente (los canales solo usan url + caption): handler.js lo escribe en la nota
+    // interna del historial para que eleccionAmbigua siga sabiendo qué se mostró,
+    // aunque el rótulo visible de las muestras de costura diga "Capitoneado premium".
+    lineas: f._lineas || [],
   }));
   // VIDEOS reales (tela capitoneada / cuero Sport): mismo circuito que las fotos.
   const _vistosV = new Set();

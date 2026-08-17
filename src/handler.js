@@ -64,7 +64,13 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
   // y nunca se le envía como mensaje; solo vive en la memoria que lee el modelo).
   let contenidoAssistant = respuesta;
   if (imagenesEnviar.length) {
-    const ops = imagenesEnviar.map((f) => f.caption).join("; ");
+    // Al caption se le agrega la LÍNEA desde la que se mostró la foto cuando no
+    // coincide con lo que dice el rótulo (las muestras de costura son fotos del
+    // capitoneado y también se usan al ofrecer el eco cuero). Va SOLO acá adentro,
+    // en la nota interna: el cliente ve el caption pelado.
+    const ops = imagenesEnviar
+      .map((f) => (f.lineas?.length ? `${f.caption} (línea: ${f.lineas.join(" y ")})` : f.caption))
+      .join("; ");
     contenidoAssistant = `${respuesta}⁣[Contexto interno — opciones que le mostré al cliente con foto, numeradas: ${ops}. Si el cliente elige un número ("la 1", "el 2", "quiero la primera"), corresponde a ESTA lista; NO vuelvas a mostrar las opciones: avanzá con la que eligió.]`;
   }
   if (videosEnviar.length) {
