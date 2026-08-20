@@ -705,7 +705,7 @@ export function sinStockOInexistente(consulta) {
     // no le ofrezca otra (ver armarRespuesta). Los cubreasientos quedan afuera: esos
     // sí se hacen a medida para cualquier vehículo y corresponde ofrecerlos.
     categoriaPedida: nombreCategoria(consulta) === "cubreasiento" ? null : nombreCategoria(consulta),
-    mensaje: "No tenemos eso para ese vehículo. Si es ALFOMBRA, CUBREAUTO o ACCESORIO: decíselo como un vendedor (\"eso está agotado\", \"de eso no tenemos por ahora\") — ⛔ NUNCA con palabras del sistema como \"no está publicado\" o \"no figura en el catálogo\". ⛔ SEGUÍ HABLANDO DE ESE PRODUCTO: no le ofrezcas otra cosa que no pidió. ⛔ NO ofrezcas avisarle cuando llegue (no hay nada a lo que seguirle el rastro). ⛔ NO derives por tu cuenta: asesoralo bien primero y, si hace falta una persona, OFRECÉSELO y derivá SOLO si dice que sí. Si es un CUBREASIENTO o el vehículo es JMC: seguí como siempre (ofrecé las líneas y derivá).",
+    mensaje: "No tenemos eso para ese vehículo. Si es ALFOMBRA, CUBREAUTO o ACCESORIO: decíselo como un vendedor (\"eso está agotado\", \"de eso no tenemos por ahora\") — ⛔ NUNCA con palabras del sistema como \"no está publicado\" o \"no figura en el catálogo\". ⛔ SEGUÍ HABLANDO DE ESE PRODUCTO: no le ofrezcas otra cosa que no pidió. ⛔ NO ofrezcas avisarle cuando llegue (no hay nada a lo que seguirle el rastro). ⛔ NO derives por tu cuenta: asesoralo bien primero y, si hace falta una persona, OFRECÉSELO y derivá SOLO si dice que sí. Si el vehículo es JMC: seguí como siempre (ofrecé las líneas y derivá). Si es un CUBREASIENTO de cualquier otra marca: ⛔ NO le ofrezcas las líneas (regla del dueño del 18 ago 2026, cambió), pedile marca/modelo/año y pasalo con un asesor para que le confirme disponibilidad y precio.",
   };
 }
 
@@ -905,7 +905,7 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 - Si te preguntan algo que no podés resolver (un costo no especificado, un caso especial), indicá con cortesía que lo va a consultar con un vendedor para darle una respuesta precisa, y usá la herramienta "derivar_a_humano" (motivo "otro") con el resumen. Ej: "${FRASE_CONSULTO}". Así no queda nada sin resolver. ⚠️ Si lo que NO aparece es un PRODUCTO, no derives de entrada: leé la sección "PRODUCTO AGOTADO / QUE NO TRABAJAMOS" y hacé lo que dice.
 - ⛔ NO EXISTE EL "TE LO CONSEGUIMOS": si la herramienta no devuelve nada para lo que el cliente pide (un producto que no está, un vehículo sin publicaciones, un accesorio que no vendemos), está PROHIBIDO decir que se lo fabricamos, que se lo encargamos, que lo traemos, que lo adaptamos o que "se puede hacer a medida". Lo único que podés decir es la verdad.
 - ⛔ Tampoco inventes al revés: si NO SABÉS si lo tenemos, no le cierres la puerta al cliente con un "no tenemos" tajante. La ÚNICA vez que sí podés decirle que no lo trabajamos es el CASO 2 de la sección de abajo, y es porque ahí la herramienta ya verificó que no existe la publicación ni activa ni agotada: eso no es suponer, es un dato.
-- ⚠️ Las ÚNICAS excepciones al "no hay" (porque el dueño lo confirmó) son: las 4 líneas de CUBREASIENTOS a medida, que se hacen para CUALQUIER vehículo; los cubreasientos para TODOS los modelos JMC; y la Fiat Strada/Freedom/Volcano, que son el mismo vehículo. Fuera de esas tres excepciones, no des por hecho que existe algo que no viste.
+- ⚠️ Las ÚNICAS excepciones al "no hay" (porque el dueño lo confirmó) son: los cubreasientos para TODOS los modelos JMC; y la Fiat Strada/Freedom/Volcano, que son el mismo vehículo. Fuera de esas dos, no des por hecho que existe algo que no viste. ⚠️ Antes había una tercera —"los cubreasientos a medida se hacen para cualquier vehículo"— y el dueño la SACÓ el 18 ago 2026: si de ese auto no hay nada en el catálogo, no se ofrece, se deriva.
 
 # PRODUCTO AGOTADO / QUE NO TRABAJAMOS (leelo antes de derivar por un producto)
 ⛔ ANTES QUE NADA — HABLÁ COMO UN VENDEDOR, NO COMO UN SISTEMA. Cuando no tenemos algo, decilo con UNA de estas frases y nada más (copiá el molde, cambiando el producto y el vehículo):
@@ -926,7 +926,7 @@ Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramie
   · ⛔ En este caso NO le ofrezcas avisarle cuando llegue: no hay publicación a la cual seguirle el rastro, así que sería una promesa que el sistema no puede cumplir.
   · ⛔ NO DERIVES SOLO PORQUE NO LO TENEMOS, y NO derives sin avisar. Primero ASESORALO BIEN sobre lo que preguntó (respondele con claridad, contale lo que sepas del producto, sacale las dudas). Recién si hace falta que lo siga una persona —porque el cliente muestra interés igual, insiste, quiere encargarlo o pide que le avisen— OFRECÉSELO y esperá su respuesta: "¿Querés que le pase tu consulta a un asesor para que lo vea?". ⛔ Llamás a "derivar_a_humano" SOLO cuando el cliente te dice que sí. (La única excepción sigue siendo cuando el cliente PIDE hablar con alguien: eso se deriva en el acto, sin preguntar.)
   · ⛔ NO LE PREGUNTES QUÉ TIPO O VARIANTE BUSCA PARA "CONFIRMARLE" (de goma, bandeja rígida, con logo…): la herramienta YA buscó todo lo de ese vehículo. Repreguntar lo deja esperando una respuesta que no va a cambiar. Decíselo derecho y seguí.
-  · ⚠️ LAS EXCEPCIONES SON SOLO DE CUBREASIENTOS, y SOLO si el cliente preguntó por cubreasientos: (a) los CUBREASIENTOS se hacen A MEDIDA para cualquier vehículo, así que aunque no haya publicación SÍ tenemos; (b) los CUBREASIENTOS para JMC y camiones JMC los tenemos para TODOS los modelos. En esos dos casos ofrecés y derivás, nunca decís que no.
+  · ⚠️ LA EXCEPCIÓN ES SOLO DE CUBREASIENTOS, y SOLO si el cliente preguntó por cubreasientos: los CUBREASIENTOS para JMC y camiones JMC los tenemos para TODOS los modelos. Ahí ofrecés y derivás, nunca decís que no. ⛔ La otra excepción que había acá —"los cubreasientos se hacen a medida para cualquier vehículo, así que aunque no haya publicación sí tenemos"— la SACÓ el dueño el 18 ago 2026: para cualquier OTRA marca, si el catálogo no trae nada de ese auto, NO ofrecés ninguna línea; juntás marca/modelo/año y derivás a un asesor sin prometer ni negar.
   · ⛔⛔ ESA EXCEPCIÓN NO ES UNA EXCUSA PARA CAMBIARLE EL TEMA (te está fallando): si el cliente preguntó por una ALFOMBRA de un JMC, le contestás por la alfombra y PUNTO. Que tengamos cubreasientos para todos los JMC NO te habilita a ofrecerle cubreasientos a alguien que vino por una alfombra. Una alfombra de un JMC que no tenemos es CASO 2 normal: se lo decís, no derivás y no le ofrecés otra cosa.
   · 🚗 EL "NO LO TRABAJAMOS" ES POR PRODUCTO, NO POR AUTO. Nunca le digas al cliente que no trabajamos SU VEHÍCULO: lo único que podés decirle es que ESE PRODUCTO puntual no lo tenemos para ese modelo, y ofrecerle lo otro que sí haya para su auto. Ej. correcto: "Alfombra para la Freedom no estamos trabajando, pero cubreasientos sí tenemos, ¿te muestro?".
   · 🚗 FIAT STRADA / FREEDOM / VOLCANO son EL MISMO vehículo con tres nombres, y esa familia SÍ la trabajamos. La herramienta ya busca los tres como Strada, así que la respuesta para una Freedom es EXACTAMENTE la que darías para una Strada. ⛔ PROHIBIDO tratarla como un vehículo desconocido ("no conozco ese modelo", "¿qué auto es?"), ⛔ prohibido decirle que no trabajamos su auto, y ⛔ prohibido nombrarle la Strada al cliente.
@@ -950,10 +950,12 @@ Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramie
 
 # CUBREASIENTOS — CUATRO LÍNEAS (MUY IMPORTANTE, conocelo bien)
 Hay CUATRO tipos de cubreasiento a medida: ECO CUERO (económico), CAPITONEADO (premium), TELA DE TAPICERÍA CAPITONEADA y CUERO AUTOMOTRIZ SPORT.
-⚠️ PRESENTACIÓN COMPLETA OBLIGATORIA (regla del dueño, pisa al "enviá solo lo que pide"): la PRIMERA vez que el cliente consulta por CUBREASIENTOS para su auto/modelo, en ESA MISMA respuesta mostrale TODAS las opciones con su material visual, llamando TODAS estas herramientas juntas: (1) "enviar_foto" con las opciones del catálogo para su modelo; (2) "mostrar_ecocuero" (las costuras del eco cuero); (3) "mostrar_capitoneado" (negro y rojo); (4) "mostrar_tela" (el video de la tela); (5) "mostrar_cuero_sport" (fotos + video del cuero Sport).
+⚠️ PRESENTACIÓN COMPLETA OBLIGATORIA (regla del dueño, pisa al "enviá solo lo que pide") — ⛔ SIEMPRE Y CUANDO TENGAMOS ALGO DE ESE AUTO (si el catálogo no trae nada suyo, ver la regla de más abajo: no se muestra nada y se deriva): la PRIMERA vez que el cliente consulta por CUBREASIENTOS para su auto/modelo, en ESA MISMA respuesta mostrale TODAS las opciones con su material visual, llamando TODAS estas herramientas juntas: (1) "enviar_foto" con las opciones del catálogo para su modelo; (2) "mostrar_ecocuero" (las costuras del eco cuero); (3) "mostrar_capitoneado" (negro y rojo); (4) "mostrar_tela" (el video de la tela); (5) "mostrar_cuero_sport" (fotos + video del cuero Sport).
   · EL TEXTO VA BIEN HUMANO (clave, que NO parezca un robot ni un catálogo): nada de listados con los 4 nombres y precios en fila. Escribí como un vendedor que abre el muestrario: 2 o 3 burbujas cortas y cálidas (separadas por línea en blanco), tipo: "Sí, para tu [modelo] tenemos varias opciones, te muestro todo así lo ves con tus ojos." (línea en blanco) "Te mandé fotos del eco cuero con sus costuras y del capitoneado premium, y ahí va también un video de la línea en tela y otro del cuero Sport, que es lo más top que trabajamos." (línea en blanco) "¿Cuál te gustó más?". Los precios NO los enumeres todos de una: mencioná al pasar el más accesible y que el resto depende de la línea y el modelo ("van desde $X según la línea"), aclarando corto que son sin colocación. Variá SIEMPRE las frases, que suene a charla.
   ⛔ La presentación completa se hace UNA vez POR MODELO: mientras se sigue hablando del MISMO auto, no reenvíes fotos ni videos ya mandados — seguí solo con la línea que eligió y dale el precio puntual. PERO si el cliente pregunta después por OTRO modelo/auto (o es la primera vez que pregunta por cubreasientos en la charla, aunque el historial venga de antes), repetí la presentación COMPLETA para ese modelo, con todas las herramientas de nuevo. En caso de duda, mostrá todo: el dueño prefiere que sobre y no que falte.
-  · VALE PARA CUALQUIER MODELO (regla, no la rompas): el capitoneado, la tela capitoneada y el cuero Sport se confeccionan A MEDIDA para TODOS los vehículos. Si "enviar_foto" no trae nada del catálogo para ese modelo, presentá IGUAL esas líneas con sus fotos y videos (solo el eco cuero económico depende del catálogo). ⛔ NUNCA le digas a un cliente que no tenemos cubreasientos para su modelo: siempre hay opción a medida, y si hace falta precisar el precio, juntá marca/modelo/año y derivá con "derivar_a_humano".
+  · ⛔⛔ SI DE SU AUTO NO TENEMOS NADA, NO SE OFRECE NADA (REGLA NUEVA del dueño, 18 ago 2026 — pisa lo que decía antes): si el cliente nombra su vehículo y "enviar_foto" NO trae nada del catálogo para ese modelo, ⛔ NO le presentes ninguna línea (ni capitoneado, ni tela, ni cuero Sport, ni eco cuero), ⛔ NO le mandes fotos ni videos de los materiales y ⛔ NO le des precio. Estábamos ofreciendo cubreasientos para autos que no tenemos. Lo que hacés es UNA sola cosa: pedirle los datos que falten (marca, modelo y año) y decirle que un asesor le confirma enseguida la disponibilidad y el precio para su auto, llamando en ese mismo turno a "derivar_a_humano" (motivo "otro").
+  · ⛔ Pero OJO con el otro extremo: tampoco le digas "no tenemos" ni "no se puede para tu auto". Vos no sabés si se puede: eso lo define el asesor. Es "dejame que un asesor te confirme", no un portazo.
+  · Las DOS excepciones que siguen firmes: los vehículos JMC (y sus camiones), que los tenemos para TODOS los modelos aunque no estén publicados; y la Fiat Strada/Freedom/Volcano, que son el mismo auto. Ahí sí ofrecés y derivás como siempre.
 🔁 FLUJO EN DOS PASOS (REGLA DEL DUEÑO, no la rompas — así no bombardeás al cliente):
   · PASO 1 — OPCIONES: mostrás las opciones con sus fotos y videos (la presentación de arriba, o el material de la línea puntual si preguntó por una) y cerrás preguntando cuál le gustó / cuál le interesa. ⛔ En este paso NO va NINGUNA descripción oficial completa: solo el material visual y un texto corto de vendedor.
   · PASO 2 — DESCRIPCIÓN: recién cuando el cliente ELIGE o confirma interés en UNA línea ("me gustó la de tela", "el sport", "contame más de ese"), le mandás la DESCRIPCIÓN OFICIAL completa de ESA línea (herramienta "descripcion_oficial") y seguís el flujo de esa línea (color/año o marca/modelo/año y derivación según corresponda).
@@ -1342,9 +1344,86 @@ const HERRAMIENTAS_DE_PRODUCTO = new Set([
 // Ninguna puede correr mientras no se sepa QUÉ línea eligió el cliente.
 const CIERRAN_VENTA = new Set(["crear_link_pago", "tomar_pedido", "confirmar_transferencia", "consultar_precio"]);
 
+// Herramientas con las que Max OFRECE una línea de cubreasientos: mandar el material
+// de una línea ES ofrecerla.
+const MUESTRAN_LINEAS = new Set([
+  "mostrar_capitoneado", "mostrar_ecocuero", "mostrar_tela", "mostrar_cuero_sport",
+  "descripcion_oficial",
+]);
+
+// ── No se ofrece lo que no tenemos para ESE auto ─────────────────────────────
+// Cambio de política de Pablo (18 ago 2026). Hasta hoy la regla era la contraria: las
+// líneas a medida (capitoneado, tela, Sport) se ofrecían para CUALQUIER vehículo
+// aunque no hubiera nada suyo en el catálogo. Resultado: Max le ofreció las tres
+// líneas a un Omoda E5 —que no tiene una sola publicación— y le cerró un pedido con
+// logo bordado (chat 59895203472). Vender lo que no hay sale caro.
+//
+// Ahora, si el cliente nombra un vehículo y de ese vehículo no hay NADA (ni activo ni
+// agotado), Max no ofrece ninguna línea: junta los datos y lo pasa a un asesor.
+//
+// Se aplica solo cuando el cliente NOMBRÓ un vehículo en su último mensaje. Si pregunta
+// en general ("¿qué colores tenés?"), no hay auto que verificar y el material se muestra
+// como siempre.
+//
+// DOS EXCEPCIONES, que el dueño confirmó y siguen vivas:
+//   · JMC (y sus camiones): la casa los tiene para TODOS los modelos, estén publicados o no.
+//   · Fiat Strada = Freedom = Volcano: es el mismo vehículo, y el catálogo lo encuentra
+//     solo (SINONIMOS_MODELO), así que ni llega acá.
+// ⚠️ La señal es lo que devolvió la BÚSQUEDA del catálogo en este turno, NO el texto
+// suelto del cliente. Buscar con la frase cruda ("me pasás precio de cubreasientos para
+// un HB20?") da cero y frenaba autos que SÍ tenemos: `buscarPrecio` espera una consulta
+// de producto, y el modelo del auto ya lo extrae el LLM cuando llama a "enviar_foto" o
+// "consultar_precio". Nos colgamos de ESE resultado, que es el bueno.
+export function sinCatalogoParaSuAuto(ctx = {}) {
+  const turno = ctx._turno || {};
+  if (turno.hayCatalogo) return null;   // algo de su auto apareció: se sigue como siempre
+  if (!turno.catalogoVacio) return null; // todavía no se buscó nada: no hay nada que afirmar
+  // JMC: excepción del dueño, se ofrece igual (y se deriva, como siempre).
+  const dicho = String(ctx._ultimoUsuario || "") + " " + String(ctx.textoCharla || "");
+  if (/\bjmc\b/i.test(dicho)) return null;
+  // Queda anotado para armarRespuesta: si el modelo no llama a derivar_a_humano, la
+  // derivación se registra igual. Con esta regla el cliente se va SIEMPRE con un asesor
+  // atrás, así que nadie puede quedar esperando una respuesta que el equipo nunca vio.
+  if (ctx._turno) ctx._turno.frenoLinea = true;
+  return {
+    ok: false,
+    mensaje:
+      "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) De ese vehículo no tenemos NADA armado. " +
+      "⛔ NO le ofrezcas ninguna línea de cubreasiento (ni capitoneado, ni tela, ni cuero Sport, ni eco cuero), NO le mandes fotos ni videos de los materiales y NO le des precio. " +
+      "⛔ Tampoco le digas que no tenemos ni que no se puede: eso lo define un asesor. " +
+      "⛔ Y NUNCA con palabras de adentro: nada de \"no lo tengo cargado\", \"no figura\", \"no está publicado\" ni \"no está en el catálogo\". " +
+      "Hacé UNA sola cosa, con una frase corta y cálida de vendedor, del estilo: \"Para tu [modelo] dejame que un asesor te confirme la disponibilidad y el precio exacto. ¿De qué año es?\". " +
+      "Pedile los datos que te falten (marca, modelo y año) y en ESTE mismo turno llamá a \"derivar_a_humano\" (motivo \"otro\") con el vehículo que consultó.",
+  };
+}
+
+// Las herramientas que MIRAN el catálogo con el modelo del auto ya extraído por el LLM.
+// Lo que devuelven es la única señal confiable de si tenemos algo de ESE vehículo.
+const BUSCAN_CATALOGO = new Set(["enviar_foto", "consultar_precio"]);
+
 // Exportada para las pruebas: así se puede verificar qué manda cada herramienta
 // (los pies de las fotos, por ejemplo) sin gastar una llamada a la IA.
 export async function ejecutarHerramienta(nombre, input, ctx = {}) {
+  const r = await _ejecutarHerramienta(nombre, input, ctx);
+  // Memoria del TURNO: qué contestó el catálogo sobre el auto del cliente. La leen las
+  // herramientas que ofrecen una línea (ver sinCatalogoParaSuAuto).
+  const turno = ctx._turno;
+  if (turno && BUSCAN_CATALOGO.has(nombre)) {
+    if (r?.ok === true || r?.encontrado === true || (r?.fotos || []).length) turno.hayCatalogo = true;
+    // Agotado NO cuenta como vacío: el producto existe y tiene su propio flujo.
+    else if (r?.encontrado === false && !r?.agotado) {
+      turno.catalogoVacio = true;
+      // ¿Lo que buscó era un CUBREASIENTO? Solo esos van al asesor cuando no hay nada:
+      // una alfombra o un accesorio que no trabajamos se contesta y punto (CASO 2), sin
+      // derivar y sin ofrecerle otra cosa.
+      const consulta = [input?.producto, input?.modelo, input?.detalle, ctx._ultimoUsuario].filter(Boolean).join(" ");
+      if (CATEGORIAS.cubreasiento.test(_normTxt(consulta))) turno.cubreasientoSinCatalogo = true;
+    }
+  }
+  return r;
+}
+
+async function _ejecutarHerramienta(nombre, input, ctx = {}) {
   // Estado del TURNO (se reinicia en cada mensaje del cliente, lo crea responder()).
   const turno = ctx._turno || (ctx._turno = { busco: false });
   if (HERRAMIENTAS_DE_PRODUCTO.has(nombre)) turno.busco = true;
@@ -1352,6 +1431,12 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   // se le mostraron: no se cotiza ni se cobra hasta saber cuál es. Es el caso de
   // Vanessa (7 ago 2026): eligió "ocre" con el capitoneado y el eco cuero los dos
   // sobre la mesa, Max supuso el barato y le cobró $3.279 de menos.
+  // ⛔ Mostrar el material de una línea ES ofrecerla: si de ese auto no hay nada, no se
+  // ofrece. Va antes que todo lo demás, incluso antes de las fotos.
+  if (MUESTRAN_LINEAS.has(nombre)) {
+    const vacio = sinCatalogoParaSuAuto(ctx);
+    if (vacio) return vacio;
+  }
   if (CIERRAN_VENTA.has(nombre)) {
     const amb = eleccionAmbigua(ctx._ultimoUsuario, ctx.textoCharla);
     if (amb.ambigua) {
@@ -1920,6 +2005,11 @@ export function limpiarJerga(texto) {
     .replace(/\bpublicad([oa])\b/gi, (m, g) => (g === g.toUpperCase() ? "DISPONIBLE" : "disponible"))
     .replace(/\bpublicad([oa])s\b/gi, (m, g) => (g === g.toUpperCase() ? "DISPONIBLES" : "disponibles"))
     .replace(/\s+en (?:el|la|nuestro|nuestra|mi) (?:cat[aá]logo|sistema|lista|base de datos)\b/gi, "")
+    // "cargado" es de adentro: al cliente no le dice nada que algo esté "cargado" o no.
+    // Salió con la regla del 18 ago 2026 ("si no está en el catálogo, no lo ofrezcas"),
+    // que le hizo contestar "para el Omoda E5 no tengo cargado nada". Se acota a la forma
+    // TENER + cargado, para no tocar frases legítimas (un cubreauto "cargado de agua").
+    .replace(/\b(teng[oa]|tenemos|ten[ée]s|tiene|hay)\s+(?:nada\s+)?cargad[oa]s?\b/gi, "$1")
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1");
 }
@@ -1928,8 +2018,15 @@ export function limpiarJerga(texto) {
 // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption.
 export function armarRespuesta(texto, acciones, ctx = {}) {
   const CON_FOTOS = new Set(["enviar_foto", "mostrar_capitoneado", "mostrar_ecocuero", "mostrar_cuero_sport"]);
+  // ⛔ Red de seguridad del "no se ofrece lo que no tenemos": el guard de las
+  // herramientas depende de que la búsqueda del catálogo haya corrido ANTES, y el orden
+  // lo elige el modelo. Si el turno terminó sin nada de ese auto, acá se caen igual las
+  // fotos y los videos de las líneas, hayan salido antes o después de la búsqueda.
+  const sinNadaDeSuAuto = !!(ctx._turno?.catalogoVacio && !ctx._turno?.hayCatalogo);
+  const ofreceLinea = (h) => h !== "enviar_foto";
   let fotosCrudas = acciones
     .filter((a) => CON_FOTOS.has(a.herramienta) && a.resultado?.ok)
+    .filter((a) => !(sinNadaDeSuAuto && ofreceLinea(a.herramienta)))
     .flatMap((a) => a.resultado.fotos || [])
     .filter((f) => f && f.img);
   // La MISMA foto puede venir de dos herramientas (las muestras de costura son los
@@ -1959,6 +2056,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   const _vistosV = new Set();
   const videosEnviar = acciones
     .filter((a) => (a.herramienta === "mostrar_tela" || a.herramienta === "mostrar_cuero_sport") && a.resultado?.ok)
+    .filter(() => !sinNadaDeSuAuto)
     .flatMap((a) => a.resultado.videos || [])
     .filter((v) => v && v.video)
     .filter((v) => { if (_vistosV.has(v.video)) return false; _vistosV.add(v.video); return true; })
@@ -2023,7 +2121,9 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
     ? `⚠️ Max estuvo por prometer ${invento} (NO lo hacemos). Se le borró esa frase y se le dijo al cliente que lo consulta un asesor. Revisá la conversación y respondele vos.`
     : inventado != null
       ? `⚠️ Max estuvo por dar un precio que NO salió del catálogo ($${inventado.toLocaleString("es-UY")}). Se le borró esa frase antes de que saliera. Pasale vos el precio correcto.`
-      : (prometioAsesor(limpio) ? "Max le dijo al cliente que lo consultaba con un asesor / que lo pasaba con una persona. Continuá vos la conversación." : null);
+      : (ctx._turno?.frenoLinea || (ctx._turno?.cubreasientoSinCatalogo && !ctx._turno?.hayCatalogo))
+        ? "Cliente que preguntó por CUBREASIENTOS para un vehículo del que NO tenemos nada en el catálogo. Max no le ofreció ninguna línea (regla del dueño del 18 ago 2026): confirmale vos la disponibilidad y el precio para su auto."
+        : (prometioAsesor(limpio) ? "Max le dijo al cliente que lo consultaba con un asesor / que lo pasaba con una persona. Continuá vos la conversación." : null);
   if (motivoDerivacion && !acciones.some((a) => a.herramienta === "derivar_a_humano")) {
     const input = { motivo: "otro", resumen: motivoDerivacion };
     acciones.push({ herramienta: "derivar_a_humano", input, resultado: registrarDerivacion(input) });
