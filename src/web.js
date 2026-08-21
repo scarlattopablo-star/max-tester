@@ -848,11 +848,17 @@ app.get("/api/sync-ahora", async (_req, res) => {
 // CORS abierto para que el sitio en Vercel lo pueda leer desde el navegador.
 // Cada producto: { n: nombre, p: precio venta, l: precio lista/tachado|null,
 //                  img: foto, usd: 1 si está en dólares, u: link a la publicación de ML }
-app.get("/api/catalogo", (_req, res) => {
+// Con ?agotados=1 se suman las publicaciones PAUSADAS (sin stock). Lo pidió el
+// catálogo mayorista de la web (20 ago 2026): ahí se muestra todo el surtido y cada
+// producto lleva su sello EN STOCK / AGOTADO, y este es el único lugar donde ese
+// dato ya viene sincronizado con Mercado Libre (cada 30 min).
+app.get("/api/catalogo", (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Cache-Control", "public, max-age=300"); // 5 min de caché en el borde
   const info = infoCatalogo();
-  res.json({ moneda: "UYU", actualizado: info.actualizado, fuente: info.fuente, cantidad: info.cantidad, productos: productos() });
+  const cuerpo = { moneda: "UYU", actualizado: info.actualizado, fuente: info.fuente, cantidad: info.cantidad, productos: productos() };
+  if (String(req.query.agotados || "") === "1") cuerpo.agotados = agotados();
+  res.json(cuerpo);
 });
 
 // ── Aprendizaje de Max: ver qué aprendió y forzar un análisis ──────────────
