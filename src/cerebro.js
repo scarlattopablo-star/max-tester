@@ -2269,6 +2269,19 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
       .join(" ")
       .trim();
   }
+  // PREVENTA: frenar la derivacion no alcanzaba. Probado contra produccion el 23
+  // ago 2026: la derivacion NO se registraba (el equipo no recibia nada) pero Max
+  // igual cerraba el mensaje con "dejame consultarlo con un asesor, enseguida se
+  // comunican con vos". O sea, le prometia al cliente un llamado que no iba a
+  // existir. El producto esta EN CAMINO y Max lo resuelve solo, asi que esa oracion
+  // se cae por codigo, igual que la del cambio de categoria de mas arriba.
+  // ⚠️ Por ORACION, no por parrafo: para acá el mensaje ya viene colapsado en uno
+  // solo y filtrar el parrafo borraba la respuesta entera.
+  // Si el cliente PIDIO hablar con una persona, la derivacion quedo pendiente y no
+  // se toca nada: ahi el asesor sí corresponde.
+  if (ctx._turno?.preventa && !ctx._turno?.derivacionPendiente && limpio) {
+    limpio = _sacarOraciones(limpio, /\b(asesor\w*|vendedor\w*|compa[ñn]er\w*)\b|se comunican? con (vos|usted|ustedes)/i);
+  }
   const textoFinal = [limpio, ...oficiales, avisoColocacion, avisoEnvio, avisoAgotado].filter(Boolean).join("\n\n")
     || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
   // Acá se resuelve la derivación que quedó pendiente, con el mensaje final a la
