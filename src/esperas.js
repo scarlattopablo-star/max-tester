@@ -15,15 +15,57 @@
 import "./env.js";
 import { neon } from "@neondatabase/serverless";
 import { aWaId, enviarPlantillaMeta, enviarTextoMeta, metaConfigurado } from "./meta_api.js";
-import { estaDisponible } from "./catalogo_vivo.js";
+import { estaDisponible, productos } from "./catalogo_vivo.js";
 
 // Cuánto vive una espera. Pasado ese plazo se vence sola y NO se avisa: si el
 // producto tarda medio año en volver, el cliente ya compró en otro lado y el
 // mensaje cae mal.
 const DIAS_VIGENCIA = 90;
 
+// Las PREVENTAS viven mas: se anota gente meses antes del arribo y la fecha de
+// importacion se corre sola. Con los 90 dias de una espera comun, quien se anota
+// hoy (23 ago 2026) vence el 21 de noviembre y el arribo estimado es el 15: una
+// semana de atraso y el aviso NO sale. Ese margen es demasiado poco.
+const DIAS_VIGENCIA_PREVENTA = 150;
+
 // Plantilla aprobada en Meta. PLANTILLA_STOCK="" la desactiva (queda solo el texto libre).
 const PLANTILLA = process.env.PLANTILLA_STOCK ?? "volvio_stock_max";
+
+// La preventa necesita SU plantilla: "volvio a estar disponible" es falso para un
+// producto que nunca estuvo a la venta antes.
+const PLANTILLA_PREVENTA = process.env.PLANTILLA_PREVENTA ?? "llego_preventa_max";
+
+// ---------------------------------------------------------------------------
+// PREVENTAS
+// Producto que TODAVIA no existe como publicacion en Mercado Libre. La espera se
+// guarda en la misma tabla contra un id sintetico `PREVENTA:<clave>`, asi no hay
+// migracion ni una segunda lista para mantener.
+//
+// El disparador es otro: una espera comun pregunta "se despauso tal publicacion?";
+// una preventa pregunta "ya aparecio una publicacion ACTIVA que sea esto?".
+// ---------------------------------------------------------------------------
+export const PREVENTAS = {
+  tesla: {
+    // El titulo entra en el aviso: tiene que cerrar la frase "Llegaron ___".
+    titulo: "las alfombras 3D para Tesla",
+    // Pide las DOS palabras a proposito. Con solo /tesla/ cualquier publicacion
+    // futura de la marca (un cubreasiento, un cubrevolante) dispararia el aviso y
+    // le escribiriamos a gente que espera otra cosa.
+    patron: (n) => /tesla/i.test(n) && /alfombra/i.test(n),
+  },
+};
+
+const PREF = "PREVENTA:";
+export const esPreventa = (id) => String(id || "").startsWith(PREF);
+const preventaDe = (id) => PREVENTAS[String(id || "").slice(PREF.length)] || null;
+
+// Ya entro el stock? Se mira el catalogo ACTIVO (lo que se puede comprar), no la
+// lista de agotados: una publicacion creada pero pausada todavia no es llegada.
+function preventaLlego(itemId) {
+  const pv = preventaDe(itemId);
+  if (!pv) return false;
+  return productos().some((p) => pv.patron(String(p.n || "")));
+}
 
 const usaDB = !!process.env.DATABASE_URL;
 let _sql = null;
@@ -44,6 +86,10 @@ async function asegurarTabla() {
     avisada_en timestamptz,
     primary key (telefono, item_id)
   )`;
+  // El nombre que dio el cliente al anotarse. Va aca y no solo en `clientes`
+  // porque ahi el nombre solo se completa si estaba vacio: si la ficha ya traia
+  // otro, el aviso saldria con el equivocado.
+  await sql`alter table esperas add column if not exists nombre text default ''`;
   listo = true;
 }
 
@@ -55,7 +101,7 @@ export function hayEsperas() {
 
 // Anota (o revive) la espera de un cliente por una publicación concreta de ML.
 // Si el mismo cliente ya se había anotado por lo mismo, no se duplica: se reabre.
-export async function anotarEspera({ telefono, itemId, titulo = "" }) {
+export async function anotarEspera({ telefono, itemId, titulo = "", nombre = "" }) {
   if (!usaDB) return { ok: false, motivo: "sin_base" };
   const tel = aWaId(telefono);
   const item = String(itemId || "").trim();
@@ -63,13 +109,14 @@ export async function anotarEspera({ telefono, itemId, titulo = "" }) {
   try {
     await asegurarTabla();
     await sql`
-      insert into esperas (telefono, item_id, titulo, estado, creada)
-      values (${tel}, ${item}, ${titulo}, 'pendiente', now())
+      insert into esperas (telefono, item_id, titulo, nombre, estado, creada)
+      values (${tel}, ${item}, ${titulo}, ${nombre}, 'pendiente', now())
       on conflict (telefono, item_id) do update set
         estado = 'pendiente',
         creada = now(),
         avisada_en = null,
-        titulo = case when excluded.titulo <> '' then excluded.titulo else esperas.titulo end
+        titulo = case when excluded.titulo <> '' then excluded.titulo else esperas.titulo end,
+        nombre = case when excluded.nombre <> '' then excluded.nombre else esperas.nombre end
     `;
     return { ok: true };
   } catch (e) {
@@ -78,12 +125,20 @@ export async function anotarEspera({ telefono, itemId, titulo = "" }) {
   }
 }
 
+// Anota a alguien en una PREVENTA. El telefono puede ser distinto al del chat:
+// hay gente que escribe desde la web o desde un numero que despues no usa.
+export async function anotarPreventa({ telefono, clave = "tesla", nombre = "" }) {
+  const pv = PREVENTAS[clave];
+  if (!pv) return { ok: false, motivo: "preventa_desconocida" };
+  return anotarEspera({ telefono, itemId: PREF + clave, titulo: pv.titulo, nombre });
+}
+
 // Esperas vivas (para el repaso y para diagnosticar).
 export async function esperasPendientes() {
   if (!usaDB) return [];
   try {
     await asegurarTabla();
-    return await sql`select telefono, item_id, titulo, creada from esperas where estado = 'pendiente' order by creada asc`;
+    return await sql`select telefono, item_id, titulo, nombre, creada from esperas where estado = 'pendiente' order by creada asc`;
   } catch (e) {
     console.error("⚠ No pude leer las esperas:", e.message);
     return [];
@@ -96,7 +151,11 @@ async function vencerViejas() {
   try {
     const filas = await sql`
       update esperas set estado = 'vencida'
-      where estado = 'pendiente' and creada < now() - (${DIAS_VIGENCIA} * interval '1 day')
+      where estado = 'pendiente' and (
+        (item_id not like ${PREF + "%"} and creada < now() - (${DIAS_VIGENCIA} * interval '1 day'))
+        or
+        (item_id like ${PREF + "%"} and creada < now() - (${DIAS_VIGENCIA_PREVENTA} * interval '1 day'))
+      )
       returning telefono
     `;
     return filas.length;
@@ -108,6 +167,12 @@ async function vencerViejas() {
 
 // Texto del aviso. Se usa como cuerpo del mensaje libre y como referencia de lo que
 // dice la plantilla (que en Meta lleva el mismo contenido con {{1}} y {{2}}).
+// Mismo texto que la plantilla `llego_preventa_max`, para la caida a texto libre.
+function textoAvisoPreventa(nombre, titulo) {
+  const hola = nombre ? `¡Hola ${nombre}!` : "¡Hola!";
+  return `${hola} Llegaron ${titulo} que estabas esperando en La Casa del Cubreasiento. Te habías anotado en la preventa y te las guardamos. ¿Querés que te pase precio y coordinemos la entrega?`;
+}
+
 function textoAviso(nombre, titulo) {
   const hola = nombre ? `¡Hola ${nombre}!` : "¡Hola!";
   return `${hola} Volvió a estar disponible ${titulo} en La Casa del Cubreasiento. Nos habías pedido que te avisáramos cuando llegara. ¿Seguís interesado/a? Escribinos y te paso precio y detalles.`;
@@ -115,19 +180,21 @@ function textoAviso(nombre, titulo) {
 
 // Manda el aviso a UN cliente. Primero por plantilla (única forma segura fuera de las
 // 24 h); si falla, texto libre como último intento. Devuelve true solo si salió.
-async function avisarA(telefono, nombre, titulo) {
-  if (PLANTILLA) {
+async function avisarA(telefono, nombre, titulo, preventa = false) {
+  const plantilla = preventa ? PLANTILLA_PREVENTA : PLANTILLA;
+  const cuerpo = preventa ? textoAvisoPreventa : textoAviso;
+  if (plantilla) {
     try {
-      await enviarPlantillaMeta(telefono, PLANTILLA, "es", [
+      await enviarPlantillaMeta(telefono, plantilla, "es", [
         { type: "body", parameters: [{ type: "text", text: nombre || "cliente" }, { type: "text", text: titulo }] },
       ]);
       return true;
     } catch (e) {
-      console.log(`⚠ aviso de stock por plantilla "${PLANTILLA}" falló (${e.message}) — pruebo texto libre`);
+      console.log(`⚠ aviso de stock por plantilla "${plantilla}" falló (${e.message}) — pruebo texto libre`);
     }
   }
   try {
-    await enviarTextoMeta(telefono, textoAviso(nombre, titulo));
+    await enviarTextoMeta(telefono, cuerpo(nombre, titulo));
     return true;
   } catch (e) {
     // Fuera de la ventana de 24 h Meta lo rechaza con code 131047: es lo esperable
@@ -163,7 +230,10 @@ export async function revisarReposiciones() {
   const pendientes = await esperasPendientes();
   if (!pendientes.length) return { revisadas: 0, avisados: 0, vencidas };
 
-  const volvieron = pendientes.filter((e) => estaDisponible(e.item_id));
+  // Cada tipo de espera pregunta lo suyo: la comun si la publicacion volvio, la
+  // preventa si la publicacion aparecio por primera vez.
+  const volvieron = pendientes.filter((e) =>
+    esPreventa(e.item_id) ? preventaLlego(e.item_id) : estaDisponible(e.item_id));
   if (!volvieron.length) return { revisadas: pendientes.length, avisados: 0, vencidas };
   if (!metaConfigurado()) {
     console.log(`ℹ ${volvieron.length} producto(s) esperado(s) volvieron, pero WhatsApp no está configurado: quedan pendientes.`);
@@ -173,14 +243,16 @@ export async function revisarReposiciones() {
   let avisados = 0;
   let dadosDeBaja = 0;
   for (const esp of volvieron) {
-    const { nombre, optIn } = await datosCliente(esp.telefono);
+    const { nombre: nomFicha, optIn } = await datosCliente(esp.telefono);
+    // Gana el nombre que dio al anotarse: es el que dijo para ESTO.
+    const nombre = esp.nombre || nomFicha;
     if (!optIn) {
       // Pidió la baja: cerramos la espera sin escribirle.
       await sql`update esperas set estado = 'vencida' where telefono = ${esp.telefono} and item_id = ${esp.item_id}`;
       dadosDeBaja++;
       continue;
     }
-    const salio = await avisarA(esp.telefono, nombre, esp.titulo || "el producto que esperabas");
+    const salio = await avisarA(esp.telefono, nombre, esp.titulo || "el producto que esperabas", esPreventa(esp.item_id));
     if (salio) {
       await sql`update esperas set estado = 'avisada', avisada_en = now() where telefono = ${esp.telefono} and item_id = ${esp.item_id}`;
       avisados++;

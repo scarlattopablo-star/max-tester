@@ -10,7 +10,8 @@ import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
 import { productos as productosML, agotados as agotadosML, agotadoPorId } from "./catalogo_vivo.js";
-import { anotarEspera, hayEsperas } from "./esperas.js";
+import { anotarEspera, anotarPreventa, hayEsperas } from "./esperas.js";
+import { registrarCliente } from "./clientes.js";
 import { leccionesActuales } from "./aprendizaje.js";
 import { crearLinkPago, hayMercadoPago } from "./pagos.js";
 import { registrarTransferencia } from "./transferencias.js";
@@ -687,6 +688,20 @@ export function buscarAgotado(consulta) {
 //   · la publicación EXISTE pero está caída → se agotó, ofrecemos avisarle;
 //   · no existe → no lo trabajamos (salvo cubreasientos y JMC, que siguen derivando).
 export function sinStockOInexistente(consulta) {
+  // PREVENTA TESLA. Las alfombras estan en camino y todavia NO tienen publicacion
+  // en Mercado Libre, asi que sin esta salida caerian en el "no tenemos eso para
+  // ese vehiculo" de mas abajo y perderiamos al interesado.
+  // Solo aplica a ALFOMBRAS (o a una consulta sin categoria): para un
+  // cubreasiento de Tesla sigue valiendo la regla de siempre.
+  const catTesla = nombreCategoria(consulta);
+  if (/tesla/i.test(consulta) && (!catTesla || catTesla === "alfombra")) {
+    return {
+      encontrado: false,
+      agotado: false,
+      preventa: "tesla",
+      mensaje: "PREVENTA: las alfombras bandeja rigidas 3D a medida para Tesla Model 3 y Model Y las estamos IMPORTANDO. Arribo ESTIMADO: 15 de noviembre. \u26d4 NO digas que no tenemos y NO derives a un asesor. Contale que las estamos trayendo, que llegan a mediados de noviembre y ofrecele anotarlo para avisarle apenas entren. \u26d4 SIN PRECIO (todavia no esta definido). \u26d4 NO prometas fecha de entrega: el 15 es el arribo ESTIMADO del embarque. Si acepta, pedile en UN solo mensaje corto el NOMBRE y si le escribimos a este mismo numero o a otro, y recien con las dos respuestas llama a \"anotar_preventa\".",
+    };
+  }
   const ago = buscarAgotado(consulta);
   if (ago) {
     return {
@@ -1061,6 +1076,14 @@ ${resumenCatalogo()}
 - Cuando el cliente quiere VER ejemplos/opciones de un producto, o cuando le venga bien verlo con calma, usá la herramienta "link_web" (pasale producto + modelo) y compartile el link diciéndole algo como: "Acá lo podés ver con fotos y, si querés, comprarlo directo desde la web 👉 <link>". Igual podés mandar alguna foto por acá con "enviar_foto" si la pide; las dos cosas se complementan.
 - ⛔ NUNCA inventes la URL: usá SIEMPRE la que devuelve "link_web".
 
+# PREVENTA: alfombras 3D para TESLA (Model 3 y Model Y)
+- Estamos IMPORTANDO alfombras bandeja rigidas 3D a medida para Tesla Model 3 y Model Y: juego de piso (3 piezas) y alfombra de baul. ARRIBO ESTIMADO: 15 de noviembre. Todavia NO estan en el catalogo ni se pueden comprar.
+- Si preguntan por alfombras para un Tesla: contales que las estamos trayendo, que llegan a mediados de noviembre y ofreceles anotarse para que les avisemos apenas entren. \u26d4 NUNCA digas "no tenemos" ni derives a un asesor por esto.
+- \u26d4 SIN PRECIO: todavia no esta definido. Si lo piden, deciles que se los pasamos apenas lleguen.
+- \u26d4 NO prometas fecha de ENTREGA. El 15 de noviembre es el arribo ESTIMADO del embarque y se dice asi: "estimado", "a mediados de noviembre".
+- Para anotarlo necesitas DOS cosas y las pedis en UN SOLO mensaje corto: (1) su NOMBRE y (2) si le escribimos a este mismo numero o a otro. Recien con las dos respuestas llamas a "anotar_preventa". El aviso lo manda el sistema solo cuando entra el stock: vos no tenes que hacer nada mas.
+- La preventa es SOLO de alfombras. Si preguntan por cubreasientos u otra cosa para el Tesla, vale la regla de siempre.
+
 # Turnos y citas (REGLA ABSOLUTA: Max NO agenda — la cita la coordina y confirma el EQUIPO)
 - ⛔⛔ VOS NO AGENDÁS NI CONFIRMÁS NADA. No tenés la agenda ni el poder de dar/confirmar una hora. PROHIBIDO decirle al cliente cosas como "su turno quedó confirmado", "lo esperamos a las X", "agendado para el día Y" o asegurarle CUALQUIER día u hora. Si el cliente te pregunta "¿a qué hora voy?" o "¿me confirmás el turno?", la respuesta es que el EQUIPO se lo confirma, NO vos.
 - ⚠️ CUÁNDO HACE FALTA TURNO Y CUÁNDO NO (leelo antes de derivar): el turno es SOLO para la COLOCACIÓN o la MEDICIÓN de cubreasientos capitoneado, de tela o cuero Sport. Para RETIRAR un producto —alfombras, cubre volantes, cubreautos, accesorios o el cubreasiento eco cuero económico— NO hace falta ningún turno: invitalo a pasar por el local cuando quiera dentro del horario (${NEGOCIO.horario}) y ⛔ NO llames a "solicitar_turno".
@@ -1116,6 +1139,21 @@ const TOOLS = [
           producto_id: { type: "string", description: "El producto_id EXACTO que devolvió la herramienta de búsqueda. No lo inventes ni lo modifiques." },
         },
         required: ["producto_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "anotar_preventa",
+      description: "Anota al cliente en la lista de espera de la PREVENTA de alfombras 3D para Tesla (Model 3 y Model Y). Usar SOLO despues de que el cliente aceptó que le avisemos Y te dio el NOMBRE y te dijo a que numero le escribimos. El aviso lo manda el sistema solo cuando el stock entra a Mercado Libre.",
+      parameters: {
+        type: "object",
+        properties: {
+          nombre: { type: "string", description: "Nombre del cliente, tal cual lo dijo. Obligatorio: preguntaselo ANTES de llamar a esta herramienta." },
+          telefono: { type: "string", description: "SOLO si pidio que le escribamos a OTRO numero. Si dijo que le escribamos al mismo desde el que habla, NO mandes este campo." },
+        },
+        required: ["nombre"],
       },
     },
   },
@@ -1556,6 +1594,27 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const r = await anotarEspera({ telefono: tel, itemId: prod.id, titulo: prod.n });
       if (!r.ok) return { ok: false, mensaje: "No pude anotar el aviso. NO se lo prometas al cliente: derivá con derivar_a_humano." };
       return { ok: true, producto: prod.n, instruccion: "Ya quedó anotado. Confirmáselo corto y cálido (ej: 'Listo, quedás anotado: te escribo apenas entre'). NO le prometas fecha de llegada." };
+    }
+    if (nombre === "anotar_preventa") {
+      if (!hayEsperas()) return { ok: false, mensaje: "No puedo anotarlo ahora. \u26d4 NO le prometas el aviso: derivá con derivar_a_humano (motivo otro) contando que quiere las alfombras 3D para Tesla." };
+      const nom = String(input.nombre || "").trim();
+      if (!nom) return { ok: false, mensaje: "Falta el NOMBRE. Preguntáselo (junto con a qué número le escribimos) antes de anotarlo." };
+      const telChat = ctx.contacto?.tel || String(ctx.chatId || "").split("@")[0];
+      // Si dio otro número, se usa ese. Menos de 8 dígitos no es un teléfono:
+      // anotarlo ahí sería prometer un aviso que nunca va a llegar.
+      const otro = String(input.telefono || "").replace(/\D/g, "");
+      const tel = otro.length >= 8 ? otro : telChat;
+      const r = await anotarPreventa({ telefono: tel, clave: "tesla", nombre: nom });
+      if (!r.ok) return { ok: false, mensaje: "No pude anotarlo. \u26d4 NO se lo prometas al cliente: derivá con derivar_a_humano." };
+      // El nombre queda también en la ficha del cliente, que es de donde salen los
+      // saludos del resto de los avisos.
+      await registrarCliente({ telefono: telChat, nombre: nom });
+      return {
+        ok: true,
+        nombre: nom,
+        telefono_avisado: tel,
+        instruccion: `Ya quedó anotado ${nom} y le vamos a avisar al ${tel} apenas entren. Confirmáselo corto y cálido (ej: "Listo ${nom}, quedás anotado: te escribo apenas lleguen"). \u26d4 NO le prometas fecha de entrega ni le des precio.`,
+      };
     }
     if (nombre === "enviar_foto") {
       const consulta = conVarianteDelCliente(input.producto || input.modelo || "", ctx._ultimoUsuario);
