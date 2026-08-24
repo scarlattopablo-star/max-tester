@@ -2131,7 +2131,11 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // por Tesla y recibio dos alfombras de HB20 a $ 2.900. Va acá, al final del turno,
   // porque el guard de las herramientas depende de que Max escriba bien la busqueda
   // y eso no se puede garantizar.
-  const preventaAbierta = !!ctx._turno?.preventa;
+  // ⚠️ Se pregunta TAMBIEN por la frase del cliente y no solo por la marca del
+  // turno: esa marca la pone el ejecutor de herramientas, y Max contesta la
+  // preventa de memoria (la tiene en el prompt) sin llamar ninguna. En esos turnos
+  // no se enteraba nadie y volvia a colarse el "lo consulto con un asesor".
+  const preventaAbierta = !!(ctx._turno?.preventa || preventaTesla("", ctx._ultimoUsuario || ""));
   const ofreceLinea = (h) => h !== "enviar_foto";
   let fotosCrudas = (preventaAbierta ? [] : acciones)
     .filter((a) => CON_FOTOS.has(a.herramienta) && a.resultado?.ok)
@@ -2298,7 +2302,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // solo y filtrar el parrafo borraba la respuesta entera.
   // Si el cliente PIDIO hablar con una persona, la derivacion quedo pendiente y no
   // se toca nada: ahi el asesor sí corresponde.
-  if (ctx._turno?.preventa && !ctx._turno?.derivacionPendiente && limpio) {
+  if (preventaAbierta && !ctx._turno?.derivacionPendiente && limpio) {
     limpio = _sacarOraciones(limpio, /\b(asesor\w*|vendedor\w*|compa[ñn]er\w*)\b|se comunican? con (vos|usted|ustedes)/i);
   }
   const textoFinal = [limpio, ...oficiales, avisoColocacion, avisoEnvio, avisoAgotado].filter(Boolean).join("\n\n")
