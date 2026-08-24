@@ -698,9 +698,16 @@ export function buscarAgotado(consulta) {
 //
 // Solo aplica a ALFOMBRAS (o a una consulta sin categoria): para un cubreasiento de
 // Tesla sigue valiendo la regla de siempre.
-export function preventaTesla(consulta) {
-  const cat = nombreCategoria(consulta);
-  if (!/tesla/i.test(consulta) || (cat && cat !== "alfombra")) return null;
+// ⚠️ Mira la consulta que armo Max Y la frase del CLIENTE. Mirar solo la consulta
+// no alcanzo: el 24 ago 2026 un cliente pregunto "tenes alfombras para Tesla" y Max
+// —convencido de que el auto era un HB20— busco "alfombra baul HB20". La palabra
+// "Tesla" nunca llego al freno y le mando las alfombras del HB20 CON PRECIO. El
+// freno no puede depender de que el modelo escriba bien la busqueda.
+// ⚠️ La frase del cliente se usa SOLO para este test de texto. NUNCA se le pasa a
+// buscarPrecio(), que espera una consulta y no una oracion (7 ago 2026: frenaba al HB20).
+export function preventaTesla(consulta, dijoElCliente = "") {
+  const cat = nombreCategoria(consulta) || nombreCategoria(dijoElCliente);
+  if (!/tesla/i.test(`${consulta} ${dijoElCliente}`) || (cat && cat !== "alfombra")) return null;
   return {
     encontrado: false,
     agotado: false,
@@ -709,8 +716,8 @@ export function preventaTesla(consulta) {
   };
 }
 
-export function sinStockOInexistente(consulta) {
-  const pv = preventaTesla(consulta);
+export function sinStockOInexistente(consulta, dijoElCliente = "") {
+  const pv = preventaTesla(consulta, dijoElCliente);
   if (pv) return pv;
   const ago = buscarAgotado(consulta);
   if (ago) {
@@ -1476,6 +1483,11 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
 async function _ejecutarHerramienta(nombre, input, ctx = {}) {
   // Estado del TURNO (se reinicia en cada mensaje del cliente, lo crea responder()).
   const turno = ctx._turno || (ctx._turno = { busco: false });
+  // Se marca por lo que dijo el CLIENTE, no por lo que haga el modelo: si Max
+  // contesta la preventa de memoria (la tiene en el prompt) y no llama ninguna
+  // herramienta, igual tienen que valer el freno de la derivacion y el filtro
+  // del texto.
+  if (!turno.preventa && preventaTesla("", ctx._ultimoUsuario)) turno.preventa = "tesla";
   if (HERRAMIENTAS_DE_PRODUCTO.has(nombre)) turno.busco = true;
   // ⛔ El cliente eligió por COLOR y ese color existe en más de una línea de las que
   // se le mostraron: no se cotiza ni se cobra hasta saber cuál es. Es el caso de
@@ -1584,7 +1596,7 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const consulta = conVarianteDelCliente(input.modelo || input.producto || "", ctx._ultimoUsuario);
       turno.busco = true;
       // Va ANTES de buscar: ver el comentario de preventaTesla().
-      const pvPrecio = preventaTesla(consulta);
+      const pvPrecio = preventaTesla(consulta, ctx._ultimoUsuario);
       if (pvPrecio) return pvPrecio;
       const encontrados = buscarPrecio(consulta);
       if (!encontrados.length) return { ...sinStockOInexistente(consulta) };
@@ -1635,7 +1647,7 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const consulta = conVarianteDelCliente(input.producto || input.modelo || "", ctx._ultimoUsuario);
       turno.busco = true;
       // Mandar una foto ES cotizar (el pie lleva el precio), asi que el mismo freno.
-      const pvFoto = preventaTesla(consulta);
+      const pvFoto = preventaTesla(consulta, ctx._ultimoUsuario);
       if (pvFoto) return { ok: false, ...pvFoto };
       const hallados = buscarPrecio(consulta);
       // Solo cuando NO hay nada del producto miramos si está agotado o si no lo
@@ -2113,8 +2125,15 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // lo elige el modelo. Si el turno terminó sin nada de ese auto, acá se caen igual las
   // fotos y los videos de las líneas, hayan salido antes o después de la búsqueda.
   const sinNadaDeSuAuto = !!(ctx._turno?.catalogoVacio && !ctx._turno?.hayCatalogo);
+  // ⛔ RED DE SEGURIDAD DE LA PREVENTA. Si el cliente pregunto por su Tesla, NO
+  // pueden salir fotos de las alfombras de otro auto —van con el precio en el pie,
+  // asi que es cotizarle un producto que no le sirve. Paso el 24 ago 2026: pregunto
+  // por Tesla y recibio dos alfombras de HB20 a $ 2.900. Va acá, al final del turno,
+  // porque el guard de las herramientas depende de que Max escriba bien la busqueda
+  // y eso no se puede garantizar.
+  const preventaAbierta = !!ctx._turno?.preventa;
   const ofreceLinea = (h) => h !== "enviar_foto";
-  let fotosCrudas = acciones
+  let fotosCrudas = (preventaAbierta ? [] : acciones)
     .filter((a) => CON_FOTOS.has(a.herramienta) && a.resultado?.ok)
     .filter((a) => !(sinNadaDeSuAuto && ofreceLinea(a.herramienta)))
     .flatMap((a) => a.resultado.fotos || [])
