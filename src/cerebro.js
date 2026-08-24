@@ -687,21 +687,31 @@ export function buscarAgotado(consulta) {
 // en una derivación):
 //   · la publicación EXISTE pero está caída → se agotó, ofrecemos avisarle;
 //   · no existe → no lo trabajamos (salvo cubreasientos y JMC, que siguen derivando).
+// PREVENTA TESLA. Las alfombras estan en camino y todavia NO tienen publicacion en
+// Mercado Libre.
+//
+// ⚠️ Se consulta ANTES de buscar en el catalogo, no despues. Buscar "alfombra tesla
+// model y" DEVUELVE resultados —las alfombras de otros autos, que matchean por la
+// palabra "alfombra"—, asi que el camino de "no encontre nada" nunca se alcanza: sin
+// este chequeo previo Max le pregunta al cliente que auto tiene (ya se lo dijo) o,
+// peor, le cotiza la alfombra de otro modelo.
+//
+// Solo aplica a ALFOMBRAS (o a una consulta sin categoria): para un cubreasiento de
+// Tesla sigue valiendo la regla de siempre.
+export function preventaTesla(consulta) {
+  const cat = nombreCategoria(consulta);
+  if (!/tesla/i.test(consulta) || (cat && cat !== "alfombra")) return null;
+  return {
+    encontrado: false,
+    agotado: false,
+    preventa: "tesla",
+    mensaje: "PREVENTA: las alfombras bandeja rigidas 3D a medida para Tesla Model 3 y Model Y las estamos IMPORTANDO. Arribo ESTIMADO: 15 de noviembre. \u26d4 NO digas que no tenemos y NO derives a un asesor. Contale que las estamos trayendo, que llegan a mediados de noviembre y ofrecele anotarlo para avisarle apenas entren. \u26d4 SIN PRECIO (todavia no esta definido). \u26d4 NO prometas fecha de entrega: el 15 es el arribo ESTIMADO del embarque. Si acepta, pedile en UN solo mensaje corto el NOMBRE y si le escribimos a este mismo numero o a otro, y recien con las dos respuestas llama a \"anotar_preventa\".",
+  };
+}
+
 export function sinStockOInexistente(consulta) {
-  // PREVENTA TESLA. Las alfombras estan en camino y todavia NO tienen publicacion
-  // en Mercado Libre, asi que sin esta salida caerian en el "no tenemos eso para
-  // ese vehiculo" de mas abajo y perderiamos al interesado.
-  // Solo aplica a ALFOMBRAS (o a una consulta sin categoria): para un
-  // cubreasiento de Tesla sigue valiendo la regla de siempre.
-  const catTesla = nombreCategoria(consulta);
-  if (/tesla/i.test(consulta) && (!catTesla || catTesla === "alfombra")) {
-    return {
-      encontrado: false,
-      agotado: false,
-      preventa: "tesla",
-      mensaje: "PREVENTA: las alfombras bandeja rigidas 3D a medida para Tesla Model 3 y Model Y las estamos IMPORTANDO. Arribo ESTIMADO: 15 de noviembre. \u26d4 NO digas que no tenemos y NO derives a un asesor. Contale que las estamos trayendo, que llegan a mediados de noviembre y ofrecele anotarlo para avisarle apenas entren. \u26d4 SIN PRECIO (todavia no esta definido). \u26d4 NO prometas fecha de entrega: el 15 es el arribo ESTIMADO del embarque. Si acepta, pedile en UN solo mensaje corto el NOMBRE y si le escribimos a este mismo numero o a otro, y recien con las dos respuestas llama a \"anotar_preventa\".",
-    };
-  }
+  const pv = preventaTesla(consulta);
+  if (pv) return pv;
   const ago = buscarAgotado(consulta);
   if (ago) {
     return {
@@ -1446,6 +1456,8 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   // Memoria del TURNO: qué contestó el catálogo sobre el auto del cliente. La leen las
   // herramientas que ofrecen una línea (ver sinCatalogoParaSuAuto).
   const turno = ctx._turno;
+  // Se abrio una PREVENTA en este turno. Lo lee el guard de derivar_a_humano.
+  if (turno && r?.preventa) turno.preventa = r.preventa;
   if (turno && BUSCAN_CATALOGO.has(nombre)) {
     if (r?.ok === true || r?.encontrado === true || (r?.fotos || []).length) turno.hayCatalogo = true;
     // Agotado NO cuenta como vacío: el producto existe y tiene su propio flujo.
@@ -1571,6 +1583,9 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
     if (nombre === "consultar_precio") {
       const consulta = conVarianteDelCliente(input.modelo || input.producto || "", ctx._ultimoUsuario);
       turno.busco = true;
+      // Va ANTES de buscar: ver el comentario de preventaTesla().
+      const pvPrecio = preventaTesla(consulta);
+      if (pvPrecio) return pvPrecio;
       const encontrados = buscarPrecio(consulta);
       if (!encontrados.length) return { ...sinStockOInexistente(consulta) };
       // Si no sabemos QUÉ AUTO tiene, lo que encontramos es de un modelo cualquiera:
@@ -1619,6 +1634,9 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
     if (nombre === "enviar_foto") {
       const consulta = conVarianteDelCliente(input.producto || input.modelo || "", ctx._ultimoUsuario);
       turno.busco = true;
+      // Mandar una foto ES cotizar (el pie lleva el precio), asi que el mismo freno.
+      const pvFoto = preventaTesla(consulta);
+      if (pvFoto) return { ok: false, ...pvFoto };
       const hallados = buscarPrecio(consulta);
       // Solo cuando NO hay nada del producto miramos si está agotado o si no lo
       // trabajamos: si hay productos pero ninguno tiene foto, es otro problema.
@@ -1698,6 +1716,19 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
         return {
           ok: false,
           mensaje: "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) Le estás PREGUNTANDO si quiere que lo pases con un asesor, así que todavía no lo derives: mandale solo esa pregunta, tal como la escribiste, y esperá la respuesta. Si te dice que sí, en ESE turno llamás a \"derivar_a_humano\".",
+        };
+      }
+      // PREVENTA: el producto no esta agotado ni falta — esta EN CAMINO, y Max
+      // tiene como resolverlo solo (anotar_preventa). Derivar acá le genera
+      // trabajo al equipo por algo que el sistema hace automatico, y al cliente
+      // le suena a que no sabemos lo que vendemos.
+      // ⚠️ Con el prompt solo no alcanzaba: probado contra produccion el 23 ago
+      // 2026, Max explico bien la preventa y CERRO igual con "lo consulto con un
+      // asesor". Por eso el freno va en codigo.
+      if (turno.preventa && !DERIVACION_DIRECTA.has(motivo)) {
+        return {
+          ok: false,
+          mensaje: "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) Esto es una PREVENTA: el producto está EN CAMINO y lo resolvés vos solo, no hace falta ningún asesor. ⛔ NO derives y ⛔ NO le digas que lo vas a consultar. Ofrecele anotarse para que le avisemos apenas entre y, cuando acepte y te dé el nombre y a qué número le escribimos, llamá a \"anotar_preventa\".",
         };
       }
       if (!turno.busco && !DERIVACION_DIRECTA.has(motivo)) {
