@@ -145,6 +145,49 @@ export async function esperasPendientes() {
   }
 }
 
+// Anotados en una PREVENTA, TODOS: los pendientes, los que ya recibieron el aviso
+// y los vencidos. Lo lee el cuadro "interesados" del panel /admin de la web, que
+// necesita mostrar el estado de cada uno (no solo quien sigue esperando).
+// Solo lectura: la lista la escribe Max en la charla, con anotarPreventa().
+export async function listarPreventas({ clave = "", limite = 500 } = {}) {
+  if (!usaDB) return [];
+  try {
+    await asegurarTabla();
+    // Una preventa concreta ("tesla") o todas. Cuando llegue una segunda, el
+    // panel las separa por `clave` sin tocar nada de esto.
+    const filas = clave
+      ? await sql`select telefono, item_id, titulo, nombre, estado, creada, avisada_en
+          from esperas where item_id = ${PREF + clave} order by creada desc limit ${limite}`
+      : await sql`select telefono, item_id, titulo, nombre, estado, creada, avisada_en
+          from esperas where item_id like ${PREF + "%"} order by creada desc limit ${limite}`;
+    return filas.map((f) => ({
+      // El numero AL QUE HAY QUE ESCRIBIRLE, que puede no ser el del chat: Max le
+      // pregunta "a este mismo numero o a otro?" antes de anotarlo.
+      telefono: f.telefono || "",
+      clave: String(f.item_id || "").slice(PREF.length),
+      titulo: f.titulo || "",
+      nombre: f.nombre || "",
+      estado: f.estado || "pendiente",
+      creada: f.creada,
+      avisadaEn: f.avisada_en || null,
+    }));
+  } catch (e) {
+    console.error("⚠ No pude leer las preventas:", e.message);
+    return [];
+  }
+}
+
+// Que preventas hay abiertas y si su stock YA entro. El panel lo usa para explicar
+// por que el aviso todavia no salio (el arribo se corre solo, y sin publicacion
+// activa en ML no hay disparador).
+export function estadoPreventas() {
+  return Object.entries(PREVENTAS).map(([clave, pv]) => ({
+    clave,
+    titulo: pv.titulo,
+    llego: preventaLlego(PREF + clave),
+  }));
+}
+
 // Da de baja las esperas que pasaron los 90 días. Devuelve cuántas venció.
 async function vencerViejas() {
   if (!usaDB) return 0;

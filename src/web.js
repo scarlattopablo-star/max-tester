@@ -13,7 +13,7 @@ import { cargarLecciones, programarAprendizaje, analizarAhora, estadoAprendizaje
 import { sleep, delayEscritura } from "./humano.js";
 import { programarSync, haySyncML, ultimaSync, sincronizar } from "./sync_ml.js";
 import { infoCatalogo, productos, agotados } from "./catalogo_vivo.js";
-import { esperasPendientes } from "./esperas.js";
+import { esperasPendientes, listarPreventas, estadoPreventas, hayEsperas } from "./esperas.js";
 import { hayMercadoPago } from "./pagos.js";
 import { proveedorIA } from "./config.js";
 import { enviarAviso, enviarTexto, enviarTextoA, formatearCupon, hayWhatsApp, linkWa } from "./notificador.js";
@@ -161,6 +161,24 @@ app.get("/api/esperas", async (req, res) => {
   const lista = await esperasPendientes();
   const filtrada = q ? lista.filter((e) => String(e.titulo || "").toLowerCase().includes(q)) : lista;
   res.json({ total: lista.length, encontrados: filtrada.length, resultados: filtrada });
+});
+
+// INTERESADOS EN UNA PREVENTA (hoy: las alfombras 3D para Tesla) para el cuadro
+// del panel /admin de la web: nombre, teléfono, cuándo se anotó y si ya se le avisó.
+// A diferencia de /api/esperas devuelve TAMBIÉN a los ya avisados y a los vencidos:
+// el panel muestra la lista entera y marca el estado de cada uno.
+// Solo lectura — anotar es cosa de Max en la charla. Misma autenticación que
+// /api/transferencias (Bearer o ?clave=, porque el panel usa Bearer y a mano
+// conviene poder abrirlo en el navegador).
+app.get("/api/preventas", async (req, res) => {
+  const token = process.env.NOTIFY_TOKEN;
+  const auth = req.headers.authorization || "";
+  const clave = String(req.query.clave || "");
+  if (!token || (auth !== `Bearer ${token}` && clave !== token))
+    return res.status(401).json({ error: "no autorizado" });
+  const cual = String(req.query.preventa || "").trim();
+  const anotados = await listarPreventas({ clave: cual });
+  res.json({ disponible: hayEsperas(), preventas: estadoPreventas(), total: anotados.length, anotados });
 });
 
 // Lista de transferencias recientes (una fila por gestión, con monto) para el
