@@ -51,6 +51,33 @@ también quedó arreglado. La **Fiat Strada no perdió ni una línea** (control 
 
 **Estado:** mergeado a `main`. ⏳ Falta que llegue a producción — ver abajo.
 
+### 😴 QUE MAX NO SE DUERMA (26 ago 2026)
+
+Render Free duerme el servicio a los **15 min sin tráfico**, y dormido **no contesta WhatsApp**.
+Había dos defensas y **las dos estaban flojas**:
+
+1. **El auto-ping de la app** (`web.js`) pingueaba cada **10** min. Con la ventana en 15, UN
+   solo ping perdido (timeout, latencia, arranque lento) abría un hueco de 20 min y Max se
+   dormía igual. → Ahora cada **5 min**, y un fallo **reintenta a los 45s** en vez de esperar
+   al próximo ciclo. Hacen falta 3 fallos seguidos para perder la ventana.
+   ⚠️ Este ping SOLO corre si está cargada la variable **`APP_URL`**. Si falta, el keep-alive
+   está apagado: antes eso solo se veía como un `keepAlive:false` que nadie mira, ahora **grita
+   en el log de arranque** y el workflow lo marca como warning. Chequealo en `/api/estado`.
+2. **El workflow `keep-max-awake`** decía `*/5 * * * *`, pero **GitHub estrangula los `schedule`**:
+   mirando el historial real de este repo, los runs salían cada **25 a 70 minutos**, no cada 5.
+   Con la ventana en 15 min, Max estuvo dormido buena parte del día. → Ahora **cada run cubre una
+   ventana**: cuando GitHub por fin lo larga, el job se queda **~50 min pingueando cada 4**, con
+   `concurrency: cancel-in-progress` para que siempre haya exactamente uno vivo. El atraso del
+   cron deja de importar. Además el job reintenta 3 veces por ciclo (un arranque en frío tarda
+   ~50s y el primer intento siempre falla) y **falla ruidosamente** si Max no responde en 3
+   ciclos seguidos: eso ya no es "dormido", es "caído".
+
+⚠️ **Todo esto es una MULETA del plan free.** Lo definitivo es un hosting que no duerma:
+**Render Starter ~US$7/mes** (un botón, mismo servicio y misma URL) o **Railway Hobby ~US$5**.
+Mientras siga en Free, Max se va a dormir cada tanto por más parches que le pongamos.
+⚠️ GitHub apaga los `schedule` de repos públicos tras **60 días sin commits**. Si Max empieza a
+dormirse y hace rato que nadie toca el repo, es eso: se reactiva desde la pestaña Actions.
+
 ### 🚀 DEPLOY: ahora lo hace GitHub Actions, no un git hook local
 
 **Por qué se había roto.** El auto-deploy lo disparaba un `curl` al Deploy Hook desde

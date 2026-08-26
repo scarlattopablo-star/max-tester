@@ -1,26 +1,70 @@
-# Mantiene a Max DESPIERTO en Render (plan free se duerme a los ~15 min sin
-# actividad). Pinguea /api/estado cada 5 minutos para que el socket de WhatsApp
-# siga vivo y NO se pierdan mensajes que llegan en horas de poco movimiento.
-# (El filtro de 5 min de whatsapp.js descarta mensajes viejos cuando Max
-# reconecta tras dormirse; manteniéndolo despierto el problema no ocurre.)
+# Mantiene a Max DESPIERTO en Render (plan free se duerme a los ~15 min sin tráfico,
+# y al dormirse deja de contestar WhatsApp).
+#
+# ⚠️ POR QUÉ NO ES UN CRON DE 5 MINUTOS (26 ago 2026). Lo era, y NO funcionaba: GitHub
+# estrangula los workflows `schedule` — mirando el historial real de este repo, los runs
+# salían cada 25 a 70 MINUTOS, no cada 5. Con la ventana de Render en 15 minutos, eso
+# deja a Max dormido la mayor parte del día. El cron de GitHub es "best effort" y no hay
+# forma de apurarlo.
+#
+# LA SOLUCIÓN: que cada run CUBRA UNA VENTANA en vez de dar un solo ping. Cuando GitHub
+# por fin lo larga, el job se queda ~50 minutos pingueando cada 4. Así el atraso del cron
+# deja de importar: lo que importa es que haya un run vivo, y el `concurrency` de abajo
+# garantiza que siempre sea uno solo (el nuevo reemplaza al viejo).
+#
+# ⚠️ Esto es una MULETA del plan free, no una solución de verdad. Lo definitivo es un
+# hosting que no duerma (Render Starter ~US$7/mes, o Railway Hobby ~US$5) — ver ESTADO.md.
+# ⚠️ GitHub apaga los workflows `schedule` en repos públicos tras 60 días SIN COMMITS.
+#    Si Max empieza a dormirse y hace rato que nadie toca el repo, es esto: se reactiva
+#    desde la pestaña Actions.
 name: keep-max-awake
 
 on:
   schedule:
-    - cron: "*/5 * * * *" # cada 5 minutos (mínimo que permite GitHub Actions)
-  workflow_dispatch: {} # permite dispararlo a mano desde la pestaña Actions
+    - cron: "*/15 * * * *" # se INTENTA cada 15 min; GitHub lo larga cuando puede
+  workflow_dispatch: {} # y a mano, desde la pestaña Actions
+
+concurrency:
+  group: keep-max-awake
+  cancel-in-progress: true # el run nuevo reemplaza al viejo: nunca dos pingueando
 
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 55
     steps:
-      - name: Despertar a Max
+      - name: Pinguear a Max durante ~50 minutos
         run: |
-          for i in 1 2 3; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 \
-              "https://max-tester.onrender.com/api/estado") || code="000"
-            echo "intento $i -> HTTP $code"
-            if [ "$code" = "200" ]; then echo "Max despierto ✅"; exit 0; fi
-            sleep 20
+          URL="https://max-tester.onrender.com/api/estado"
+          fallos_seguidos=0
+          for ciclo in $(seq 1 13); do   # 13 ciclos × 4 min ≈ 50 min
+            ok=0
+            # Hasta 3 intentos: si estaba dormido, el arranque en frío tarda ~50s y el
+            # primer intento SIEMPRE va a fallar. Rendirse ahí sería dejarlo dormido.
+            for intento in 1 2 3; do
+              code=$(curl -s -o /tmp/estado.json -w "%{http_code}" --max-time 90 "$URL") || code="000"
+              if [ "$code" = "200" ]; then ok=1; break; fi
+              echo "ciclo $ciclo intento $intento -> HTTP $code (reintento en 15s)"
+              sleep 15
+            done
+            if [ "$ok" = "1" ]; then
+              fallos_seguidos=0
+              commit=$(jq -r '.build.commit // "?"' /tmp/estado.json 2>/dev/null || echo "?")
+              ka=$(jq -r '.whatsapp.keepAlive // "?"' /tmp/estado.json 2>/dev/null || echo "?")
+              echo "ciclo $ciclo ✅ despierto (commit=$commit, keepAlive=$ka)"
+              # El auto-ping de la app es la primera línea de defensa; esto es la red.
+              # Si está apagado, Max depende SOLO de este workflow: hay que avisarlo.
+              if [ "$ka" = "false" ]; then
+                echo "::warning::APP_URL no está configurada en Render: el auto-ping de Max está APAGADO y queda dependiendo solo de este workflow. Cargá APP_URL=https://max-tester.onrender.com en las variables de entorno del servicio."
+              fi
+            else
+              fallos_seguidos=$((fallos_seguidos + 1))
+              echo "ciclo $ciclo ❌ no respondió tras 3 intentos"
+              if [ "$fallos_seguidos" -ge 3 ]; then
+                echo "::error::Max no responde hace 3 ciclos seguidos (~12 min). No es que esté dormido: algo se cayó. Revisá los logs del servicio en Render."
+                exit 1
+              fi
+            fi
+            sleep 240   # 4 min
           done
-          echo "No respondió 200 tras 3 intentos (puede estar arrancando); no falla el job."
+          echo "Ventana cubierta. El próximo run toma la posta."

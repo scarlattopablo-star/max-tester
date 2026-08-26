@@ -945,16 +945,28 @@ app.listen(PORT, () => {
   // en local no hace falta. Tolerante a fallos (no debe tirar el server).
   const urlPublica = (process.env.APP_URL || "").trim().replace(/\/$/, "");
   if (urlPublica) {
-    const pingear = async () => {
+    // ⚠️ Cada 5 minutos, NO cada 10. Render duerme a los 15 sin tráfico: con un ping
+    // cada 10, UN solo ping perdido (un timeout, un pico de latencia, un arranque en
+    // frío que tarda) deja un hueco de 20 minutos y el servicio se duerme igual. A 5
+    // minutos hacen falta TRES fallos seguidos para perder la ventana (26 ago 2026).
+    const pingear = async (intento = 1) => {
       try {
         const r = await fetch(`${urlPublica}/api/estado`, { signal: AbortSignal.timeout(20_000) });
         console.log(`💓 keep-alive ${urlPublica} → ${r.status}`);
+        if (r.ok) return;
       } catch (e) {
-        console.log(`💓 keep-alive falló: ${e.message}`);
+        console.log(`💓 keep-alive falló (intento ${intento}): ${e.message}`);
       }
+      // Un fallo no espera al próximo ciclo: se reintenta enseguida. Es justo el caso
+      // en que el servicio está por dormirse y hace falta el tráfico YA.
+      if (intento < 3) setTimeout(() => pingear(intento + 1), 45_000);
     };
-    setInterval(pingear, 10 * 60 * 1000); // cada 10 min (< 15 min de Render Free)
-    setTimeout(pingear, 30_000); // primer ping a los 30s de arrancar
+    setInterval(() => pingear(), 5 * 60 * 1000); // cada 5 min (< 15 min de Render Free)
+    setTimeout(() => pingear(), 30_000); // primer ping a los 30s de arrancar
     console.log(`💓 keep-alive activo contra ${urlPublica} (evita que Render duerma el bot)`);
+  } else {
+    // Sin APP_URL el keep-alive NO CORRE, y hasta hoy eso solo se veía como un
+    // `keepAlive:false` en /api/estado que nadie mira. Que grite en el log de arranque.
+    console.log("⚠️  SIN APP_URL: el keep-alive está APAGADO. En Render Free eso significa que Max se DUERME a los 15 minutos y deja de contestar. Cargá APP_URL (ej: https://max-tester.onrender.com) en las variables de entorno.");
   }
 });
