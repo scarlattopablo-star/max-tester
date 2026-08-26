@@ -1,0 +1,68 @@
+# Deploy automático a Render en cada push a `main`.
+#
+# POR QUÉ EXISTE: el auto-deploy nativo de Render (webhook de GitHub) nunca disparó
+# en este repo, así que se resolvía con un `curl` al Deploy Hook desde un git hook
+# `.git/hooks/pre-push` en la PC. Los git hooks NO viajan con el repo: en cualquier
+# clon nuevo desaparecen y los pushes dejan de deployar en silencio — pasó, y el fix
+# de las cabinas JMC quedó en `main` sin llegar a producción (26 ago 2026).
+# Acá vive en el repo, así que no se pierde nunca más.
+#
+# SETUP (una sola vez): Settings → Secrets and variables → Actions → New repository
+# secret, nombre `RENDER_DEPLOY_HOOK`, valor = la URL del Deploy Hook de Render
+# (Render → servicio max-tester → Settings → Deploy Hook). Es la MISMA URL que estaba
+# en el archivo `.deploy_hook`. Guardada como secret, GitHub la oculta en los logs.
+name: deploy-a-render
+
+on:
+  push:
+    branches: [main]
+    # Un cambio SOLO de documentación no justifica un redeploy: en el plan free de
+    # Render cada deploy es un rato de arranque en frío con Max caído.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch: {} # y a mano, desde la pestaña Actions
+
+concurrency:
+  group: deploy-render
+  cancel-in-progress: false # nunca cortar un deploy a la mitad
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar el Deploy Hook de Render
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Falta el secret RENDER_DEPLOY_HOOK. Cargalo en Settings → Secrets and variables → Actions con la URL del Deploy Hook de Render (Render → max-tester → Settings → Deploy Hook). Sin eso este workflow NO deploya nada."
+            exit 1
+          fi
+          code=$(curl -sS -o /tmp/render.txt -w "%{http_code}" --max-time 60 "$HOOK") || code="000"
+          echo "Render respondió HTTP $code"
+          head -c 500 /tmp/render.txt || true
+          case "$code" in
+            200|201|202) echo "Deploy encolado ✅" ;;
+            *) echo "::error::El Deploy Hook devolvió HTTP $code. Si es 401/404 la URL del secret está vencida o mal copiada: regenerala en Render y actualizá el secret."; exit 1 ;;
+          esac
+
+      - name: Esperar a que Render levante este commit
+        # No hace fallar el job: en el plan free el build + arranque en frío puede
+        # pasarse de este margen sin que nada esté mal. Si no converge, avisa fuerte.
+        continue-on-error: true
+        run: |
+          esperado="${GITHUB_SHA:0:7}"
+          echo "Esperando build.commit = $esperado en /api/estado"
+          for i in $(seq 1 40); do   # 40 × 20s ≈ 13 min
+            actual=$(curl -s --max-time 30 "https://max-tester.onrender.com/api/estado" \
+              | jq -r '.build.commit // empty' 2>/dev/null || true)
+            echo "intento $i -> corriendo: ${actual:-(sin respuesta)}"
+            if [ "$actual" = "$esperado" ]; then
+              echo "✅ Producción ya corre $esperado"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::warning::Render no llegó a servir $esperado en ~13 min. Puede seguir buildeando: revisá los logs del servicio en el panel de Render y volvé a chequear /api/estado."
+          exit 1

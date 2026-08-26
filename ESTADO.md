@@ -49,10 +49,29 @@ también quedó arreglado. La **Fiat Strada no perdió ni una línea** (control 
 
 **Pruebas:** `node test_cabina_jmc.mjs` (32 casos, sin red ni IA) + toda la regresión offline en verde.
 
-**Estado:** mergeado a `main` (commit `026b725`). ⏳ **PENDIENTE: redeployar en Render**
-("Manual Deploy → Deploy latest commit"): Render no auto-deploya, y hasta que no se deployee
-Max sigue cotizando las dos cabinas igual en WhatsApp. Verificar después con
-`GET /api/estado` → `build.commit` = `026b725`.
+**Estado:** mergeado a `main`. ⏳ Falta que llegue a producción — ver abajo.
+
+### 🚀 DEPLOY: ahora lo hace GitHub Actions, no un git hook local
+
+**Por qué se había roto.** El auto-deploy lo disparaba un `curl` al Deploy Hook desde
+`.git/hooks/pre-push`. **Los git hooks no viajan con el repo**: en cualquier clon nuevo
+desaparecen y los `git push` dejan de deployar **en silencio**. Por eso el fix de las
+cabinas JMC quedó en `main` sin llegar a Max.
+
+**Cómo quedó.** `.github/workflows/deploy.yml` (vive EN el repo, no se pierde más):
+dispara el Deploy Hook en cada push a `main` —salvo cambios solo de documentación, que no
+justifican un arranque en frío— y también a mano desde la pestaña Actions. Después del
+deploy espera y verifica que `/api/estado` → `build.commit` sea el commit pusheado.
+
+⚠️ **SETUP, una sola vez:** Settings → Secrets and variables → Actions → New repository
+secret, nombre **`RENDER_DEPLOY_HOOK`**, valor = la URL del Deploy Hook de Render (la misma
+que estaba en el archivo `.deploy_hook`). **Hasta que ese secret exista el workflow falla a
+propósito**, con el mensaje de qué cargar: preferimos una cruz roja visible antes que un
+verde que no deployó nada.
+
+⚠️ Claude **no puede** deployar desde su entorno: la política de red rechaza el CONNECT a
+`api.render.com` y a `max-tester.onrender.com` (403). Ni siquiera con la URL del hook en la
+mano. Los runners de GitHub Actions **sí** llegan: por eso el deploy vive ahí.
 
 ## 💸 SESIÓN 14 ago — LAS TRANSFERENCIAS VOLVÍAN A AVISAR (LO MÁS NUEVO)
 
