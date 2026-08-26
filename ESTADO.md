@@ -49,6 +49,11 @@ también quedó arreglado. La **Fiat Strada no perdió ni una línea** (control 
 
 **Pruebas:** `node test_cabina_jmc.mjs` (32 casos, sin red ni IA) + toda la regresión offline en verde.
 
+**Estado:** mergeado a `main` (commit `026b725`). ⏳ **PENDIENTE: redeployar en Render**
+("Manual Deploy → Deploy latest commit"): Render no auto-deploya, y hasta que no se deployee
+Max sigue cotizando las dos cabinas igual en WhatsApp. Verificar después con
+`GET /api/estado` → `build.commit` = `026b725`.
+
 ## 💸 SESIÓN 14 ago — LAS TRANSFERENCIAS VOLVÍAN A AVISAR (LO MÁS NUEVO)
 
 Dos bugs de la migración a Meta del 22 jul, los dos por lo mismo: **la lógica estaba duplicada
