@@ -40,6 +40,14 @@ const STOP_BUSQUEDA = new Set([
   "buscando", "consulta", "consultar", "precio", "precios", "cuanto", "cuanta", "cuesta",
   "cuestan", "vale", "valen", "sale", "salen", "modelo", "modelos", "marca", "marcas",
   "camioneta", "camionetas", "pickup", "coche", "hola", "buenas", "gracias", "favor",
+  // ⚠️ "camion" / "camiones" es el TIPO de vehículo, igual que "camioneta" o "pickup":
+  // no identifica ningún modelo. Faltaba en esta lista y se exigía dentro del título,
+  // donde NINGÚN cubreasiento la trae — así que "cubreasiento para mi camión JMC doble
+  // cabina" y "…camión JMC cabina simple" daban las dos CERO resultados y Max contestaba
+  // exactamente lo mismo a las dos (la frase de "tenemos para todos los modelos" + el
+  // pase a un asesor). Ése era el motivo de que las dos cabinas se cotizaran igual
+  // (26 ago 2026).
+  "camion", "camiones",
   "que", "cual", "cuales", "una", "unas", "unos", "los", "las", "este", "esta", "estos", "estas",
   // Terminaciones/materiales que describen el producto, no el auto. Si se exigen, la
   // búsqueda se va a los productos de OTRAS marcas que comparten la terminación
@@ -287,28 +295,99 @@ export function cabinaDe(consulta) {
 // cabina", "strada cabina simple" y "strada 2 asientos" devolvían los mismos 6
 // resultados que "strada" a secas. Verificado el 7 ago 2026.
 export function cabinaDelProducto(nombre) {
-  const m = _normTxt(nombre);
-  if (/(doble cabina|cabina doble|doble cab|\bd ?\.? ?cabina\b|\bdc\b)/.test(m)) return "doble";
-  if (/(cabina simple|cab simple|cabina sencilla|\b(?:2|dos) ?asientos?\b|pik ?up 2)/.test(m)) return "simple";
+  // ⚠️ Se lee con `_tituloDe` — la MISMA cocina que usa la búsqueda — y no con
+  // `_normTxt`. Con `_normTxt` la barra sobrevivía y el "Cubreasiento Vw Saveiro
+  // Capitoneado **D/cabina**" ($9.500) no lo leía nadie; `_tituloDe` la vuelve espacio
+  // ("d cabina") y además unifica "Pik Up" / "Pick Up" en "pickup" (ERRATAS_ML).
+  const m = _tituloDe(nombre);
+  if (/(doble cabina|cabina doble|doble cab|\bd ?\.? ?cabina\b|\bd ?cab\b|\bdc\b)/.test(m)) return "doble";
+  // "pickup" a secas es la CABINA SIMPLE cuando lo dice el título de una publicación:
+  // Mercado Libre lo usa como contracara de la "D/cabina" del mismo vehículo (Saveiro
+  // Pik Up $5.900 vs Saveiro D/cabina $9.500; Strada Pik Up **2 Asientos** $6.500).
+  // ⛔ Vale SOLO para títulos: en el mensaje del cliente "tengo una pickup" es la
+  // carrocería y no dice nada de la cabina, por eso `cabinaDe()` no lo mira.
+  if (/(cabina simple|cab\.? simple|c ?\/ ?simple|cabina sencilla|\b(?:2|dos) ?asientos?\b|\bpickup\b)/.test(m)) return "simple";
   return null;
 }
-function _matchCabina(nombre, cab) {
-  const c = cabinaDelProducto(nombre);
-  // Sin marca en el título, la publicación sirve para cualquiera: no se descarta.
-  return c === null || c === cab;
+
+// Las palabras del título que nombran al VEHÍCULO: sin la marca, sin las del producto
+// y sin el acabado. Sirven para saber si dos publicaciones son del MISMO auto ("Doble
+// Cabina Jx1044" y "N822 2850" son los dos JMC, pero no son el mismo camión).
+function _modeloDelTitulo(nombre) {
+  return new Set(_tituloDe(nombre).split(" ").filter((w) =>
+    w && !STOP_BUSQUEDA.has(w) && !MARCAS.has(w) && !ACABADO_PRODUCTO.has(w) && !NO_ES_AUTO.has(w)));
 }
 
-// ¿Los resultados mezclan cabina simple y doble? Entonces son vehículos DISTINTOS y
-// no se puede cotizar sin saber cuál tiene el cliente. Es el caso de la Strada: la de
+// Vehículos que Mercado Libre publica en LAS DOS cabinas. No se adivina: se saca del
+// propio catálogo (activos + pausados). Si de un mismo modelo hay un título que dice
+// "Cab Simple" y otro que dice "Doble Cabina", ese vehículo viene en las dos y una
+// publicación que NO lo aclara no se puede dar por buena para ninguna.
+// Hoy salen tres: la Fiat Strada, la VW Saveiro y el camión JMC N822 2850
+// ("Alfombra Bandeja Camion Jmc N822 2850 **Cab Simple**" y "Alfombra 5d Bandeja Jmc
+// **Doble Cabina** N822 2850").
+let _dosCabinasCache = null;
+function modelosDeDosCabinas() {
+  const lista = [...productosML(), ...agotadosML()];
+  const clave = `${lista.length}|${lista[0]?.id}|${lista[lista.length - 1]?.id}`;
+  if (_dosCabinasCache && _dosCabinasCache.clave === clave) return _dosCabinasCache.set;
+  const porModelo = new Map(); // palabra del vehículo -> Set(cabinas que declara el catálogo)
+  for (const p of lista) {
+    const c = cabinaDelProducto(p.n);
+    if (!c) continue;
+    for (const w of _modeloDelTitulo(p.n)) {
+      if (!porModelo.has(w)) porModelo.set(w, new Set());
+      porModelo.get(w).add(c);
+    }
+  }
+  const set = new Set([...porModelo].filter(([, cabs]) => cabs.size > 1).map(([w]) => w));
+  _dosCabinasCache = { clave, set };
+  return set;
+}
+
+// Una publicación AMBIGUA es la que no dice la cabina y es de un vehículo que se vende
+// en las dos. No es "sirve para cualquiera": es "no sabemos cuál es". Los dos
+// cubreasientos del JMC N822 2850 ($6.900 y $11.900) son exactamente eso.
+export function cabinaAmbigua(nombre) {
+  if (cabinaDelProducto(nombre)) return false;
+  const dos = modelosDeDosCabinas();
+  for (const w of _modeloDelTitulo(nombre)) if (dos.has(w)) return true;
+  return false;
+}
+
+// ¿Esta publicación sirve para la cabina que pidió el cliente?
+//   · la declara igual  → sí;  · declara la otra → no;
+//   · no dice nada y el vehículo tiene una sola cabina → sí (sirve para cualquiera);
+//   · no dice nada y el vehículo se vende en las dos (AMBIGUA) → solo si es del MISMO
+//     auto que alguna de las que sí la declaran (`modelosOk`). La publicación "Doble
+//     Cabina Jx1044" no cubre al N822 aunque los dos sean JMC; en cambio el capitoneado
+//     de la Strada sí acompaña a la "Strada D Cabina": es el mismo camión, otra línea.
+function _matchCabina(nombre, cab, modelosOk = null) {
+  const c = cabinaDelProducto(nombre);
+  if (c) return c === cab;
+  if (!modelosOk || !cabinaAmbigua(nombre)) return true;
+  for (const w of _modeloDelTitulo(nombre)) if (modelosOk.has(w)) return true;
+  return false;
+}
+
+// ¿Los resultados dejan la cabina en duda? Entonces son vehículos DISTINTOS y no se
+// puede cotizar sin saber cuál tiene el cliente. Es el caso de la Strada: la de
 // "Pik Up 2 Asientos" ($6.500) y la "D Cabina" ($6.486) conviven en la búsqueda, y
 // ofrecerle la de 2 asientos a una Freedom es venderle algo que no le entra.
+// ⚠️ Antes solo miraba las cabinas DECLARADAS, y por eso no servía para los camiones
+// JMC: de las cinco publicaciones JMC hay UNA sola que la dice ("Doble Cabina Jx1044"),
+// así que el conjunto parecía unánime y Max cotizaba sin preguntar — le daba los mismos
+// precios al de doble cabina y al de cabina simple. Una publicación AMBIGUA (ver
+// `cabinaAmbigua`) cuenta como una cabina más: con eso el freno vuelve a saltar
+// (26 ago 2026).
 export function mezclaCabinas(resultados = []) {
   const vistas = new Set();
   for (const p of resultados) {
-    const c = cabinaDelProducto(p?.nombre || p?.n || "");
+    const n = p?.nombre || p?.n || "";
+    const c = cabinaDelProducto(n);
     if (c) vistas.add(c);
+    else if (cabinaAmbigua(n)) vistas.add("?");
   }
-  return vistas.size > 1;
+  return vistas.size > 1 || vistas.has("?");
 }
 // Carrocería (sedán / hatchback) — filtro suave, igual que cabina.
 function carroceriaDe(consulta) {
@@ -615,7 +694,16 @@ export function buscarPrecio(consulta, lista = null) {
   // (mejor ofrecer lo del modelo y, si hace falta, preguntar la variante).
   const aplicarCab = (lista) => {
     let r = lista;
-    if (cab) { const f = r.filter((it) => _matchCabina(it.n, cab)); if (f.length) r = f; }
+    if (cab) {
+      // Los vehículos de los que Mercado Libre SÍ publica la cabina que pidió: solo
+      // esos habilitan a usar además las publicaciones mudas del mismo auto. Si no hay
+      // ninguna, `modelosOk` queda vacío y las mudas pasan como siempre (no hay con qué
+      // elegir, y vale más ofrecerle el modelo que dejarlo en cero).
+      const declaran = r.filter((it) => cabinaDelProducto(it.n) === cab);
+      const modelosOk = declaran.length ? new Set(declaran.flatMap((it) => [..._modeloDelTitulo(it.n)])) : null;
+      const f = r.filter((it) => _matchCabina(it.n, cab, modelosOk));
+      if (f.length) r = f;
+    }
     if (carr) { const f = r.filter((it) => _matchCarroceria(it.n, carr)); if (f.length) r = f; }
     return r;
   };
@@ -1374,6 +1462,22 @@ function conVarianteDelCliente(consulta, textoCliente) {
   return out;
 }
 
+// El cliente YA dijo la cabina, pero de ese vehículo Mercado Libre no publica NINGUNA
+// que la declare: las que hay no aclaran si son de una o de la otra, y ese camión se
+// vende en las dos. El precio es real; la cabina, no está confirmada. Mismo criterio
+// que `versionSinConfirmar`: se cotiza nombrando la publicación y se confirma antes de
+// cerrar. Es el caso de los dos cubreasientos del JMC N822 2850 ($6.900 y $11.900), que
+// hasta el 26 ago 2026 salían iguales para el de cabina simple y el de doble.
+export function cabinaSinConfirmar(resultados, consulta, textoCliente) {
+  const cab = cabinaDe(consulta) || cabinaDe(textoCliente || "");
+  if (!cab || !resultados.length) return null;
+  const nombre = (r) => r?.nombre || r?.n || "";
+  if (resultados.some((r) => cabinaDelProducto(nombre(r)))) return null; // alguna la dice: ésa manda
+  if (!resultados.every((r) => cabinaAmbigua(nombre(r)))) return null;
+  return cab;
+}
+const AVISO_CABINA_SIN_CONFIRMAR = (cab) => `⚠️ El cliente dijo que la suya es ${cab === "doble" ? "DOBLE CABINA" : "CABINA SIMPLE (2 asientos)"}, pero NINGUNA de estas publicaciones lo aclara y ese vehículo se vende en las dos cabinas. El precio es real: pasáselo nombrando la publicación TAL CUAL está, y CONFIRMÁSELO antes de cerrar ("esta es la que tenemos publicada para ese modelo, ¿me confirmás que te sirve para tu ${cab === "doble" ? "doble cabina" : "cabina simple"}?"). ⛔ NO le asegures que es la de su cabina: eso no lo sabemos.`;
+
 // Cuando la búsqueda trae cabina simple Y doble, y ni Max ni el cliente dijeron cuál
 // es, no se cotiza: se pregunta. Son vehículos distintos y el precio cambia.
 function faltaCabina(encontrados, consulta, textoCliente) {
@@ -1607,6 +1711,10 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // cuál, se pregunta antes de cotizar (7 ago 2026, Strada Freedom).
       const sinCabina = faltaCabina(encontrados, consulta, ctx._ultimoUsuario);
       if (sinCabina) return sinCabina;
+      // El cliente dijo la cabina pero el catálogo no la declara en ninguna: se cotiza
+      // igual y se le confirma (26 ago 2026, cubreasientos del JMC N822 2850).
+      const cabDudosa = cabinaSinConfirmar(encontrados, consulta, ctx._ultimoUsuario);
+      if (cabDudosa) return { encontrado: true, moneda: "UYU", resultados: encontrados, confirmar_cabina: cabDudosa, instruccion: AVISO_CABINA_SIN_CONFIRMAR(cabDudosa) };
       const version = versionSinConfirmar(consulta, encontrados);
       if (version) return { encontrado: true, moneda: "UYU", resultados: encontrados, confirmar_version: version, instruccion: `⚠️ TODO lo que encontré es de la versión ${version.join(" / ")} de ese modelo, y el cliente nunca dijo cuál tiene. El ${version[0]} es otro auto: si le vendés esto y tiene la versión común, no le calza. Pasale el precio aclarando la versión y CONFIRMÁSELA antes de cerrar ("es para la versión ${version[0]}, ¿esa tenés?").` };
       return { encontrado: true, moneda: "UYU", resultados: encontrados };
@@ -1664,10 +1772,14 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       if (!encontrados.length) return { ok: false, mensaje: "No tengo foto exacta de eso; pedí más datos del modelo." };
       const elegidas = encontrados.slice(0, 4); // hasta 4 fotos (opciones del modelo)
       const fotos = elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio, moneda: x.moneda }));
-      // El caption de cada foto lleva el PRECIO, así que mandar fotos ES cotizar. Si
-      // todo lo que hay es de otra VERSIÓN del modelo, vale el mismo aviso que en
-      // consultar_precio — y hacía falta acá, porque para el Polo (7 ago 2026) Max
-      // resolvió con enviar_foto y pasó los $11.610 del Polo Track sin nombrarlo.
+      // El caption de cada foto lleva el PRECIO, así que mandar fotos ES cotizar: valen
+      // los mismos avisos que en consultar_precio. Primero el de la CABINA sin declarar
+      // (26 ago 2026, cubreasientos del JMC N822 2850).
+      const cabDudosaFoto = cabinaSinConfirmar(elegidas, consulta, ctx._ultimoUsuario);
+      if (cabDudosaFoto) return { ok: true, enviadas: fotos.length, fotos, confirmar_cabina: cabDudosaFoto, instruccion: AVISO_CABINA_SIN_CONFIRMAR(cabDudosaFoto) };
+      // Y si todo lo que hay es de otra VERSIÓN del modelo, el aviso de la versión —
+      // hacía falta acá porque para el Polo (7 ago 2026) Max resolvió con enviar_foto y
+      // pasó los $11.610 del Polo Track sin nombrarlo.
       const ver = versionSinConfirmar(consulta, elegidas);
       if (ver) {
         return {

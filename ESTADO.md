@@ -20,6 +20,35 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
+## 🚚 SESIÓN 26 ago — LOS CAMIONES JMC: DOBLE CABINA Y CABINA SIMPLE COTIZADOS IGUAL (LO MÁS NUEVO)
+
+Reportado por Pablo. **Las dos cabinas del JMC recibían la misma respuesta.** Detalle completo en
+`docs/2026-08-26-jmc-cabina-simple-y-doble.md`. Tres causas encadenadas:
+
+1. **`"camión"` no era genérica** (sí lo eran `"camioneta"` y `"pickup"`): se exigía dentro del
+   título, ningún cubreasiento la trae, y *"camión JMC doble cabina"* y *"camión JMC cabina simple"*
+   daban las dos **cero** ⇒ la misma frase genérica de JMC + pase a un asesor.
+2. **La publicación que no declara la cabina se tomaba como universal.** De los 5 cubreasientos JMC
+   activos, **uno solo** dice la cabina ("Doble Cabina Jx1044", $18.000). Los del N822 2850 ($6.900 y
+   $11.900) no la dicen y pasaban los dos filtros ⇒ el $6.900 encabezaba también la lista de doble
+   cabina.
+3. **`mezclaCabinas()` solo miraba las cabinas escritas** ⇒ el conjunto parecía unánime y
+   `faltaCabina()` no preguntaba nunca.
+
+**Fix (todo sacado del catálogo, no se infiere ninguna cabina):** `"camion"/"camiones"` a
+`STOP_BUSQUEDA`; `cabinaDelProducto()` lee con `_tituloDe` y entiende `D/cabina`, `D Cab`,
+`Cab. Simple`, `C/Simple` y `Pik Up` (⛔ solo en títulos, y el **VW Up** no se confunde);
+`modelosDeDosCabinas()` detecta solo cuáles se publican en las dos (hoy **Strada, Saveiro y JMC N822
+2850** — lo prueban sus dos alfombras, "Cab Simple" y "Doble Cabina"); `cabinaAmbigua()`;
+`mezclaCabinas()` cuenta la ambigua ⇒ Max **pregunta**; el filtro deja pasar la ambigua solo si es del
+**mismo vehículo** que la que sí declara la cabina; y `cabinaSinConfirmar()` cotiza pidiendo confirmar
+cuando el cliente dijo la cabina y ninguna publicación la declara.
+
+⚠️ El **VW Saveiro** tenía el mismo bug (D/cabina $9.500 y Pik Up $5.900 salían iguales para las dos):
+también quedó arreglado. La **Fiat Strada no perdió ni una línea** (control de no-regresión).
+
+**Pruebas:** `node test_cabina_jmc.mjs` (32 casos, sin red ni IA) + toda la regresión offline en verde.
+
 ## 💸 SESIÓN 14 ago — LAS TRANSFERENCIAS VOLVÍAN A AVISAR (LO MÁS NUEVO)
 
 Dos bugs de la migración a Meta del 22 jul, los dos por lo mismo: **la lógica estaba duplicada
