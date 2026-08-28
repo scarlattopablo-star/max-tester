@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, AVISO_AGOTADO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, AVISO_AGOTADO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -904,7 +904,7 @@ export function sinStockOInexistente(consulta, dijoElCliente = "") {
       agotado: false,
       aMedida: true,
       categoriaPedida: null,
-      mensaje: "El cubreasiento para ese vehículo NO está agotado: se CONFECCIONA A MEDIDA, se puede hacer perfectamente. ⛔ NO digas que está agotado, que no hay stock, que no lo tenemos ni que no trabajamos ese modelo. ⛔ NO ofrezcas avisarle cuando llegue: no hay nada que esperar, se fabrica. ⛔ NO le des precio y NO le mandes fotos: ese modelo no está cargado, así que el precio exacto lo confirma un asesor (regla del dueño del 18 ago 2026). ⛔ NO le enumeres las líneas. Decile que se hace a medida para su vehículo, pedile en UN mensaje corto la marca, el modelo y el año, y OFRECELE pasarlo con un asesor para el precio exacto; derivá SOLO si te dice que sí.",
+      mensaje: "El cubreasiento para ese vehículo NO está agotado: se CONFECCIONA A MEDIDA, se puede hacer perfectamente. ⛔ NO digas que está agotado, que no hay stock, que no lo tenemos ni que no trabajamos ese modelo. ⛔ NO ofrezcas avisarle cuando llegue: no hay nada que esperar, se fabrica. ⛔ NO le des precio y NO le mandes fotos, y ⛔ NO le enumeres las líneas: para ese vehículo el precio exacto lo confirma un asesor (regla del dueño del 18 ago 2026). ⛔ Y NO LE EXPLIQUES POR QUÉ: nada de \"no lo tengo cargado\", \"no está cargado\", \"no está publicado\" ni \"no lo tengo en el sistema\" — son palabras de adentro y al cliente le suenan a excusa. Le decís que se hace a medida y que lo pasás con un asesor, punto. ➡️ LO PASÁS CON UN ASESOR, NO SE LO PREGUNTÁS (pedido del dueño del 28 ago 2026): en UNA frase corta le decís que ese cubreasiento se confecciona a medida para su vehículo y que se lo pasás a un asesor para el precio exacto (ej: \"Para tu Palio lo confeccionamos a medida. Te paso con un asesor que te confirma el precio exacto\"). ⛔ PROHIBIDO preguntarle \"¿querés que te pase con un asesor?\": ya está decidido, el equipo lo recibe igual. Llamá a \"derivar_a_humano\" (motivo \"otro\") con el vehículo y la línea que pidió. Si sabés el año, ponelo en el resumen; si no lo sabés, NO frenes la derivación por eso: podés pedírselo en la misma frase, pero pasalo igual.",
     };
   }
   return {
@@ -1131,7 +1131,8 @@ Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramie
   · ⛔ NUNCA agregues plazos ni fechas ("en 3 días", "la semana que viene", "el martes"): no los sabemos y el cliente te los reclama.
 - 🧵 CASO 3 — te devuelve **aMedida: true** (es SIEMPRE un CUBREASIENTO): para ese vehículo no hay ninguna publicación cargada, pero los cubreasientos NO son una caja que se agota: se CONFECCIONAN A MEDIDA para cada auto. ⛔⛔ PROHIBIDÍSIMO decirle que está agotado, que no hay stock, que no lo tenemos o que no trabajamos ese modelo (el 28 ago 2026 le dijiste "está agotado" a dos clientes que preguntaban por el capitoneado y tuvo que meterse el equipo en la charla a desmentirte: "perdón que el bot está dando fallas, tenemos sí en stock capitoneado negro"). ⛔ NO ofrezcas avisarle cuando llegue: no hay nada que esperar, se fabrica.
   · Lo que SÍ decís, corto y natural: que ese cubreasiento se hace a medida para su vehículo, tal cual se lo diría un vendedor ("Para ese modelo lo confeccionamos a medida, se puede hacer perfectamente").
-  · ⛔ SIN PRECIO y SIN FOTOS, y ⛔ sin enumerarle las líneas: ese modelo no está cargado, así que el precio exacto lo confirma un asesor (regla del dueño del 18 ago 2026). Pedile en UN mensaje corto marca, modelo y año, OFRECELE pasarlo con un asesor y derivá SOLO si te dice que sí.
+  · ⛔ SIN PRECIO y SIN FOTOS, y ⛔ sin enumerarle las líneas: para ese vehículo el precio exacto lo confirma un asesor (regla del dueño del 18 ago 2026). ⛔ Y NO LE EXPLIQUES POR QUÉ ("no lo tengo cargado", "no está cargado", "no está publicado"): son palabras de adentro, al cliente le suenan a excusa.
+  · ➡️ **LO PASÁS CON UN ASESOR, NO SE LO PREGUNTÁS** (pedido del dueño del 28 ago 2026: "cuando no encuentres el material que piden, mandalo a un asesor"). Se lo decís en afirmativo y llamás a "derivar_a_humano" (motivo "otro") con el vehículo y la línea que pidió. Ej: "Para tu Palio lo confeccionamos a medida. Te paso con un asesor que te confirma el precio exacto". ⛔⛔ PROHIBIDO la pregunta "¿querés que te pase con un asesor?": esto ya está decidido, y el cliente que no la contesta se pierde solo. Si te falta el año, pedíselo en la MISMA frase pero derivá igual, no lo dejes para después. ⚠️ Esta es la ÚNICA excepción a la regla de ofrecer el asesor antes de derivar; en el CASO 2 (alfombras y demás) se sigue ofreciendo y esperando el sí.
 - 🚫 CASO 2 — te devuelve **agotado: false** (y SIN aMedida): no tenemos eso para ese vehículo. Para ALFOMBRAS, CUBREAUTOS y ACCESORIOS decíselo como se lo diría un vendedor en el mostrador: **que ese producto está agotado / no lo tenemos por ahora**. Ej: "De alfombras para ese modelo estamos sin stock por ahora".
   · ⛔ SEGUÍ HABLANDO DEL PRODUCTO QUE TE PIDIÓ (regla dura, te está fallando): si te preguntó por ALFOMBRAS, tu respuesta es sobre alfombras y nada más. ⛔ PROHIBIDO saltar a ofrecerle otra cosa que no pidió ("pero cubreasientos sí tenemos, ¿te muestro?"): el cliente vino por una alfombra y cambiarle el tema le suena a que le querés vender cualquier cosa. Si él después pregunta por otro producto, ahí sí se lo mostrás.
   · ⛔ En este caso NO le ofrezcas avisarle cuando llegue: no hay publicación a la cual seguirle el rastro, así que sería una promesa que el sistema no puede cumplir.
@@ -1624,6 +1625,14 @@ const MUESTRAN_LINEAS = new Set([
 // un HB20?") da cero y frenaba autos que SÍ tenemos: `buscarPrecio` espera una consulta
 // de producto, y el modelo del auto ya lo extrae el LLM cuando llama a "enviar_foto" o
 // "consultar_precio". Nos colgamos de ESE resultado, que es el bueno.
+// CUBREASIENTO que no está en el catálogo de ese auto: la derivación es DIRECTA, no se
+// le pregunta al cliente si quiere que lo pasemos (pedido del dueño del 28 ago 2026:
+// "cuando no encuentre el material que piden, que lo envíe a un asesor"). Son los dos
+// caminos que llegan a lo mismo: `aMedida` (la búsqueda no trajo nada) y `frenoLinea`
+// (quiso mostrar una línea de un auto del que no hay nada). Sin esto, el guard de
+// "preguntaste, esperá el sí" tiraba la derivación cuando a Max le salía preguntar.
+const derivaDirecto = (turno) => !!(turno?.cubreasientoAMedida || turno?.frenoLinea);
+
 export function sinCatalogoParaSuAuto(ctx = {}) {
   const turno = ctx._turno || {};
   if (turno.hayCatalogo) return null;   // algo de su auto apareció: se sigue como siempre
@@ -1640,10 +1649,10 @@ export function sinCatalogoParaSuAuto(ctx = {}) {
     mensaje:
       "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) De ese vehículo no tenemos NADA armado. " +
       "⛔ NO le ofrezcas ninguna línea de cubreasiento (ni capitoneado, ni tela, ni cuero Sport, ni eco cuero), NO le mandes fotos ni videos de los materiales y NO le des precio. " +
-      "⛔ Tampoco le digas que no tenemos ni que no se puede: eso lo define un asesor. " +
+      "⛔ Tampoco le digas que no tenemos ni que no se puede: el cubreasiento se confecciona A MEDIDA para cualquier vehículo, y el precio lo define un asesor. " +
       "⛔ Y NUNCA con palabras de adentro: nada de \"no lo tengo cargado\", \"no figura\", \"no está publicado\" ni \"no está en el catálogo\". " +
-      "Hacé UNA sola cosa, con una frase corta y cálida de vendedor, del estilo: \"Para tu [modelo] dejame que un asesor te confirme la disponibilidad y el precio exacto. ¿De qué año es?\". " +
-      "Pedile los datos que te falten (marca, modelo y año) y en ESTE mismo turno llamá a \"derivar_a_humano\" (motivo \"otro\") con el vehículo que consultó.",
+      "Hacé UNA sola cosa, con una frase corta y cálida de vendedor, del estilo: \"Para tu [modelo] lo confeccionamos a medida. Te paso con un asesor que te confirma el precio exacto\". " +
+      "➡️ LO PASÁS, NO SE LO PREGUNTÁS (pedido del dueño del 28 ago 2026): ⛔ prohibido \"¿querés que te pase con un asesor?\". En ESTE mismo turno llamá a \"derivar_a_humano\" (motivo \"otro\") con el vehículo que consultó. Si te faltan datos del auto (marca, modelo y año), pedíselos en la MISMA frase — pero derivá igual, no lo dejes para cuando conteste.",
   };
 }
 
@@ -1660,6 +1669,11 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   const turno = ctx._turno;
   // Se abrio una PREVENTA en este turno. Lo lee el guard de derivar_a_humano.
   if (turno && r?.preventa) turno.preventa = r.preventa;
+  // CUBREASIENTO a medida (no está en el catálogo): va DERECHO al asesor, no se le
+  // pregunta al cliente si quiere que lo pasemos (pedido del dueño del 28 ago 2026).
+  // Lo lee el guard de derivar_a_humano y el cierre de armarRespuesta, que si no
+  // descartan la derivación cuando Max la escribe como pregunta.
+  if (turno && r?.aMedida) turno.cubreasientoAMedida = true;
   if (turno && BUSCAN_CATALOGO.has(nombre)) {
     if (r?.ok === true || r?.encontrado === true || (r?.fotos || []).length) turno.hayCatalogo = true;
     // Agotado NO cuenta como vacío: el producto existe y tiene su propio flujo.
@@ -1927,7 +1941,11 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // Se recuerda para TODO el turno: si no, Max reintenta la derivación en la
       // vuelta siguiente (esa vez sin texto) y se colaba igual.
       if (ofreceAsesor.test(turno.texto || "")) turno.ofrecioAsesor = true;
-      if (turno.ofrecioAsesor) {
+      // ⚠️ El CUBREASIENTO A MEDIDA queda afuera de este freno: ahí la derivación es
+      // DIRECTA por decisión del dueño (28 ago 2026), así que aunque Max lo escriba
+      // como pregunta —le sale solo— el asesor recibe la consulta igual. Preguntar y
+      // no derivar era lo peor de los dos mundos: el cliente que no contesta se pierde.
+      if (turno.ofrecioAsesor && !derivaDirecto(turno)) {
         return {
           ok: false,
           mensaje: "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) Le estás PREGUNTANDO si quiere que lo pases con un asesor, así que todavía no lo derives: mandale solo esa pregunta, tal como la escribiste, y esperá la respuesta. Si te dice que sí, en ESE turno llamás a \"derivar_a_humano\".",
@@ -2508,6 +2526,20 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   if (preventaAbierta && !ctx._turno?.derivacionPendiente && limpio) {
     limpio = _sacarOraciones(limpio, /\b(asesor\w*|vendedor\w*|compa[ñn]er\w*)\b|se comunican? con (vos|usted|ustedes)/i);
   }
+  // CUBREASIENTO A MEDIDA: red de seguridad. Max a veces llama a la derivación y
+  // contesta SOLO "ya quedó anotado, en breve se comunican con vos" — el cliente
+  // preguntó si tenemos para su auto y se queda sin respuesta. Si en el mensaje no
+  // quedó dicho que se confecciona a medida, o que lo pasamos con un asesor, esas
+  // frases las pone el CÓDIGO (AVISO_A_MEDIDA y AVISO_PASO_ASESOR en config.js).
+  // Se miran POR SEPARADO: a veces dice una y se come la otra, y repetirle al cliente
+  // algo que Max ya dijo queda peor que no decirlo. Si Max lo dijo con sus palabras no
+  // se toca nada: su frase nombra el auto y suena mejor que cualquier texto fijo.
+  if (derivaDirecto(ctx._turno)) {
+    const diceMedida = /a medida|confeccion|fabric/i.test(limpio);
+    const diceAsesor = /asesor|compa[ñn]er|vendedor|se comunica|te contact|lo contact/i.test(limpio);
+    limpio = [diceMedida ? null : AVISO_A_MEDIDA, limpio, diceAsesor ? null : AVISO_PASO_ASESOR]
+      .filter(Boolean).join("\n\n");
+  }
   const textoFinal = [limpio, ...oficiales, avisoColocacion, avisoEnvio, avisoAgotado].filter(Boolean).join("\n\n")
     || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
   // Acá se resuelve la derivación que quedó pendiente, con el mensaje final a la
@@ -2515,7 +2547,11 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // (se espera el sí). Si no, se registra y el equipo se entera.
   const pend = ctx._turno?.derivacionPendiente;
   if (pend) {
-    const pregunta = /[¿?][^?]*\b(quer[eé]s|quiere|te parece|quer[ií]a)\b[^?]*\b(pas[eoa]r?|pase|paso|derive|derivar|consulta|asesor|compa[ñn]ero|vendedor)\b[^?]*\?/i.test(textoFinal);
+    // El CUBREASIENTO A MEDIDA se deriva SIEMPRE, escriba Max lo que escriba: es la
+    // decisión del dueño del 28 ago 2026 ("cuando no encuentre el material que piden,
+    // que lo envíe a un asesor"). El resto sigue igual: si preguntó, se espera el sí.
+    const pregunta = !derivaDirecto(ctx._turno)
+      && /[¿?][^?]*\b(quer[eé]s|quiere|te parece|quer[ií]a)\b[^?]*\b(pas[eoa]r?|pase|paso|derive|derivar|consulta|asesor|compa[ñn]ero|vendedor)\b[^?]*\?/i.test(textoFinal);
     const accion = acciones.find((a) => a.herramienta === "derivar_a_humano");
     if (pregunta) {
       if (accion) accion.resultado = { ok: false, motivo: "solo_ofrecida" };

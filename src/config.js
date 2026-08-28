@@ -187,6 +187,27 @@ Si esta opción es de su interés, por favor indíquenos la marca, modelo y año
 // salga SIEMPRE palabra por palabra. Si Pablo cambia el texto, se edita acá.
 // ───────────────────────────────────────────────────────────────────
 // ───────────────────────────────────────────────────────────────────
+// CUBREASIENTO A MEDIDA — red de seguridad para cuando el vehículo del cliente
+// no está en el catálogo. Pedido de Pablo (28 ago 2026): "cuando Max no
+// encuentre el material que piden, que lo envíe a un asesor".
+//
+// El cubreasiento NO se agota: se cose a medida para cada auto. El problema es
+// que a veces el modelo se apura, llama a la derivación y contesta SOLO "ya
+// quedó anotado, en breve se comunican con vos" — el cliente preguntó si
+// tenemos para su auto y se queda sin respuesta. Por eso esta frase la pone el
+// CÓDIGO: si Max ya lo dijo con sus palabras, no se toca nada; si se lo comió,
+// se le antepone esta.
+// ✏️ Para cambiar cómo se lo dice a los clientes, se edita ACÁ y nada más.
+// ⛔ Sin precios y sin plazos: eso lo confirma el asesor.
+// ───────────────────────────────────────────────────────────────────
+export const AVISO_A_MEDIDA = `Ese cubreasiento lo confeccionamos a medida para tu vehículo, así que se puede hacer sin problema.`;
+
+// Y la otra mitad: que lo pasamos con un asesor. Va aparte porque se agregan por
+// separado — a veces Max dice una y se come la otra, y repetirle al cliente algo
+// que Max ya dijo queda peor que no decirlo.
+export const AVISO_PASO_ASESOR = `Te paso con un asesor para que te confirme el precio exacto.`;
+
+// ───────────────────────────────────────────────────────────────────
 // AVISO DE ENVÍO — texto EXACTO que el CÓDIGO agrega al cerrar una venta
 // que va POR ENVÍO. Pedido de Pablo (14 ago 2026): el cliente tiene que
 // saber cuándo se despacha antes de quedarse esperando.
