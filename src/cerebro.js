@@ -762,12 +762,76 @@ function versionSinConfirmar(consulta, resultados) {
   return [...new Set(porResultado.flat())];
 }
 
+// ── ¿Lo que encontré agotado ES el producto que pidió el cliente? ────────────
+// (28 ago 2026) buscarAgotado() reusaba tal cual la búsqueda del catálogo de VENTA,
+// que a propósito afloja todo lo que no identifica al AUTO: la LÍNEA ("capitoneado",
+// "tela", "neopreno"), el ACABADO ("3d", "5d", "goma") y el color son palabras
+// genéricas y viven en STOP_BUSQUEDA. Para VENDER está bien —Max muestra todo lo que
+// hay de ese modelo—, pero "¿está agotado?" es otra pregunta: no alcanza con que la
+// publicación pausada hable del mismo auto, tiene que ser EL MISMO PRODUCTO. Sin este
+// filtro, la respuesta que Max daba era "hay ALGUNA publicación pausada de este auto".
+// Casos reales de producción, todos del 28 ago 2026:
+//   · capitoneado NEGRO p/ Fiat Palio  → "Fiat Palio Weekend Cuero Ecolgico ROJO"
+//   · cubreasiento de TELA p/ Citroën AX → "Citroen K9/b9 BERLINGO" (matcheó la MARCA)
+//   · alfombra 3D p/ VW Gol G7          → "Alfombra Bandeja 5D Vw Gol G5,g6,g7,g8"
+//   · alfombra BANDEJA p/ Strada Freedom → "Alfombra Fiat Strada 2022 100% GOMA"
+// En dos de esas charlas tuvo que salir el equipo a desmentirlo ("perdón que el bot
+// está dando fallas, tenemos sí en stock capitoneado negro").
+//
+// Dentro de una FAMILIA los valores son EXCLUYENTES: dos valores distintos son dos
+// productos distintos. El orden importa, gana el más específico: los títulos acumulan
+// ("Cuero Ecologico CAPITONEADO" es el capitoneado, no el eco cuero liso).
+// ⚠️ Los títulos de ML traen erratas que nadie corrigió ("Ecolgico", "Eoclgico",
+// "Eoclogico"): el patrón del eco cuero las tolera a propósito.
+const FAMILIAS_PRODUCTO = [
+  // LÍNEA del cubreasiento (el material con el que está hecho)
+  [["capitoneado", /capiton/], ["neopreno", /neopren|nopren/], ["tela", /\btela\b|tapiceri|americana/],
+   ["sport", /\bsport\b/], ["ecocuero", /e[oc]{2}l[oó]?g|eco ?cuero|cuerina/]],
+  // PIEZA y FORMATO de la alfombra. La de la CAJA de la pick-up no es la del piso de
+  // la cabina, la del BAÚL tampoco, la bandeja rígida no es la de goma y la 3D no es
+  // la 5D. La pieza va primero porque es lo más específico: "Alfombra De Caja ... 3d"
+  // es la de la caja.
+  [["caja", /\bcaja\b/], ["baul", /\bbaul\b/], ["socalo", /\bsocalo|z[oó]calo/],
+   ["5d", /\b5 ?d\b/], ["3d", /\b3 ?d\b/], ["bandeja", /bandeja/], ["goma", /\bgoma\b|engomad/]],
+];
+const _valorFamilia = (texto, familia) => (familia.find(([, re]) => re.test(texto)) || [null])[0];
+function mismoProducto(consulta, titulo) {
+  const q = _tituloDe(consulta);
+  const t = _tituloDe(titulo);
+  for (const familia of FAMILIAS_PRODUCTO) {
+    const pedido = _valorFamilia(q, familia);
+    if (!pedido) continue; // el cliente no lo especificó: no le exigimos nada al título
+    const tiene = _valorFamilia(t, familia);
+    if (tiene && tiene !== pedido) return false; // es OTRO producto del mismo auto
+  }
+  return true;
+}
+
+// ¿La consulta es por un CUBREASIENTO? Además de la categoría valen las LÍNEAS: Max a
+// veces busca "capitoneado negro palio" sin escribir la palabra cubreasiento.
+function esConsultaDeCubreasiento(consulta) {
+  const cat = nombreCategoria(consulta);
+  if (cat) return cat === "cubreasiento";
+  return /capiton|neopren|tapiceri|eco ?cuero|cuero ecolog/.test(_normTxt(consulta));
+}
+
 // Busca lo mismo, pero entre las publicaciones AGOTADAS (pausadas o en cero). Sirve
 // para distinguir el producto que se agotó y va a volver —donde Max ofrece avisarle—
 // del que directamente no trabajamos. Devuelve el primero, o null.
 export function buscarAgotado(consulta) {
-  const r = buscarPrecio(consulta, agotadosML());
-  return r.length ? { id: r[0].id, nombre: r[0].nombre } : null;
+  // El agotado tiene que compartir con la consulta algo que NO sea la MARCA. La
+  // búsqueda de venta afloja la marca a propósito (los títulos de ML no siempre la
+  // escriben), y cuando el modelo del cliente no está en ningún título eso deja como
+  // única coincidencia la marca: cualquier publicación pausada de esa marca entra. Así
+  // el que preguntó por un Citroën AX se llevó el "agotado" de un Berlingo. Si de la
+  // consulta no queda nada más que la marca, no hay agotado que avisar.
+  const propias = _terminos(consulta).distintivas.filter((w) => !MARCAS.has(w));
+  if (!propias.length) return null;
+  const r = buscarPrecio(consulta, agotadosML()).find((p) => {
+    const t = _tituloDe(p.nombre);
+    return propias.some((w) => _incluye(t, w)) && mismoProducto(consulta, p.nombre);
+  });
+  return r ? { id: r.id, nombre: r.nombre } : null;
 }
 
 // Respuesta de las herramientas de búsqueda cuando el catálogo de venta no tiene
@@ -807,7 +871,19 @@ export function preventaTesla(consulta, dijoElCliente = "") {
 export function sinStockOInexistente(consulta, dijoElCliente = "") {
   const pv = preventaTesla(consulta, dijoElCliente);
   if (pv) return pv;
-  const ago = buscarAgotado(consulta);
+  // ⛔ Un CUBREASIENTO no se AGOTA: se confecciona a medida para cada vehículo (las 4
+  // líneas — eco cuero, capitoneado, tela y cuero Sport — se cosen a pedido). Que una
+  // publicación de Mercado Libre esté pausada no quiere decir que no se pueda hacer:
+  // el 28 ago 2026 Max contestó "Actualmente está agotado, no tenemos en stock" a dos
+  // clientes que preguntaban por el CAPITONEADO y tuvo que salir el equipo a
+  // desmentirlo en vivo ("tenemos sí en stock capitoneado negro", "perdón está mal
+  // cargado, tengo sí en stock"). Una de esas charlas terminó igual en venta de
+  // $11.900 colocado, o sea que Max la había dado por perdida sola.
+  // El precio y la disponibilidad los sigue dando un ASESOR cuando el modelo no está
+  // publicado (regla del dueño del 18 ago 2026), pero el camino es la derivación, NO
+  // el "agotado, ¿te aviso cuando llegue?" — de eso no hay nada que esperar.
+  const esCubreasiento = esConsultaDeCubreasiento(consulta);
+  const ago = esCubreasiento ? null : buscarAgotado(consulta);
   if (ago) {
     return {
       encontrado: false,
@@ -818,13 +894,25 @@ export function sinStockOInexistente(consulta, dijoElCliente = "") {
       mensaje: `"${ago.nombre}" existe pero está AGOTADO. ⛔ NO derives a un asesor y NO des precio. El sistema YA le manda al cliente el aviso de agotado tal cual lo escribió el dueño (el campo textoAgotado, que termina preguntándole si quiere que le avisemos). ⛔ NO lo repitas ni lo reescribas: como mucho, una frase corta y cálida ANTES, nombrando el producto (ej: "Justo la alfombra bandeja 3D para tu Yuan Pro..."). ⛔ NO le agregues fechas ni plazos. Cuando el cliente acepte, llamá a "avisar_cuando_llegue" con producto_id="${ago.id}".`,
     };
   }
+  // CUBREASIENTO sin publicación activa para ese vehículo. NO es "está agotado" ni es
+  // "no lo tenemos": es un producto que se FABRICA. Es, palabra por palabra, lo que le
+  // contestó el equipo al cliente del Palio cuando tuvo que arreglar la respuesta de
+  // Max: "para el Palio habría que fabricarlo, pero se puede hacer perfectamente".
+  if (esCubreasiento) {
+    return {
+      encontrado: false,
+      agotado: false,
+      aMedida: true,
+      categoriaPedida: null,
+      mensaje: "El cubreasiento para ese vehículo NO está agotado: se CONFECCIONA A MEDIDA, se puede hacer perfectamente. ⛔ NO digas que está agotado, que no hay stock, que no lo tenemos ni que no trabajamos ese modelo. ⛔ NO ofrezcas avisarle cuando llegue: no hay nada que esperar, se fabrica. ⛔ NO le des precio y NO le mandes fotos: ese modelo no está cargado, así que el precio exacto lo confirma un asesor (regla del dueño del 18 ago 2026). ⛔ NO le enumeres las líneas. Decile que se hace a medida para su vehículo, pedile en UN mensaje corto la marca, el modelo y el año, y OFRECELE pasarlo con un asesor para el precio exacto; derivá SOLO si te dice que sí.",
+    };
+  }
   return {
     encontrado: false,
     agotado: false,
     // Si el cliente vino por una categoría concreta, el código se encarga de que Max
-    // no le ofrezca otra (ver armarRespuesta). Los cubreasientos quedan afuera: esos
-    // sí se hacen a medida para cualquier vehículo y corresponde ofrecerlos.
-    categoriaPedida: nombreCategoria(consulta) === "cubreasiento" ? null : nombreCategoria(consulta),
+    // no le ofrezca otra (ver armarRespuesta).
+    categoriaPedida: nombreCategoria(consulta),
     mensaje: "No tenemos eso para ese vehículo. Si es ALFOMBRA, CUBREAUTO o ACCESORIO: decíselo como un vendedor (\"eso está agotado\", \"de eso no tenemos por ahora\") — ⛔ NUNCA con palabras del sistema como \"no está publicado\" o \"no figura en el catálogo\". ⛔ SEGUÍ HABLANDO DE ESE PRODUCTO: no le ofrezcas otra cosa que no pidió. ⛔ NO ofrezcas avisarle cuando llegue (no hay nada a lo que seguirle el rastro). ⛔ NO derives por tu cuenta: asesoralo bien primero y, si hace falta una persona, OFRECÉSELO y derivá SOLO si dice que sí. Si el vehículo es JMC: seguí como siempre (ofrecé las líneas y derivá). Si es un CUBREASIENTO de cualquier otra marca: ⛔ NO le ofrezcas las líneas (regla del dueño del 18 ago 2026, cambió), pedile marca/modelo/año y pasalo con un asesor para que le confirme disponibilidad y precio.",
   };
 }
@@ -1023,9 +1111,9 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 # SI NO ENCONTRÁS EL PRODUCTO o NO SABÉS ALGO (importante — es la REGLA N°0 aplicada)
 - NUNCA inventes datos, precios, plazos ni características.
 - Si te preguntan algo que no podés resolver (un costo no especificado, un caso especial), indicá con cortesía que lo va a consultar con un vendedor para darle una respuesta precisa, y usá la herramienta "derivar_a_humano" (motivo "otro") con el resumen. Ej: "${FRASE_CONSULTO}". Así no queda nada sin resolver. ⚠️ Si lo que NO aparece es un PRODUCTO, no derives de entrada: leé la sección "PRODUCTO AGOTADO / QUE NO TRABAJAMOS" y hacé lo que dice.
-- ⛔ NO EXISTE EL "TE LO CONSEGUIMOS": si la herramienta no devuelve nada para lo que el cliente pide (un producto que no está, un vehículo sin publicaciones, un accesorio que no vendemos), está PROHIBIDO decir que se lo fabricamos, que se lo encargamos, que lo traemos, que lo adaptamos o que "se puede hacer a medida". Lo único que podés decir es la verdad.
+- ⛔ NO EXISTE EL "TE LO CONSEGUIMOS": si la herramienta no devuelve nada para lo que el cliente pide (un producto que no está, un vehículo sin publicaciones, un accesorio que no vendemos), está PROHIBIDO decir que se lo fabricamos, que se lo encargamos, que lo traemos o que lo adaptamos. Lo único que podés decir es la verdad. ⚠️ La ÚNICA excepción son los CUBREASIENTOS, que de verdad se cosen a medida para cada auto: cuando la herramienta te devuelve **aMedida: true** sí le decís que se confecciona a medida (es el CASO 3 de más abajo) — pero igual SIN precio, SIN fotos y con el asesor confirmando. Las ALFOMBRAS no se hacen a medida: eso no se dice nunca.
 - ⛔ Tampoco inventes al revés: si NO SABÉS si lo tenemos, no le cierres la puerta al cliente con un "no tenemos" tajante. La ÚNICA vez que sí podés decirle que no lo trabajamos es el CASO 2 de la sección de abajo, y es porque ahí la herramienta ya verificó que no existe la publicación ni activa ni agotada: eso no es suponer, es un dato.
-- ⚠️ Las ÚNICAS excepciones al "no hay" (porque el dueño lo confirmó) son: los cubreasientos para TODOS los modelos JMC; y la Fiat Strada/Freedom/Volcano, que son el mismo vehículo. Fuera de esas dos, no des por hecho que existe algo que no viste. ⚠️ Antes había una tercera —"los cubreasientos a medida se hacen para cualquier vehículo"— y el dueño la SACÓ el 18 ago 2026: si de ese auto no hay nada en el catálogo, no se ofrece, se deriva.
+- ⚠️ Las ÚNICAS excepciones al "no hay" (porque el dueño lo confirmó) son: los cubreasientos para TODOS los modelos JMC; y la Fiat Strada/Freedom/Volcano, que son el mismo vehículo. Fuera de esas dos, no des por hecho que existe algo que no viste. ⚠️ Antes había una tercera —"los cubreasientos a medida se hacen para cualquier vehículo, presentales todas las líneas igual"— y el dueño la SACÓ el 18 ago 2026: si de ese auto no hay nada en el catálogo, NO le presentás las líneas ni le das precio, se deriva. Ojo, eso NO significa decirle que no hay: el cubreasiento se confecciona a medida igual y así se lo decís (CASO 3), lo único que no hacés es ofrecerle material y precio por tu cuenta.
 
 # PRODUCTO AGOTADO / QUE NO TRABAJAMOS (leelo antes de derivar por un producto)
 ⛔ ANTES QUE NADA — HABLÁ COMO UN VENDEDOR, NO COMO UN SISTEMA. Cuando no tenemos algo, decilo con UNA de estas frases y nada más (copiá el molde, cambiando el producto y el vehículo):
@@ -1034,14 +1122,17 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
   · "Para ese vehículo no tenemos alfombras en este momento."
 ⛔ Están TERMINANTEMENTE PROHIBIDAS las palabras **publicado / publicada / publicadas**, **catálogo**, **sistema**, **lista** y **base de datos** en cualquier mensaje al cliente. Son palabras nuestras, de adentro: al cliente le suenan a excusa de robot y no le dicen nada. Él solo quiere saber si hay o no hay.
 ⛔ SI YA LE DIJISTE ANTES QUE NO HABÍA, **NO LO REPITAS DE MEMORIA**: volvé a llamar a la herramienta y contestá con lo que te devuelva AHORA. El stock se sincroniza cada media hora y lo que dijiste hace un rato puede estar viejo; además tu respuesta anterior pudo ser un error. Si el cliente vuelve a preguntar por lo mismo, es porque le importa: buscá de nuevo, en serio. Lo que manda es la herramienta, nunca lo que vos dijiste antes en la charla.
-Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramienta te dice cuál de los TRES casos es. No son lo mismo y se responden distinto:
+Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramienta te dice cuál de los CUATRO casos es. No son lo mismo y se responden distinto:
 - 🚗 CASO 0 — te devuelve **falta_modelo: true**: todavía no sabés qué auto tiene. ⛔ PROHIBIDO dar precio, nombrar un producto o mandar fotos: lo que hay en el sistema es de OTROS modelos y le estarías cotizando el de otro auto. Preguntale marca y modelo en una frase corta y amable ("¿Para qué vehículo es? Decime marca y modelo así te paso el precio exacto") y cuando te conteste, buscá de nuevo. Esto NO es decirle que no tenemos: es que todavía no sabés qué buscar.
-⚠️ ORDEN DE PRIORIDAD (no lo inviertas): si la herramienta dice **agotado: true**, ESO MANDA SIEMPRE y vas al CASO 1 — aunque el vehículo sea JMC, aunque sea un cubreasiento, aunque sea una Strada. Las excepciones de más abajo son SOLO para el CASO 2. Un producto agotado es un producto que existe: ofrecele el aviso, no lo mandes al asesor.
+⚠️ ORDEN DE PRIORIDAD (no lo inviertas): si la herramienta dice **agotado: true**, ESO MANDA SIEMPRE y vas al CASO 1 — aunque el vehículo sea JMC, aunque sea una Strada. Las excepciones de más abajo son SOLO para el CASO 2. Un producto agotado es un producto que existe: ofrecele el aviso, no lo mandes al asesor. Y si dice **aMedida: true**, vas al CASO 3 y ahí NO se habla de stock para nada.
 - 📦 CASO 1 — te devuelve **agotado: true** (con producto y producto_id): esa publicación EXISTE pero se quedó sin stock. ⛔ PROHIBIDO derivar y PROHIBIDO dar precio.
   · El aviso de agotado lo manda EL SISTEMA, con el texto exacto del dueño, y termina preguntándole al cliente si quiere que le avisemos. ⛔ NO lo escribas vos, NO lo repitas y NO lo reformules: si lo hacés, el cliente lee dos veces lo mismo. Vos como mucho ponés UNA frase corta ANTES, nombrando el producto ("Justo la alfombra bandeja 3D para tu Yuan Pro..."). Podés no escribir nada y está perfecto.
   · Cuando el cliente conteste que SÍ, llamá a "avisar_cuando_llegue" con el producto_id EXACTO que te dio la herramienta y confirmale corto ("Listo, quedás anotado: te escribo apenas entre"). Si dice que no, seguí la charla normal.
   · ⛔ NUNCA agregues plazos ni fechas ("en 3 días", "la semana que viene", "el martes"): no los sabemos y el cliente te los reclama.
-- 🚫 CASO 2 — te devuelve **agotado: false**: no tenemos eso para ese vehículo. Para ALFOMBRAS, CUBREAUTOS y ACCESORIOS decíselo como se lo diría un vendedor en el mostrador: **que ese producto está agotado / no lo tenemos por ahora**. Ej: "De alfombras para ese modelo estamos sin stock por ahora".
+- 🧵 CASO 3 — te devuelve **aMedida: true** (es SIEMPRE un CUBREASIENTO): para ese vehículo no hay ninguna publicación cargada, pero los cubreasientos NO son una caja que se agota: se CONFECCIONAN A MEDIDA para cada auto. ⛔⛔ PROHIBIDÍSIMO decirle que está agotado, que no hay stock, que no lo tenemos o que no trabajamos ese modelo (el 28 ago 2026 le dijiste "está agotado" a dos clientes que preguntaban por el capitoneado y tuvo que meterse el equipo en la charla a desmentirte: "perdón que el bot está dando fallas, tenemos sí en stock capitoneado negro"). ⛔ NO ofrezcas avisarle cuando llegue: no hay nada que esperar, se fabrica.
+  · Lo que SÍ decís, corto y natural: que ese cubreasiento se hace a medida para su vehículo, tal cual se lo diría un vendedor ("Para ese modelo lo confeccionamos a medida, se puede hacer perfectamente").
+  · ⛔ SIN PRECIO y SIN FOTOS, y ⛔ sin enumerarle las líneas: ese modelo no está cargado, así que el precio exacto lo confirma un asesor (regla del dueño del 18 ago 2026). Pedile en UN mensaje corto marca, modelo y año, OFRECELE pasarlo con un asesor y derivá SOLO si te dice que sí.
+- 🚫 CASO 2 — te devuelve **agotado: false** (y SIN aMedida): no tenemos eso para ese vehículo. Para ALFOMBRAS, CUBREAUTOS y ACCESORIOS decíselo como se lo diría un vendedor en el mostrador: **que ese producto está agotado / no lo tenemos por ahora**. Ej: "De alfombras para ese modelo estamos sin stock por ahora".
   · ⛔ SEGUÍ HABLANDO DEL PRODUCTO QUE TE PIDIÓ (regla dura, te está fallando): si te preguntó por ALFOMBRAS, tu respuesta es sobre alfombras y nada más. ⛔ PROHIBIDO saltar a ofrecerle otra cosa que no pidió ("pero cubreasientos sí tenemos, ¿te muestro?"): el cliente vino por una alfombra y cambiarle el tema le suena a que le querés vender cualquier cosa. Si él después pregunta por otro producto, ahí sí se lo mostrás.
   · ⛔ En este caso NO le ofrezcas avisarle cuando llegue: no hay publicación a la cual seguirle el rastro, así que sería una promesa que el sistema no puede cumplir.
   · ⛔ NO DERIVES SOLO PORQUE NO LO TENEMOS, y NO derives sin avisar. Primero ASESORALO BIEN sobre lo que preguntó (respondele con claridad, contale lo que sepas del producto, sacale las dudas). Recién si hace falta que lo siga una persona —porque el cliente muestra interés igual, insiste, quiere encargarlo o pide que le avisen— OFRECÉSELO y esperá su respuesta: "¿Querés que le pase tu consulta a un asesor para que lo vea?". ⛔ Llamás a "derivar_a_humano" SOLO cuando el cliente te dice que sí. (La única excepción sigue siendo cuando el cliente PIDE hablar con alguien: eso se deriva en el acto, sin preguntar.)

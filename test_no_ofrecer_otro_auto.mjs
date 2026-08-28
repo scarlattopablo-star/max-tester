@@ -105,21 +105,33 @@ caso("ningún producto a la venta queda sin aparecer", invisibles.length === 0, 
 // De cada publicación PAUSADA cuyo modelo no tiene nada activo en esa categoría, la
 // respuesta tiene que ser "agotado" nombrando ese mismo auto: ni un "no lo trabajamos",
 // ni el producto de otro modelo.
+// ⚠️ Los CUBREASIENTOS quedan afuera desde el 28 ago 2026: no se agotan, se confeccionan
+// a medida, así que la respuesta correcta ahí NO es "agotado" sino "se hace a medida +
+// te lo confirma un asesor" (ver test_agotado_producto_correcto.mjs). Que una publicación
+// de ML esté pausada no significa que no se pueda fabricar.
 const malAvisados = [];
-let revisadas = 0;
+const malAMedida = [];
+let revisadas = 0, aMedida = 0;
 for (const p of agotados()) {
   const info = modeloDe(p.n);
   const c = categoriaDe(p.n);
   if (!info || !c) continue;
   const q = [c, info.marca, info.consulta].filter(Boolean).join(" ");
   if (!identificaModelo(q) || buscarPrecio(q).length) continue; // hay stock de ese modelo: no aplica
-  revisadas++;
   const s = sinStockOInexistente(q);
+  if (c === "cubreasiento") {
+    aMedida++;
+    // Ni "agotado" ni "no lo trabajamos": tiene que ir por el camino del a medida.
+    if (s.agotado || !s.aMedida) malAMedida.push(`"${q}" -> ${s.agotado ? `dijo AGOTADO (${s.producto})` : "no marcó a medida"}`);
+    continue;
+  }
+  revisadas++;
   if (!s.agotado || !nombra(norm(s.producto || ""), info.modelo)) {
     malAvisados.push(`"${q}" -> ${s.agotado ? s.producto : "dijo que no lo trabajamos"}`);
   }
 }
 caso(`las ${revisadas} sin stock se avisan como agotado DEL MISMO auto`, malAvisados.length === 0, malAvisados.slice(0, 6).join("  ·  "));
+caso(`los ${aMedida} cubreasientos pausados se resuelven A MEDIDA, nunca como agotados`, malAMedida.length === 0, malAMedida.slice(0, 6).join("  ·  "));
 
 console.log(`\n(consultas revisadas: ${consultas} · publicaciones sin modelo identificable en el título: ${sinModelo.length})`);
 console.log(mal ? `\n❌ ${mal} fallaron, ${ok} pasaron` : `\n✅ TODO OK — ${ok} pasaron, 0 fallaron`);
