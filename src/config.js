@@ -202,6 +202,15 @@ Si esta opción es de su interés, por favor indíquenos la marca, modelo y año
 // ───────────────────────────────────────────────────────────────────
 export const AVISO_A_MEDIDA = `Ese cubreasiento lo confeccionamos a medida para tu vehículo, así que se puede hacer sin problema.`;
 
+// PRIMERO EL AUTO, DESPUÉS LOS MATERIALES. Pedido de Pablo (28 ago 2026): "si el
+// modelo no está que derive a asesor, ANTES de hablar de materiales". Enumerarle
+// las 4 líneas a alguien de quien todavía no sabemos el auto es empezar la venta al
+// revés: si después resulta que de ese vehículo no tenemos nada, ya le prometimos un
+// material y hay que dar marcha atrás. Si a Max se le escapa la enumeración, el
+// código le borra esas frases y —si no le quedó nada— pone esta pregunta.
+// ✏️ Editable acá.
+export const PEDIR_VEHICULO = `¿Para qué marca y modelo de auto es? Así te confirmo las opciones y el precio exacto.`;
+
 // Y la otra mitad: que lo pasamos con un asesor. Va aparte porque se agregan por
 // separado — a veces Max dice una y se come la otra, y repetirle al cliente algo
 // que Max ya dijo queda peor que no decirlo.

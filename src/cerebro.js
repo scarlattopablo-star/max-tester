@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, AVISO_AGOTADO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, AVISO_AGOTADO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -807,6 +807,29 @@ function mismoProducto(consulta, titulo) {
   return true;
 }
 
+// ── ¿El cliente ya nos dijo QUÉ AUTO tiene? ──────────────────────────────────
+// Se mira toda la charla, no el turno: si el auto se nombró hace tres mensajes, sigue
+// siendo el mismo auto. Vale una MARCA ("Citroën"), un modelo que el catálogo conozca
+// ("Palio", "Strada") o uno alfanumérico escrito como sea ("hb20" ↔ "Hb 20").
+// ⚠️ Es una lectura de TEXTO, nada más: no se le pasa a buscarPrecio(), que espera una
+// consulta de producto y no una oración (lección del 7 ago 2026).
+const _titulosCatalogo = () => [...productosML(), ...agotadosML()].map((p) => _tituloDe(p.n));
+function nombroVehiculo(texto) {
+  // ⚠️ Sin el nombre del negocio ni el del bot: "max" está en el catálogo ("Max
+  // Resistencia") y el saludo de cada charla lo trae, así que sin esto el test daba
+  // siempre que sí.
+  const limpio = String(texto || "").replace(/(la\s+)?casa\s+del\s+cubre\s*asiento/gi, " ").replace(/\bmax\b/gi, " ");
+  const { distintivas, modelos } = _terminos(limpio);
+  return distintivas.some((w) => {
+    if (MARCAS.has(w) || modelos.has(w)) return true;
+    if (NO_ES_AUTO.has(w) || ACABADO_PRODUCTO.has(w)) return false;
+    if (existeEnCatalogo(w)) return true;
+    // Los modelos con número no entran en el vocabulario (que es solo de letras):
+    // se buscan contra los títulos, que es donde "hb20" encuentra a "Hb 20".
+    return /\d/.test(w) && _titulosCatalogo().some((t) => _incluye(t, w));
+  });
+}
+
 // ¿La consulta es por un CUBREASIENTO? Además de la categoría valen las LÍNEAS: Max a
 // veces busca "capitoneado negro palio" sin escribir la palabra cubreasiento.
 function esConsultaDeCubreasiento(consulta) {
@@ -871,6 +894,25 @@ export function preventaTesla(consulta, dijoElCliente = "") {
 export function sinStockOInexistente(consulta, dijoElCliente = "") {
   const pv = preventaTesla(consulta, dijoElCliente);
   if (pv) return pv;
+  // ⛔ PRIMERO EL AUTO. Si la consulta no nombra ningún vehículo, no encontrar nada no
+  // significa NADA: no es que se agotó, ni que se lo hacemos a medida, ni que no lo
+  // trabajamos — es que todavía no sabemos qué buscar. Sin este corte, una repregunta
+  // suelta a mitad de charla ("¿cuál me recomendás?") caía en el camino del a medida y
+  // Max mandaba al asesor a un cliente con una Strada, que sí tenemos y que ya le
+  // habíamos mostrado con fotos.
+  // ⚠️ NO se usa identificaModelo(): descarta los modelos de DOS letras (el Citroën
+  // AX, el VW Up) y ahí Max entraba en bucle pidiéndole al cliente un auto que ya le
+  // había dicho. Alcanza con que quede algo que no sea la MARCA — o con que el auto
+  // aparezca en la frase del cliente, por si Max escribió mal la búsqueda.
+  const nombraAlgo = _terminos(consulta).distintivas.some((w) => !MARCAS.has(w));
+  if (!nombraAlgo && !nombroVehiculo(dijoElCliente)) {
+    return {
+      encontrado: false,
+      agotado: false,
+      falta_modelo: true,
+      mensaje: "Esa búsqueda no nombra ningún vehículo, así que no encontré nada — pero eso NO quiere decir que no lo tengamos. ⛔ NO le digas que no hay, ⛔ NO le digas que está agotado y ⛔ NO lo derives por esto. Si el cliente YA te dijo qué auto tiene, ⛔ no se lo preguntes de nuevo: volvé a buscar poniendo la marca y el modelo en la consulta. Si todavía no te lo dijo, preguntáselo en una frase corta y amable (\"¿Para qué marca y modelo es? Así te paso el precio exacto\") y buscá de nuevo cuando te conteste.",
+    };
+  }
   // ⛔ Un CUBREASIENTO no se AGOTA: se confecciona a medida para cada vehículo (las 4
   // líneas — eco cuero, capitoneado, tela y cuero Sport — se cosen a pedido). Que una
   // publicación de Mercado Libre esté pausada no quiere decir que no se pueda hacer:
@@ -1077,6 +1119,8 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 - ⛔ NO SEAS INSISTENTE NI REPETITIVO. Nunca repreguntes algo que el cliente YA respondió, ya aclaró, o eligió no contestar. Si el cliente confirma o avanza (dice "ese está bien", "dale", "me sirve", "ok"), SEGUÍ SU RITMO y avanzá con lo que quiere: NO vuelvas a pedir el mismo dato (año, modelo, etc.) salvo que sea imprescindible para concretar la venta/el turno. Si ya preguntaste algo una vez y no te lo contestó, NO lo repitas.
 - 🧠 RECORDÁ TODO LO QUE EL CLIENTE YA DIJO (REGLA CLAVE, no la rompas): tenés el historial completo de la charla — USALO. Apenas el cliente menciona el MODELO de su auto (ej. "cubreasiento para HB20"), ese es SU vehículo para TODA la conversación: NO le vuelvas a preguntar "¿para qué modelo?" más adelante. Lo mismo con el COLOR, el AÑO, el tipo de cabina, si quiere logo, el medio de pago, etc.: una vez que lo dijo, queda FIJADO y das por sabido ese dato; NO lo repreguntes. Si el cliente eligió un color, referite a ESE color de ahí en más ("el capitoneado negro que elegiste"). Antes de preguntar CUALQUIER dato, revisá si ya está en la conversación: si está, NO preguntes. Solo se vuelve a preguntar si el cliente CAMBIA de auto/modelo explícitamente. Ser coherente con lo que ya te dijeron es lo más importante: nada de hacer sentir al cliente que no lo escuchaste.
 - No repitas el saludo, tu nombre, ni reformules la misma pregunta de otra forma.
+- 🚗🚗 PRIMERO EL AUTO, DESPUÉS LOS MATERIALES (REGLA DURA del dueño, 28 ago 2026: "si el modelo no está que derive a asesor, ANTES de hablar de materiales"). Mientras NO SEPAS qué vehículo tiene, ⛔ PROHIBIDO nombrarle las líneas y los materiales (eco cuero, capitoneado, tela de tapicería, cuero Sport, espumas, costuras) y ⛔ PROHIBIDO mandarle fotos o videos de material. No es un detalle de forma: si le enumerás las cuatro líneas y después resulta que de su auto no tenemos nada, ya le prometiste un material y tenés que dar marcha atrás — le pasó a un cliente con un Fiat Palio el 28 ago. Lo ÚNICO que hacés primero es preguntarle el auto, corto y amable: "¿Para qué marca y modelo de auto es? Así te confirmo las opciones y el precio exacto". Recién cuando el vehículo aparece en el catálogo le presentás las líneas; si no aparece, es el CASO 3 (se hace a medida y lo pasás con un asesor, sin nombrarle materiales).
+  · ⚠️ Esto NO cambia nada cuando el auto SÍ está: ahí seguís presentando TODAS las líneas juntas como siempre (regla del 22 jul 2026).
 - 🚗 EL VEHÍCULO SE PREGUNTA UNA SOLA VEZ (REGLA DURA, te está fallando): en cuanto el cliente te da CUALQUIER referencia de su vehículo —una marca, un modelo, o un tipo genérico como "combi", "camioneta", "auto chico"— tu PRÓXIMA acción es BUSCAR ESE TÉRMINO en el catálogo con "enviar_foto" (o "consultar_precio"), NO volver a preguntar. ⛔ PROHIBIDO pedirle que precise el modelo de nuevo y PROHIBIDO tirarle una lista de submodelos para que elija ("¿VW Combi, Sprinter, Transit...?"). ⛔⛔ Y PROHIBIDO PREGUNTARLE SI ESO ES LA MARCA O EL MODELO (te está fallando, caso real: el cliente pidió "alfombra para nammi" y le preguntaste "¿de qué marca es el Nammi?" cuando la alfombra del Dongfeng Nammi estaba ahí para venderla). Los nombres del catálogo vienen completos (marca + modelo), así que BUSCÁ LA PALABRA TAL CUAL TE LA DIJO y la vas a encontrar igual. Recién si la búsqueda no devuelve NADA podés pedirle un dato más. Ejemplo concreto: cliente dice "tengo una combi" → buscás "combi" con enviar_foto y le mostrás lo que aparezca. Si la búsqueda NO devuelve nada para ese vehículo, NO sigas pidiendo el modelo: resolvelo como dice la sección "PRODUCTO AGOTADO / QUE NO TRABAJAMOS" (según lo que te haya devuelto la herramienta, le ofrecés el aviso, le decís que no lo trabajamos, o derivás). Como mucho, UNA repregunta corta en toda la charla; si no la contesta, seguí igual.
 - Sin emojis. Lenguaje claro, profesional y cordial (tuteando, con respeto). Si no sabés algo, no lo inventes: consultalo (ver más abajo).
 - DALE ESPACIO: después de preguntar algo, esperá la respuesta. Si el cliente no contestó, NO mandes otro mensaje insistiendo.
@@ -1631,7 +1675,12 @@ const MUESTRAN_LINEAS = new Set([
 // caminos que llegan a lo mismo: `aMedida` (la búsqueda no trajo nada) y `frenoLinea`
 // (quiso mostrar una línea de un auto del que no hay nada). Sin esto, el guard de
 // "preguntaste, esperá el sí" tiraba la derivación cuando a Max le salía preguntar.
-const derivaDirecto = (turno) => !!(turno?.cubreasientoAMedida || turno?.frenoLinea);
+// ⚠️ Va también `cubreasientoSinCatalogo`: es la misma situación vista desde otra
+// herramienta, y sin ella quedaban turnos en los que Max derivaba pero contestaba solo
+// "enseguida se comunican con vos" — sin decirle nunca al cliente que su cubreasiento
+// SE PUEDE HACER. La red de seguridad de las frases se cuelga de esta misma señal.
+const derivaDirecto = (turno) =>
+  !!(turno?.cubreasientoAMedida || turno?.frenoLinea || (turno?.cubreasientoSinCatalogo && !turno?.hayCatalogo));
 
 export function sinCatalogoParaSuAuto(ctx = {}) {
   const turno = ctx._turno || {};
@@ -1662,6 +1711,11 @@ const BUSCAN_CATALOGO = new Set(["enviar_foto", "consultar_precio"]);
 
 // Exportada para las pruebas: así se puede verificar qué manda cada herramienta
 // (los pies de las fotos, por ejemplo) sin gastar una llamada a la IA.
+// Respuestas de las herramientas que piden UN DATO MÁS antes de poder contestar. NO
+// son un "no tenemos": son un "todavía no sé qué buscar". La de la cabina dice justo
+// lo contrario — que hay productos y sobran opciones.
+const faltaUnDato = (r) => !!(r?.falta_modelo || r?.falta_cabina);
+
 export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   const r = await _ejecutarHerramienta(nombre, input, ctx);
   // Memoria del TURNO: qué contestó el catálogo sobre el auto del cliente. La leen las
@@ -1677,7 +1731,12 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   if (turno && BUSCAN_CATALOGO.has(nombre)) {
     if (r?.ok === true || r?.encontrado === true || (r?.fotos || []).length) turno.hayCatalogo = true;
     // Agotado NO cuenta como vacío: el producto existe y tiene su propio flujo.
-    else if (r?.encontrado === false && !r?.agotado) {
+    // Y las que piden UN DATO MÁS tampoco: no encontrar nada porque la consulta no
+    // nombraba ningún vehículo no dice NADA sobre el auto del cliente. Contarlo como
+    // vacío hacía que, a mitad de una charla por una Strada —que sí tenemos y ya le
+    // habíamos mostrado—, una repregunta suelta ("¿cuál me recomendás?") disparara el
+    // freno de "de ese auto no hay nada" y lo mandara al asesor.
+    else if (r?.encontrado === false && !r?.agotado && !faltaUnDato(r)) {
       turno.catalogoVacio = true;
       // ¿Lo que buscó era un CUBREASIENTO? Solo esos van al asesor cuando no hay nada:
       // una alfombra o un accesorio que no trabajamos se contesta y punto (CASO 2), sin
@@ -1808,7 +1867,7 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const pvPrecio = preventaTesla(consulta, ctx._ultimoUsuario);
       if (pvPrecio) return pvPrecio;
       const encontrados = buscarPrecio(consulta);
-      if (!encontrados.length) return { ...sinStockOInexistente(consulta) };
+      if (!encontrados.length) return { ...sinStockOInexistente(consulta, ctx._ultimoUsuario) };
       // Si no sabemos QUÉ AUTO tiene, lo que encontramos es de un modelo cualquiera:
       // darle ese precio es mentirle. Se le pregunta el vehículo primero.
       if (!identificaModelo(consulta)) return { encontrado: false, falta_modelo: true, mensaje: "Todavía no sabés qué vehículo tiene, así que NO le des precio ni le nombres productos: lo que encontré es de otros modelos y le estarías cotizando cualquier cosa. Preguntale marca y modelo (y el año si es camioneta) en una frase corta y amable, y recién ahí volvé a buscar." };
@@ -1865,7 +1924,7 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const hallados = buscarPrecio(consulta);
       // Solo cuando NO hay nada del producto miramos si está agotado o si no lo
       // trabajamos: si hay productos pero ninguno tiene foto, es otro problema.
-      if (!hallados.length) return { ok: false, ...sinStockOInexistente(consulta) };
+      if (!hallados.length) return { ok: false, ...sinStockOInexistente(consulta, ctx._ultimoUsuario) };
       // Mismo criterio que consultar_precio: sin saber el vehículo, las fotos serían de
       // otro auto. Antes de mostrar nada, se pregunta el modelo.
       if (!identificaModelo(consulta)) return { ok: false, falta_modelo: true, mensaje: "Todavía no sabés qué vehículo tiene: las fotos que encontré son de otros modelos y mostrárselas lo confunde. Preguntale marca y modelo en una frase corta y amable, y después buscá de nuevo." };
@@ -2346,6 +2405,12 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // lo elige el modelo. Si el turno terminó sin nada de ese auto, acá se caen igual las
   // fotos y los videos de las líneas, hayan salido antes o después de la búsqueda.
   const sinNadaDeSuAuto = !!(ctx._turno?.catalogoVacio && !ctx._turno?.hayCatalogo);
+  // ⛔ PRIMERO EL AUTO, DESPUÉS LOS MATERIALES: mientras no sepamos qué vehículo tiene
+  // —o sabiéndolo, si de ese vehículo no hay nada— no se le muestran ni se le nombran
+  // las líneas. Las fotos de material van sin precio pero son igual de comprometedoras:
+  // el cliente elige un capitoneado y recién ahí nos enteramos de que su auto no está.
+  const autoConocido = nombroVehiculo(`${ctx.dichoPorElCliente || ctx.textoCharla || ""} ${ctx._ultimoUsuario || ""}`);
+  const ocultarLineas = sinNadaDeSuAuto || !autoConocido;
   // ⛔ RED DE SEGURIDAD DE LA PREVENTA. Si el cliente pregunto por su Tesla, NO
   // pueden salir fotos de las alfombras de otro auto —van con el precio en el pie,
   // asi que es cotizarle un producto que no le sirve. Paso el 24 ago 2026: pregunto
@@ -2360,7 +2425,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   const ofreceLinea = (h) => h !== "enviar_foto";
   let fotosCrudas = (preventaAbierta ? [] : acciones)
     .filter((a) => CON_FOTOS.has(a.herramienta) && a.resultado?.ok)
-    .filter((a) => !(sinNadaDeSuAuto && ofreceLinea(a.herramienta)))
+    .filter((a) => !(ocultarLineas && ofreceLinea(a.herramienta)))
     .flatMap((a) => a.resultado.fotos || [])
     .filter((f) => f && f.img);
   // La MISMA foto puede venir de dos herramientas (las muestras de costura son los
@@ -2390,7 +2455,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   const _vistosV = new Set();
   const videosEnviar = acciones
     .filter((a) => (a.herramienta === "mostrar_tela" || a.herramienta === "mostrar_cuero_sport") && a.resultado?.ok)
-    .filter(() => !sinNadaDeSuAuto)
+    .filter(() => !ocultarLineas)
     .flatMap((a) => a.resultado.videos || [])
     .filter((v) => v && v.video)
     .filter((v) => { if (_vistosV.has(v.video)) return false; _vistosV.add(v.video); return true; })
@@ -2534,6 +2599,24 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // Se miran POR SEPARADO: a veces dice una y se come la otra, y repetirle al cliente
   // algo que Max ya dijo queda peor que no decirlo. Si Max lo dijo con sus palabras no
   // se toca nada: su frase nombra el auto y suena mejor que cualquier texto fijo.
+  // ⛔ PRIMERO EL AUTO, DESPUÉS LOS MATERIALES (pedido del dueño, 28 ago 2026: "si el
+  // modelo no está que derive a asesor — antes de hablar de materiales").
+  // Enumerarle las 4 líneas a alguien de quien todavía no sabemos el auto es empezar la
+  // venta al revés: si después resulta que de ese vehículo no tenemos nada, ya le
+  // prometimos un material y hay que dar marcha atrás. Es EXACTAMENTE lo que pasó con
+  // el cliente del Fiat Palio (28 ago): Max le ofreció "contarle sobre el resto de la
+  // línea (capitoneado, tela, cuero Sport)" de un auto del que no tenemos nada.
+  // Se le caen las ORACIONES que nombran materiales en dos casos:
+  //   · la búsqueda de este turno confirmó que de su auto no hay nada, o
+  //   · en toda la charla todavía no nombró ningún vehículo.
+  // ⚠️ Solo los MATERIALES: "a medida" no es un material y tiene que poder decirlo.
+  // ⚠️ Y NO toca las charlas donde el auto ya apareció: ahí presentar las líneas es
+  // justo lo que corresponde (regla del 22 jul 2026).
+  if (limpio && ocultarLineas) {
+    limpio = _sacarOraciones(limpio, /capiton|eco ?cuero|cuero ecol|tapiceri|cuero sport|neopren|costura|espuma|\d+\s?mm|\btelas?\b/i);
+    // Si no le quedó nada y encima no sabemos el auto, lo que falta es la pregunta.
+    if (!limpio && !autoConocido) limpio = PEDIR_VEHICULO;
+  }
   if (derivaDirecto(ctx._turno)) {
     const diceMedida = /a medida|confeccion|fabric/i.test(limpio);
     const diceAsesor = /asesor|compa[ñn]er|vendedor|se comunica|te contact|lo contact/i.test(limpio);
@@ -2663,7 +2746,16 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
   // El aviso de COLOCACIÓN necesita saber QUÉ línea se está comprando, y el modelo
   // no siempre la repite al llamar la herramienta (típico: confirmar_transferencia
   // sin "detalle"). Por eso le damos a las herramientas el texto de la charla.
-  ctx = { ...ctx, textoCharla: [...(historialPrevio || []).map((m) => (typeof m.content === "string" ? m.content : m.texto || "")), textoUsuario].join(" ") };
+  const _texto = (m) => (typeof m.content === "string" ? m.content : m.texto || "");
+  ctx = {
+    ...ctx,
+    textoCharla: [...(historialPrevio || []).map(_texto), textoUsuario].join(" "),
+    // Lo que dijo EL CLIENTE, sin las respuestas de Max. Lo usa el test del vehículo:
+    // en el saludo Max dice "te habla Max de La Casa del Cubreasiento", y "max" existe
+    // en el catálogo ("Max Resistencia"), así que la charla entera daba SIEMPRE
+    // "el cliente ya nombró su auto" — con su propio saludo.
+    dichoPorElCliente: [...(historialPrevio || []).filter((m) => m.role === "user").map(_texto), textoUsuario].join(" "),
+  };
   // Proveedor "claude" -> SDK nativo con caché de prompt (mucho más barato que el modo compat).
   if ((process.env.IA_PROVIDER || "gemini").toLowerCase() === "claude") {
     return responderAnthropic(textoUsuario, historialPrevio, imagenes, ctx);
