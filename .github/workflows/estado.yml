@@ -1,0 +1,65 @@
+# Mirar el estado de Max en producción, a pedido (pestaña Actions → "ver estado de Max"
+# → Run workflow). Es un GET a /api/estado, no toca nada.
+#
+# POR QUÉ EXISTE: `https://max-tester.onrender.com` no se puede consultar desde
+# cualquier lado (la red del entorno de Claude rechaza el CONNECT a Render con 403), y
+# el log del keep-alive tarda ~50 min en cerrarse. Este workflow es la forma rápida de
+# responder las tres preguntas que importan cuando algo se subió a `main`:
+#   · ¿qué commit está corriendo ahí adentro?  (¿llegó el deploy o no?)
+#   · ¿cuántas publicaciones se venden A PEDIDO? (¿ML manda la disponibilidad a X días?)
+#   · ¿cómo salió la última sincronización con Mercado Libre?
+name: ver estado de Max
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  estado:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Leer /api/estado
+        run: |
+          URL="https://max-tester.onrender.com/api/estado"
+          # Puede estar dormido (plan free): el arranque en frío tarda ~50 s y el
+          # primer intento casi siempre falla. Se reintenta antes de dar por caído.
+          for intento in 1 2 3 4 5; do
+            code=$(curl -s -o /tmp/estado.json -w "%{http_code}" --max-time 90 "$URL") || code="000"
+            [ "$code" = "200" ] && break
+            echo "intento $intento -> HTTP $code (estaba dormido; reintento en 20s)"
+            sleep 20
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::Max no respondió (HTTP $code). Revisá los logs del servicio en Render."
+            exit 1
+          fi
+
+          commit=$(jq -r '.build.commit // "?"' /tmp/estado.json)
+          aPedido=$(jq -r '.catalogo.aPedido // "sin dato"' /tmp/estado.json)
+          {
+            echo "## Estado de Max"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit corriendo | \`$commit\` |"
+            echo "| Publicaciones activas | $(jq -r '.catalogo.cantidad // "?"' /tmp/estado.json) |"
+            echo "| Agotadas | $(jq -r '.catalogo.agotados // "?"' /tmp/estado.json) |"
+            echo "| **A pedido (con plazo)** | **$aPedido** |"
+            echo "| Catálogo actualizado | $(jq -r '.catalogo.actualizado // "?"' /tmp/estado.json) |"
+            echo "| Última sync con ML | $(jq -c '.ultimaSync' /tmp/estado.json) |"
+            echo "| WhatsApp (Meta) | on=$(jq -r '.whatsapp.on' /tmp/estado.json) conectado=$(jq -r '.whatsapp.conectado' /tmp/estado.json) keepAlive=$(jq -r '.whatsapp.keepAlive' /tmp/estado.json) |"
+            echo "| Cerebro | $(jq -r '.ia.proveedor + " / " + .ia.modelo' /tmp/estado.json) |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          echo ""
+          echo "JSON completo:"
+          jq . /tmp/estado.json
+
+          # El commit que corre en producción vs. el último de `main`: si no coinciden,
+          # hay código mergeado que NO llegó a Render (pasó todo agosto por el secret
+          # RENDER_DEPLOY_HOOK sin cargar).
+          if [ "$commit" != "${GITHUB_SHA:0:7}" ]; then
+            echo "::warning::Producción corre $commit y el último commit de main es ${GITHUB_SHA:0:7}. Hay cambios sin deployar: Render → max-tester → Manual Deploy → Deploy latest commit (o cargá el secret RENDER_DEPLOY_HOOK para que el deploy salga solo)."
+          fi
+          if [ "$aPedido" = "0" ]; then
+            echo "::warning::Ninguna publicación activa declara disponibilidad a X días. Si hay artículos que se entregan a los 21 días, cargá el plazo en la publicación de Mercado Libre (disponibilidad de stock) o agregalos a DEMORAS_MANUALES en src/config.js."
+          fi
