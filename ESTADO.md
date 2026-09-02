@@ -55,6 +55,45 @@ de publicación (eso pisa lo que diga ML).
 **Pruebas:** `node src/disponibilidad.test.mjs` (21 casos, sin red ni IA, entra en `npm test`)
 y `node test_disponibilidad_e2e.mjs` (conversación real, necesita API key).
 
+### ✅ EN PRODUCCIÓN Y CON DATOS REALES (2 sep, 16:51)
+
+Verificado con el workflow nuevo **`ver estado de Max`** (Actions → Run workflow: hace un
+GET a `/api/estado` + `/api/catalogo` y deja la tabla en el resumen del run). Producción
+corre el commit del merge y la sincronización con ML trajo el plazo de **76 de las 231
+publicaciones activas**:
+
+| Días | Publicaciones |
+|---|---|
+| 2 | 16 |
+| 3 | 13 |
+| 4 | 2 |
+| 5 | 36 |
+| 6 | 1 |
+| **20** | **6** |
+| **25** | **2** |
+
+Los largos (20/25 días) son los que reportó Pablo: alfombras **Omoda C5/E5, Geely EX2,
+Dongfeng Nammi, BYD Yuan Pro** y cubreasientos **VW Bora capitoneado** y **VW Up tela**.
+⚠️ En ML están declarados **20 y 25** días, no 21: Max dice el número que declara cada
+publicación, así que si el plazo real es otro se corrige en ML y listo.
+
+**Decisión de Pablo (2 sep):** se avisan **TODOS** los plazos, también los cortos (2 a 6
+días, casi todos cubreasientos a medida). Si alguna vez molesta en los cortos, el umbral
+se agrega en `conDisponibilidad()` (`cerebro.js`) — hoy a propósito no hay ninguno.
+
+### ⚠️ EL DEPLOY: LO QUE REALMENTE PASA (corrige lo que dice más abajo)
+
+**El auto-deploy nativo de Render SÍ está funcionando.** El merge fue 16:42:26 y producción
+arrancó con ese commit 16:42:57, sin que el workflow hiciera nada. Lo que está roto es el
+workflow `deploy-a-render`: **el secret `RENDER_DEPLOY_HOOK` nunca se cargó**, así que
+falla al primer paso — y viene fallando desde el 26 ago (los 5 runs en rojo). Es una cruz
+roja que no significa "no se deployó".
+
+Para arreglarlo: Render → max-tester → Settings → **Deploy Hook** → copiar la URL →
+GitHub → Settings → Secrets and variables → Actions → **`RENDER_DEPLOY_HOOK`**.
+Mientras tanto, si algo no llegó: Render → **Manual Deploy → Deploy latest commit**.
+Para saber si llegó, `ver estado de Max` compara el commit de producción con el de `main`.
+
 ## 🚚 SESIÓN 26 ago — LOS CAMIONES JMC: DOBLE CABINA Y CABINA SIMPLE COTIZADOS IGUAL
 
 Reportado por Pablo. **Las dos cabinas del JMC recibían la misma respuesta.** Detalle completo en
