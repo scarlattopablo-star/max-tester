@@ -234,6 +234,36 @@ export const AVISO_ENVIO = `Sobre el ENVÍO:
 • Lo mandamos por DAC (agencia de encomiendas), a todo el país.
 • El pedido se despacha dentro de los 2 o 3 días.`;
 
+// ───────────────────────────────────────────────────────────────────
+// DISPONIBILIDAD A PEDIDO — pedido de Pablo (2 sep 2026). En Mercado Libre hay
+// publicaciones ACTIVAS que NO son de entrega inmediata: el vendedor declara en
+// ML una "disponibilidad de stock" de X días (típico: 21). Max las cotizaba como
+// cualquier otra y el cliente compraba creyendo que lo llevaba ese mismo día.
+//
+// El plazo lo trae la propia publicación (campo MANUFACTURING_TIME de la API de
+// ML, ver `diasDeDisponibilidad` en sync_ml.js), así que se actualiza solo: si
+// Pablo lo cambia en ML, Max lo dice cambiado en la próxima sincronización.
+//
+// El texto lo pone el CÓDIGO, no el modelo, para que salga siempre igual.
+// ✏️ Para cambiar cómo se lo dice a los clientes, se edita ACÁ y nada más.
+// ⛔ Sin fecha exacta ("el martes 12"): el plazo cuenta desde la compra y lo que
+//    se promete es lo que declara la publicación, ni un día menos.
+// ───────────────────────────────────────────────────────────────────
+export const AVISO_DISPONIBILIDAD = (dias) => `Sobre la DISPONIBILIDAD de ese producto:
+
+• Se hace a pedido: hoy no lo tenemos para entrega inmediata.
+• Queda disponible a los ${dias} ${dias === 1 ? "día" : "días"} de la compra.
+• Lo podés encargar igual: se pide al confirmar la compra y el equipo te coordina la entrega.`;
+
+// Plazos cargados A MANO (escotilla de emergencia). Normalmente NO hace falta
+// tocar nada: el plazo sale de Mercado Libre. Esto es para el caso en que una
+// publicación se vende a pedido pero en ML quedó sin declarar la disponibilidad.
+// Formato: id de la publicación (con o sin "MLU") -> días.
+//   export const DEMORAS_MANUALES = { MLU123456789: 21 };
+// ⚠️ Lo que se cargue acá PISA lo que diga Mercado Libre: si el artículo vuelve a
+// tener entrega inmediata, hay que borrar la línea o Max va a seguir avisando.
+export const DEMORAS_MANUALES = {};
+
 export const AVISO_COLOCACION = `Importante sobre la COLOCACIÓN:
 
 • La colocación NO está incluida en el precio del cubreasiento: se cotiza y se abona aparte.

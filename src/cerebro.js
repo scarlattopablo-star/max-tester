@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, AVISO_AGOTADO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -152,9 +152,73 @@ const _incluye = (m, d) => {
   const partido = d.replace(/^([a-z]{1,4})(\d{1,4})$/, "$1 $2");
   return partido !== d && new RegExp(`\\b${partido}\\b`).test(m);
 };
-const _mapProd = (item) => ({ id: item.id, nombre: item.n, precio: item.p, precio_lista: item.l, moneda: item.usd ? "USD" : "UYU", img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
+// `demora_dias` (0 = entrega inmediata) viaja con CADA producto que se le muestra al
+// modelo: es lo que le permite saber que esa publicación está activa pero se entrega
+// recién dentro de X días. Lo carga la sincronización con ML (campo `d`).
+const _mapProd = (item) => ({ id: item.id, nombre: item.n, precio: item.p, precio_lista: item.l, moneda: item.usd ? "USD" : "UYU", demora_dias: Number(item.d) > 0 ? Math.round(Number(item.d)) : 0, img: (item.img || "").replace(/-[A-Z]\.jpg$/i, "-O.jpg") });
 // Formatea un precio con su símbolo de moneda. USD => "US$ 60"; UYU => "$ 8.010".
 const _fmtPrecio = (precio, moneda) => `${moneda === "USD" ? "US$ " : "$ "}${Number(precio).toLocaleString("es-UY")}`;
+
+// ─────────────────────────────────────────────────────────────────────
+// DISPONIBILIDAD A PEDIDO (pedido de Pablo, 2 sep 2026)
+// El negocio activó en Mercado Libre publicaciones que se venden pero que recién
+// están disponibles a los 21 días. Para Max eran productos como cualquier otro:
+// cotizaba, cerraba la venta y el cliente se enteraba después. Ahora cada producto
+// viaja con `demora_dias` y el CÓDIGO se encarga de que el cliente lo sepa.
+//
+// Devuelve null si todo lo que se está mostrando es de entrega inmediata. Si no:
+//   { dias, todos, productos: [{ nombre, dias }] }
+// `todos` = TODO lo encontrado es a pedido y con el MISMO plazo → ahí el aviso
+// oficial (AVISO_DISPONIBILIDAD) se puede mandar tal cual. Si la lista mezcla
+// artículos con y sin demora, o con plazos distintos, un texto único mentiría
+// sobre alguno: en ese caso se le pasa el detalle al modelo para que lo aclare
+// producto por producto.
+export function demoraDeProductos(lista) {
+  const items = (lista || []).filter(Boolean);
+  const conDemora = items
+    .filter((x) => Number(x.demora_dias) > 0)
+    .map((x) => ({ nombre: x.nombre, dias: Math.round(Number(x.demora_dias)) }));
+  if (!conDemora.length) return null;
+  const dias = Math.max(...conDemora.map((x) => x.dias));
+  const todos = conDemora.length === items.length && conDemora.every((x) => x.dias === dias);
+  return { dias, todos, productos: conDemora };
+}
+
+// Agrega a lo que devuelve una herramienta lo que haya que decir sobre la
+// disponibilidad: el aviso oficial (lo escribe el código, ver AVISO_DISPONIBILIDAD
+// en config.js) cuando corresponde, y SIEMPRE la nota interna para el modelo.
+function conDisponibilidad(res, lista) {
+  const d = demoraDeProductos(lista);
+  if (!d) return res;
+  const out = { ...res, demora: d };
+  let nota;
+  if (d.todos) {
+    out.avisoDisponibilidad = AVISO_DISPONIBILIDAD(d.dias);
+    nota = `⏳ ESE PRODUCTO ES A PEDIDO: se entrega a los ${d.dias} días de la compra, no en el momento. El sistema ya se lo avisa al cliente con el texto oficial, así que NO lo repitas ni lo reformules y NO inventes otros plazos ni fechas. Ojo: NO está agotado y NO se ofrece "te aviso cuando llegue" — se puede comprar hoy, con esa demora. Seguí la venta normal.`;
+  } else {
+    const detalle = d.productos.map((x) => `${x.nombre} (${x.dias} días)`).join("; ");
+    nota = `⏳ OJO CON LA DISPONIBILIDAD: de lo que encontré, esto NO es entrega inmediata, se entrega a pedido: ${detalle}. Lo demás se lleva en el día. Aclarale al cliente, en una frase corta y por producto, cuál tiene demora y de cuántos días, ANTES de cerrar la venta. ⛔ No inventes fechas exactas y ⛔ no digas que está agotado: se puede comprar hoy.`;
+  }
+  out.instruccion = res.instruccion ? `${res.instruccion}\n\n${nota}` : nota;
+  return out;
+}
+
+// Días de demora de un producto nombrado en TEXTO (lo que el modelo escribe al
+// cerrar la venta o al pedir el link de pago). Compara contra el título del
+// catálogo sin adivinar: título exacto, o título contenido en lo que escribió.
+// Si no lo reconoce devuelve 0 — mejor no avisar de más que avisar de un plazo
+// que no es el de ese artículo (en la cotización ya se avisó).
+export function demoraDelProducto(nombre) {
+  const t = _normTxt(String(nombre || "")).replace(/\s+/g, " ").trim();
+  if (!t) return 0;
+  for (const p of productosML()) {
+    const dias = Number(p.d);
+    if (!(dias > 0)) continue;
+    const tp = _normTxt(String(p.n || "")).replace(/\s+/g, " ").trim();
+    if (tp && (t === tp || t.includes(tp))) return Math.round(dias);
+  }
+  return 0;
+}
 
 // Saca del texto del modelo las ORACIONES que pisan un aviso oficial (el de
 // colocación o el del plazo de envío), y deja el resto.
@@ -1187,6 +1251,17 @@ Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramie
   · 🚗 EL "NO LO TRABAJAMOS" ES POR PRODUCTO, NO POR AUTO. Nunca le digas al cliente que no trabajamos SU VEHÍCULO: lo único que podés decirle es que ESE PRODUCTO puntual no lo tenemos para ese modelo, y ofrecerle lo otro que sí haya para su auto. Ej. correcto: "Alfombra para la Freedom no estamos trabajando, pero cubreasientos sí tenemos, ¿te muestro?".
   · 🚗 FIAT STRADA / FREEDOM / VOLCANO son EL MISMO vehículo con tres nombres, y esa familia SÍ la trabajamos. La herramienta ya busca los tres como Strada, así que la respuesta para una Freedom es EXACTAMENTE la que darías para una Strada. ⛔ PROHIBIDO tratarla como un vehículo desconocido ("no conozco ese modelo", "¿qué auto es?"), ⛔ prohibido decirle que no trabajamos su auto, y ⛔ prohibido nombrarle la Strada al cliente.
 
+# DISPONIBILIDAD: ARTÍCULOS A PEDIDO (se venden hoy, se entregan en X días)
+Hay publicaciones ACTIVAS que NO son de entrega inmediata: se venden con normalidad pero el artículo está disponible recién dentro de unos días (hoy hay varias a 21 días). El plazo lo declara la propia publicación de Mercado Libre, así que NO lo adivines: te lo dan las herramientas.
+- Cada producto que te devuelven "consultar_precio" y "enviar_foto" trae el campo **demora_dias**: 0 = se lo lleva en el momento; mayor que 0 = ESE artículo se entrega a pedido, a esa cantidad de días de la compra.
+- ⚠️ ESTO NO ES "AGOTADO" y NO ES "no lo trabajamos": el artículo se puede comprar HOY. ⛔ No le ofrezcas "te aviso cuando llegue" y ⛔ no le digas que está sin stock. Se cotiza, se muestra y se vende normal — con la demora dicha de frente.
+- ⛔ EL CLIENTE TIENE QUE SABERLO ANTES DE PAGAR. Es la regla: nunca le cierres una venta ni le pases un link de pago de un artículo a pedido sin haberle dicho que se entrega a los X días.
+- Cuando TODO lo que estás mostrando es a pedido y con el mismo plazo, el aviso lo manda EL SISTEMA con el texto oficial (dice que es a pedido, en cuántos días está y que igual lo puede encargar). ⛔ NO lo escribas vos, NO lo repitas y NO lo reformules: como mucho una frase corta tuya nombrando el producto.
+- Cuando SOLO ALGUNAS de las opciones son a pedido (la herramienta te lo aclara producto por producto), ahí SÍ lo decís vos, corto y por producto: "La bandeja 3D la tenés en el momento; la de baúl es a pedido, se entrega a los 21 días". El pie de cada foto también lo aclara.
+- ⛔ NO INVENTES FECHAS NI PLAZOS: se dice la cantidad de días que te dio la herramienta ("a los 21 días de la compra"), nunca un día del calendario ("el martes 23"), nunca "en una semanita" y nunca un plazo más corto para no perder la venta.
+- El plazo del ENVÍO (que el pedido se despacha dentro de los 2 o 3 días) es OTRA cosa y corre recién cuando el artículo está: no los mezcles ni los sumes vos, cada aviso lo pone el sistema.
+- Si el cliente pregunta POR QUÉ demora: es un artículo que se pide/repone especialmente, se encarga al confirmar la compra. Si insiste con tenerlo antes o quiere una fecha exacta, no se la prometas: pasalo con un asesor.
+
 # Qué hacés
 1. Respondés consultas sobre los productos.
 2. Asesorás según el vehículo del cliente.
@@ -1361,7 +1436,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "consultar_precio",
-      description: "Busca el precio de CUALQUIER producto del negocio (cubreasientos, alfombras, cubre volantes, cubreautos, llaveros, accesorios, etc.) por nombre o modelo del auto. Datos reales de Mercado Libre. Usar SIEMPRE que el cliente pregunte cuánto sale algo.",
+      description: "Busca el precio de CUALQUIER producto del negocio (cubreasientos, alfombras, cubre volantes, cubreautos, llaveros, accesorios, etc.) por nombre o modelo del auto. Datos reales de Mercado Libre. Usar SIEMPRE que el cliente pregunte cuánto sale algo. Cada producto trae demora_dias: 0 = entrega inmediata, mayor a 0 = se entrega a pedido, a esos días de la compra (hay que avisárselo al cliente antes de cerrar).",
       parameters: {
         type: "object",
         properties: { modelo: { type: "string", description: "Qué busca: producto Y MODELO DEL AUTO, siempre juntos. Ej: 'cubreasiento Hilux', 'alfombra Nivus', 'alfombra Peugeot 208'. ⚠️ Si el cliente dijo el vehículo en CUALQUIER mensaje anterior de la charla, ponelo acá aunque en este mensaje no lo repita: sin el modelo la búsqueda no puede darte el precio de SU auto." } },
@@ -1858,7 +1933,13 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       if (idML) items = [{ id: idML, qty: Math.max(1, Math.round(Number(input.cantidad) || 1)) }];
       const r = await crearLinkPago({ titulo: input.titulo, monto: input.monto, items, chatId: ctx.chatId, contacto: ctx.contacto });
       if (!r.ok) return { ok: false, mensaje: `No pude generar el link (${r.motivo}). Decile al cliente que enseguida un compañero le envía el link de pago y derivá con derivar_a_humano.` };
-      return { ok: true, link: r.link, monto: r.monto, instruccion: "Pasale este link al cliente para que pague directo. Es por el monto exacto de su compra." };
+      // Antes de pagar tiene que saber si ese artículo es A PEDIDO: pagar y enterarse
+      // después de que recién lo tiene en 21 días es el reclamo asegurado.
+      const diasLink = demoraDelProducto(input.producto_catalogo || input.titulo);
+      const dispLink = diasLink > 0
+        ? { avisoDisponibilidad: AVISO_DISPONIBILIDAD(diasLink), notaDisponibilidad: `⏳ Ese artículo es A PEDIDO (${diasLink} días). El sistema ya se lo avisa al cliente junto con el link: no repitas el plazo ni inventes fechas.` }
+        : {};
+      return { ok: true, link: r.link, monto: r.monto, ...dispLink, instruccion: `Pasale este link al cliente para que pague directo. Es por el monto exacto de su compra.${dispLink.notaDisponibilidad ? " " + dispLink.notaDisponibilidad : ""}` };
     }
     if (nombre === "consultar_precio") {
       const consulta = conVarianteDelCliente(input.modelo || input.producto || "", ctx._ultimoUsuario);
@@ -1878,10 +1959,12 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // El cliente dijo la cabina pero el catálogo no la declara en ninguna: se cotiza
       // igual y se le confirma (26 ago 2026, cubreasientos del JMC N822 2850).
       const cabDudosa = cabinaSinConfirmar(encontrados, consulta, ctx._ultimoUsuario);
-      if (cabDudosa) return { encontrado: true, moneda: "UYU", resultados: encontrados, confirmar_cabina: cabDudosa, instruccion: AVISO_CABINA_SIN_CONFIRMAR(cabDudosa) };
+      if (cabDudosa) return conDisponibilidad({ encontrado: true, moneda: "UYU", resultados: encontrados, confirmar_cabina: cabDudosa, instruccion: AVISO_CABINA_SIN_CONFIRMAR(cabDudosa) }, encontrados);
       const version = versionSinConfirmar(consulta, encontrados);
-      if (version) return { encontrado: true, moneda: "UYU", resultados: encontrados, confirmar_version: version, instruccion: `⚠️ TODO lo que encontré es de la versión ${version.join(" / ")} de ese modelo, y el cliente nunca dijo cuál tiene. El ${version[0]} es otro auto: si le vendés esto y tiene la versión común, no le calza. Pasale el precio aclarando la versión y CONFIRMÁSELA antes de cerrar ("es para la versión ${version[0]}, ¿esa tenés?").` };
-      return { encontrado: true, moneda: "UYU", resultados: encontrados };
+      if (version) return conDisponibilidad({ encontrado: true, moneda: "UYU", resultados: encontrados, confirmar_version: version, instruccion: `⚠️ TODO lo que encontré es de la versión ${version.join(" / ")} de ese modelo, y el cliente nunca dijo cuál tiene. El ${version[0]} es otro auto: si le vendés esto y tiene la versión común, no le calza. Pasale el precio aclarando la versión y CONFIRMÁSELA antes de cerrar ("es para la versión ${version[0]}, ¿esa tenés?").` }, encontrados);
+      // Si lo que se está cotizando es A PEDIDO (activo en ML pero con disponibilidad
+      // a X días), el cliente se entera ACÁ, antes de decidir. Ver conDisponibilidad().
+      return conDisponibilidad({ encontrado: true, moneda: "UYU", resultados: encontrados }, encontrados);
     }
     if (nombre === "avisar_cuando_llegue") {
       if (!hayEsperas()) return { ok: false, mensaje: "No puedo anotar el aviso ahora. NO le prometas al cliente que le vas a avisar: derivá con derivar_a_humano (motivo otro) contando qué producto busca." };
@@ -1935,23 +2018,25 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const encontrados = hallados.filter((x) => x.img);
       if (!encontrados.length) return { ok: false, mensaje: "No tengo foto exacta de eso; pedí más datos del modelo." };
       const elegidas = encontrados.slice(0, 4); // hasta 4 fotos (opciones del modelo)
-      const fotos = elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio, moneda: x.moneda }));
+      // `demora_dias` viaja con la foto: el pie de cada una avisa si ese artículo
+      // se entrega a pedido (mandar la foto con el precio ES cotizar).
+      const fotos = elegidas.map((x) => ({ nombre: x.nombre, img: x.img, precio: x.precio, moneda: x.moneda, demora_dias: x.demora_dias || 0 }));
       // El caption de cada foto lleva el PRECIO, así que mandar fotos ES cotizar: valen
       // los mismos avisos que en consultar_precio. Primero el de la CABINA sin declarar
       // (26 ago 2026, cubreasientos del JMC N822 2850).
       const cabDudosaFoto = cabinaSinConfirmar(elegidas, consulta, ctx._ultimoUsuario);
-      if (cabDudosaFoto) return { ok: true, enviadas: fotos.length, fotos, confirmar_cabina: cabDudosaFoto, instruccion: AVISO_CABINA_SIN_CONFIRMAR(cabDudosaFoto) };
+      if (cabDudosaFoto) return conDisponibilidad({ ok: true, enviadas: fotos.length, fotos, confirmar_cabina: cabDudosaFoto, instruccion: AVISO_CABINA_SIN_CONFIRMAR(cabDudosaFoto) }, elegidas);
       // Y si todo lo que hay es de otra VERSIÓN del modelo, el aviso de la versión —
       // hacía falta acá porque para el Polo (7 ago 2026) Max resolvió con enviar_foto y
       // pasó los $11.610 del Polo Track sin nombrarlo.
       const ver = versionSinConfirmar(consulta, elegidas);
       if (ver) {
-        return {
+        return conDisponibilidad({
           ok: true, enviadas: fotos.length, fotos, confirmar_version: ver,
           instruccion: `⚠️ TODO lo que encontré es de la versión ${ver.join(" / ")} de ese modelo, y el cliente nunca dijo cuál tiene. El ${ver[0]} es otro auto: si le vendés esto y tiene la versión común, no le calza. Nombrá la versión al pasarle el precio y CONFIRMÁSELA antes de cerrar ("es para la versión ${ver[0]}, ¿esa tenés?").`,
-        };
+        }, elegidas);
       }
-      return { ok: true, enviadas: fotos.length, fotos };
+      return conDisponibilidad({ ok: true, enviadas: fotos.length, fotos }, elegidas);
     }
     if (nombre === "solicitar_turno") return await solicitarTurno(input);
     if (nombre === "tomar_pedido") {
@@ -1962,16 +2047,29 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const extra = conEnvio
         ? { avisoEnvio: AVISO_ENVIO, instruccion: "El sistema ya le avisa al cliente cuánto demora el ENVÍO. NO inventes ni repitas plazos de entrega vos." }
         : {};
+      // Producto A PEDIDO: el aviso de la disponibilidad se repite al cerrar la venta,
+      // aunque ya se lo hayamos dicho al cotizar. Es el momento en que el cliente
+      // decide, y el plazo del despacho (AVISO_ENVIO) recién corre desde que está.
+      const diasPedido = demoraDelProducto(input.producto);
+      if (diasPedido > 0) {
+        extra.avisoDisponibilidad = AVISO_DISPONIBILIDAD(diasPedido);
+        extra.instruccion = `${extra.instruccion ? extra.instruccion + " " : ""}⏳ Ese artículo es A PEDIDO (${diasPedido} días): el sistema ya se lo avisa al cliente con el texto oficial. NO repitas el plazo ni des fechas.`;
+      }
       // Cierre de venta de un cubreasiento colocable => el sistema agrega el aviso
       // de colocación TAL CUAL (ver AVISO_COLOCACION en config.js).
       if (esCubreasientoColocable(input.producto, input.notas, ctx.textoCharla)) {
-        return { ...r, ...extra, avisoColocacion: AVISO_COLOCACION, instruccion: `El sistema ya le manda al cliente el aviso de COLOCACIÓN (que va aparte, que la coordina el equipo y que no se acerque al local hasta tener fecha y hora confirmadas). NO lo repitas ni lo resumas vos: como mucho una frase corta aparte.${conEnvio ? " También le manda solo el plazo del ENVÍO: no inventes plazos." : ""}` };
+        // ⚠️ Esta rama REESCRIBE la instrucción, así que lo de la disponibilidad se
+        // vuelve a sumar acá: si no, el cubreasiento colocable a pedido mandaba el
+        // aviso pero sin decirle al modelo que no lo repita.
+        return { ...r, ...extra, avisoColocacion: AVISO_COLOCACION, instruccion: `El sistema ya le manda al cliente el aviso de COLOCACIÓN (que va aparte, que la coordina el equipo y que no se acerque al local hasta tener fecha y hora confirmadas). NO lo repitas ni lo resumas vos: como mucho una frase corta aparte.${conEnvio ? " También le manda solo el plazo del ENVÍO: no inventes plazos." : ""}${diasPedido > 0 ? ` También le avisa que ese artículo es A PEDIDO (${diasPedido} días): no repitas el plazo ni des fechas.` : ""}` };
       }
       return { ...r, ...extra };
     }
     if (nombre === "confirmar_transferencia") {
       const r = await registrarTransferencia({ ...input, chatId: ctx.chatId, nombre: input.nombre || ctx.contacto?.nombre, telefono: input.telefono || ctx.contacto?.tel });
       const extra = esVentaConEnvio(input.detalle) ? { avisoEnvio: AVISO_ENVIO } : {};
+      const diasTransf = demoraDelProducto(input.detalle);
+      if (diasTransf > 0) extra.avisoDisponibilidad = AVISO_DISPONIBILIDAD(diasTransf);
       if (esCubreasientoColocable(input.detalle, ctx.textoCharla)) {
         return { ...r, ...extra, avisoColocacion: AVISO_COLOCACION, instruccion: "El sistema ya le manda al cliente el aviso de COLOCACIÓN. NO lo repitas ni lo resumas vos." };
       }
@@ -2444,7 +2542,10 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   });
   const imagenesEnviar = fotosCrudas.map((f, i) => ({
     url: f.img,
-    caption: f.precio ? `${i + 1}) ${f.nombre} - ${_fmtPrecio(f.precio, f.moneda)}` : `${i + 1}) ${f.nombre}`,
+    // El pie lleva el precio y, si el artículo NO es de entrega inmediata, el plazo:
+    // así el aviso viaja pegado a la opción que lo tiene (una lista donde solo una es
+    // a pedido no se puede aclarar con un texto único al final).
+    caption: `${i + 1}) ${f.nombre}${f.precio ? ` - ${_fmtPrecio(f.precio, f.moneda)}` : ""}${Number(f.demora_dias) > 0 ? ` (a pedido: disponible en ${Math.round(Number(f.demora_dias))} días)` : ""}`,
     // ⚠️ INTERNO: qué línea se estaba mostrando con esta foto. NO se le manda al
     // cliente (los canales solo usan url + caption): handler.js lo escribe en la nota
     // interna del historial para que eleccionAmbigua siga sabiendo qué se mostró,
@@ -2478,6 +2579,10 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // Plazo del ENVÍO: mismo criterio que el de colocación (lo pone el código, una sola
   // vez aunque se dispare en tomar_pedido y confirmar_transferencia en el mismo turno).
   const avisoEnvio = acciones.some((a) => a.resultado?.avisoEnvio) ? AVISO_ENVIO : null;
+  // DISPONIBILIDAD A PEDIDO: el texto sale del código (AVISO_DISPONIBILIDAD, con los
+  // días que declara la publicación en Mercado Libre) y se manda UNA sola vez, aunque
+  // el producto haya aparecido en varias herramientas del mismo turno.
+  const avisoDisponibilidad = acciones.find((a) => a.resultado?.avisoDisponibilidad)?.resultado?.avisoDisponibilidad || null;
   let limpio = limpiarJerga(corregirSaludo((texto || "").trim()));
   // ANTI-INVENTO: si Max prometió algo que el negocio NO hace (típico: "te hacemos
   // la alfombra a medida"), se le borra esa frase, se le dice al cliente que lo
@@ -2543,6 +2648,16 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // esa frase se va. El plazo bueno es el del código; dos plazos distintos en el mismo
   // mensaje es justo lo que no queremos.
   if (avisoEnvio) limpio = _sacarOraciones(limpio, /\b\d+\s*(a|o|y|-|hasta)\s*\d+\s*d[ií]as?\b|demora|tarda|plazo de entrega|llega en|llegar[ií]a|despach/i);
+  // Ídem con la DISPONIBILIDAD: si el modelo escribió su propia versión ("está
+  // disponible en 21 días"), esa oración se va y queda solo el texto oficial.
+  // ⚠️ Con red de seguridad: si la poda se lleva el mensaje entero o se lleva el
+  // PRECIO (el modelo suele meter todo en una sola oración: "sale $9.500 y se
+  // entrega a los 21 días"), se deja el texto como estaba. Repetir el plazo molesta;
+  // dejar al cliente sin la respuesta que pidió es peor.
+  if (avisoDisponibilidad && limpio) {
+    const podado = _sacarOraciones(limpio, /a pedido|disponibilidad|disponible en|\bdemora|\btarda|\bencarg|\b\d+\s*d[ií]as?\b/i);
+    if (podado && /\$/.test(podado) === /\$/.test(limpio)) limpio = podado;
+  }
   // PRODUCTO AGOTADO: el texto lo pone el CÓDIGO (AVISO_AGOTADO de config.js), igual
   // que el de colocación, para que SIEMPRE salga igual — es lo que pidió el dueño.
   // Y como el modelo igual lo parafrasea, le sacamos sus propios párrafos que hablen
@@ -2623,7 +2738,8 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
     limpio = [diceMedida ? null : AVISO_A_MEDIDA, limpio, diceAsesor ? null : AVISO_PASO_ASESOR]
       .filter(Boolean).join("\n\n");
   }
-  const textoFinal = [limpio, ...oficiales, avisoColocacion, avisoEnvio, avisoAgotado].filter(Boolean).join("\n\n")
+  // Orden: primero CUÁNDO lo tiene (disponibilidad), después cómo se despacha y se coloca.
+  const textoFinal = [limpio, ...oficiales, avisoDisponibilidad, avisoColocacion, avisoEnvio, avisoAgotado].filter(Boolean).join("\n\n")
     || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
   // Acá se resuelve la derivación que quedó pendiente, con el mensaje final a la
   // vista: si Max terminó PREGUNTÁNDOLE al cliente si quiere el asesor, no se deriva

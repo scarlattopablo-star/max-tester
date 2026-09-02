@@ -66,3 +66,27 @@ jobs:
           done
           echo "::warning::Render no llegó a servir $esperado en ~13 min. Puede seguir buildeando: revisá los logs del servicio en el panel de Render y volvé a chequear /api/estado."
           exit 1
+
+      - name: Cuántas publicaciones se venden A PEDIDO
+        # La sincronización con ML corre al arrancar, así que apenas termina el deploy
+        # ya se puede ver si Mercado Libre está mandando el plazo de disponibilidad
+        # (campo MANUFACTURING_TIME). Es el único lugar desde donde se puede mirar:
+        # la red de Claude no llega a onrender.com. Nunca hace fallar el deploy.
+        continue-on-error: true
+        run: |
+          for i in $(seq 1 10); do   # el primer sync puede tardar un rato
+            estado=$(curl -s --max-time 30 "https://max-tester.onrender.com/api/estado" || true)
+            aPedido=$(echo "$estado" | jq -r '.catalogo.aPedido // empty' 2>/dev/null || true)
+            if [ -n "$aPedido" ]; then
+              echo "Catálogo: $(echo "$estado" | jq -c '.catalogo' 2>/dev/null)"
+              echo "Última sync: $(echo "$estado" | jq -c '.ultimaSync' 2>/dev/null)"
+              if [ "$aPedido" = "0" ]; then
+                echo "::warning::Ninguna publicación activa declara disponibilidad a X días. Si hay artículos que se entregan a los 21 días, cargá el plazo en la publicación de Mercado Libre (disponibilidad de stock) o agregalos a DEMORAS_MANUALES en src/config.js."
+              else
+                echo "✅ $aPedido publicaciones activas se venden a pedido: Max ya avisa el plazo."
+              fi
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::warning::No pude leer /api/estado para contar las publicaciones a pedido."

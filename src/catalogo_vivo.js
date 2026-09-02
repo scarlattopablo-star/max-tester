@@ -44,6 +44,10 @@ export function infoCatalogo() {
   return {
     cantidad: (datos.productos || []).length,
     agotados: (datos.agotados || []).length,
+    // Publicaciones que se venden pero NO son de entrega inmediata (campo `d` =
+    // días de disponibilidad, ver sync_ml.js). Sale en /api/estado para poder
+    // comprobar de un vistazo que Mercado Libre está mandando ese plazo.
+    aPedido: (datos.productos || []).filter((p) => Number(p.d) > 0).length,
     actualizado: datos.actualizado || "?",
     fuente: datos.fuente || "snapshot",
   };

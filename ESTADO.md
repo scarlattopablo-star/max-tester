@@ -20,7 +20,42 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
-## 🚚 SESIÓN 26 ago — LOS CAMIONES JMC: DOBLE CABINA Y CABINA SIMPLE COTIZADOS IGUAL (LO MÁS NUEVO)
+## ⏳ SESIÓN 2 sep — ARTÍCULOS A PEDIDO: LA DISPONIBILIDAD A 21 DÍAS (LO MÁS NUEVO)
+
+Reportado por Pablo. Activó/despausó publicaciones en Mercado Libre que **se venden pero
+están disponibles recién dentro de 21 días**. Para Max eran productos normales: cotizaba,
+mandaba las fotos con precio y cerraba la venta **sin decir nada del plazo**. Detalle
+completo en `docs/2026-09-02-disponibilidad-a-pedido.md`.
+
+**De dónde sale el plazo:** de la propia publicación de ML (`sale_terms` →
+`MANUFACTURING_TIME`, la "disponibilidad de stock" del formulario de ML). El sync lo pide
+en el multiget y `diasDeDisponibilidad()` (`sync_ml.js`) lo lee estructurado, como texto
+("21 días", "3 días hábiles") o en otra unidad (48 h → 2 días). Queda como campo `d` del
+catálogo y como `demora_dias` en lo que ven las herramientas. **Si Pablo cambia el plazo en
+ML, Max lo dice cambiado en la próxima sincronización — no hay nada que tocar.**
+
+**Qué hace Max:** el aviso lo pone el CÓDIGO (`AVISO_DISPONIBILIDAD` en `config.js`), como
+el de colocación y el de envío.
+- Cotizando o mandando fotos: si TODO lo encontrado es a pedido con el mismo plazo, va el
+  texto oficial; si solo ALGUNAS opciones tienen demora, se le pasa el detalle por producto
+  al modelo y **el pie de cada foto lo aclara** ("(a pedido: disponible en 21 días)").
+- Al cerrar la venta (`tomar_pedido`, `confirmar_transferencia`) y al pasar el link de pago:
+  el aviso se repite, que es cuando el cliente decide.
+- Si Max escribe su propio plazo, esa oración se le cae… salvo que la poda se lleve el
+  mensaje entero o el PRECIO (suele meter todo en una oración): ahí se deja como estaba.
+
+⛔ **A pedido NO es agotado:** se compra hoy, con demora. Max no dice "sin stock" ni ofrece
+"te aviso cuando llegue" (eso sigue siendo solo para las pausadas / en cero).
+
+**Verificación en producción:** `GET /api/estado` → `catalogo.aPedido` y `ultimaSync.aPedido`
+dicen cuántas publicaciones activas traen plazo. Si da **0** teniendo artículos a 21 días,
+ML no está mandando el dato: cargarlos a mano en **`DEMORAS_MANUALES`** (`config.js`), por id
+de publicación (eso pisa lo que diga ML).
+
+**Pruebas:** `node src/disponibilidad.test.mjs` (21 casos, sin red ni IA, entra en `npm test`)
+y `node test_disponibilidad_e2e.mjs` (conversación real, necesita API key).
+
+## 🚚 SESIÓN 26 ago — LOS CAMIONES JMC: DOBLE CABINA Y CABINA SIMPLE COTIZADOS IGUAL
 
 Reportado por Pablo. **Las dos cabinas del JMC recibían la misma respuesta.** Detalle completo en
 `docs/2026-08-26-jmc-cabina-simple-y-doble.md`. Tres causas encadenadas:
