@@ -13,7 +13,7 @@
 // Sin credenciales, la sincronización se salta (el bot sigue con el snapshot).
 import "./env.js";
 import { actualizarCatalogo, infoCatalogo } from "./catalogo_vivo.js";
-import { SELLER_ML_ID } from "./config.js";
+import { SELLER_ML_ID, DEMORAS_MANUALES } from "./config.js";
 
 const API = "https://api.mercadolibre.com";
 const SITE = "MLU"; // Uruguay
@@ -52,6 +52,52 @@ async function tokenApp() {
   return _token;
 }
 
+// ── DISPONIBILIDAD: ¿este artículo es de ENTREGA INMEDIATA o A PEDIDO? ──
+// Pedido de Pablo (2 sep 2026): activó publicaciones que se venden pero que recién
+// están disponibles a los 21 días, y Max las cotizaba como si estuvieran en el local.
+//
+// En Mercado Libre ese plazo es el "tiempo de fabricación / disponibilidad de stock":
+// viaja en `sale_terms` con id MANUFACTURING_TIME, normalmente así:
+//   { id: "MANUFACTURING_TIME", value_name: "21 días",
+//     value_struct: { number: 21, unit: "días" } }
+// Se lee de las dos formas (la estructurada y el texto) porque ML no siempre manda
+// las dos, y también se mira `attributes` por si la publicación lo trae ahí.
+// Devuelve los DÍAS (entero > 0) o 0 si el artículo está listo para entregar.
+export function diasDeDisponibilidad(item) {
+  // Lo cargado a mano en config.js manda sobre lo que diga ML (escotilla para las
+  // publicaciones que se venden a pedido pero en ML quedaron sin declararlo).
+  const idNum = String(item?.id || "").replace(/\D/g, "");
+  for (const [clave, dias] of Object.entries(DEMORAS_MANUALES || {})) {
+    if (String(clave).replace(/\D/g, "") === idNum && idNum) return Math.max(0, Math.round(Number(dias) || 0));
+  }
+  const campos = [...(item?.sale_terms || []), ...(item?.attributes || [])];
+  const term = campos.find((t) => String(t?.id || "").toUpperCase() === "MANUFACTURING_TIME");
+  if (!term) return 0;
+  const num = Number(term.value_struct?.number ?? term.values?.[0]?.struct?.number);
+  const unidad = String(term.value_struct?.unit || term.values?.[0]?.struct?.unit || term.value_name || "").toLowerCase();
+  if (Number.isFinite(num) && num > 0) return _aDias(num, unidad);
+  // Sin dato estructurado: se lee el texto ("21 días", "48 horas", "3 días hábiles").
+  const txt = String(term.value_name || term.values?.[0]?.name || "").toLowerCase();
+  const m = /(\d+)\s*(h|d|s|m)/.exec(txt);
+  if (!m) return 0;
+  return _aDias(Number(m[1]), txt);
+}
+
+// Pasa a DÍAS lo que ML exprese en horas, semanas o meses. Las horas se redondean
+// para arriba: "48 horas" son 2 días y "12 horas" es 1, nunca 0 (0 sería decirle al
+// cliente que se lo lleva puesto).
+function _aDias(numero, unidad) {
+  const n = Math.max(0, Number(numero) || 0);
+  if (!n) return 0;
+  // ⚠️ La "h" suelta se busca pegada al número ("48 hs"). Con \bh\b sola, el
+  // acento de "3 días hábiles" abre un borde de palabra y la h de "hábiles"
+  // matcheaba: ese plazo se convertía en 1 día en vez de 3.
+  if (/hora|hour|\d\s*h(s|rs)?\b/.test(unidad)) return Math.max(1, Math.ceil(n / 24));
+  if (/semana|week/.test(unidad)) return Math.round(n * 7);
+  if (/mes|month/.test(unidad)) return Math.round(n * 30);
+  return Math.round(n); // días (hábiles o corridos: ML no distingue en este campo)
+}
+
 // Mapea un item de ML al formato del catálogo {n, p, l, img, imgs?, usd?, u?, v?}.
 // precio = { venta, lista } resuelto desde /prices (incluye promociones activas).
 // Si no se pudo obtener, cae al price/original_price del item (puede NO traer la promo).
@@ -69,6 +115,10 @@ function mapItem(it, precio) {
       .map((p) => String(p.secure_url || p.url || "").replace(/^http:/, "https:"))
       .filter(Boolean);
   }
+  // DÍAS de disponibilidad (0 = entrega inmediata). Es lo que hace que Max avise
+  // "se hace a pedido, está disponible en X días" antes de cerrar la venta.
+  const dias = diasDeDisponibilidad(it);
+  if (dias > 0) out.d = dias;
   if (it.currency_id === "USD") out.usd = 1;
   if (it.permalink) out.u = String(it.permalink).replace(/^http:/, "https:"); // link a la publicación de ML
   // Variaciones (colores): la web muestra selector y el stock se baja por variación.
@@ -165,7 +215,7 @@ async function idsPorEstado(tk, estado = "active") {
 async function detallesDe(tk, ids) {
   const vendibles = [];
   const caidos = [];
-  const ATTRS = "id,title,price,original_price,currency_id,thumbnail,pictures,available_quantity,status,permalink,variations";
+  const ATTRS = "id,title,price,original_price,currency_id,thumbnail,pictures,available_quantity,status,permalink,variations,sale_terms";
   for (let i = 0; i < ids.length; i += 20) {
     const grupo = ids.slice(i, i + 20);
     const url = `${API}/items?ids=${grupo.join(",")}&attributes=${ATTRS}`;
@@ -269,8 +319,13 @@ export async function sincronizar() {
       return _ultima;
     }
     actualizarCatalogo(items, "api-ml", caidos);
-    console.log(`🔄 Catálogo sincronizado con Mercado Libre: ${items.length} publicaciones activas${caidos ? ` y ${caidos.length} agotadas` : ""} (${via}).`);
-    _ultima = { ok: true, motivo: `ok (${via})`, cuando: ahora(), cantidad: items.length, agotados: caidos ? caidos.length : null };
+    // Cuántas publicaciones son A PEDIDO. Se loguea y sale en /api/estado: es la
+    // forma de comprobar que Mercado Libre está mandando el plazo de verdad (si
+    // esto queda en 0 teniendo artículos a 21 días, el dato no viene de ML y hay
+    // que cargarlo a mano en DEMORAS_MANUALES).
+    const aPedido = items.filter((x) => x.d > 0).length;
+    console.log(`🔄 Catálogo sincronizado con Mercado Libre: ${items.length} publicaciones activas${caidos ? ` y ${caidos.length} agotadas` : ""}${aPedido ? `, ${aPedido} a pedido` : ""} (${via}).`);
+    _ultima = { ok: true, motivo: `ok (${via})`, cuando: ahora(), cantidad: items.length, agotados: caidos ? caidos.length : null, aPedido };
     // Con el catálogo fresco, avisamos a los clientes cuyo producto volvió.
     // Nunca puede voltear la sincronización: si falla, se reintenta en la próxima.
     try {
