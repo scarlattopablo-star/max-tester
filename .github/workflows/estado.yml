@@ -60,6 +60,26 @@ jobs:
           if [ "$commit" != "${GITHUB_SHA:0:7}" ]; then
             echo "::warning::Producción corre $commit y el último commit de main es ${GITHUB_SHA:0:7}. Hay cambios sin deployar: Render → max-tester → Manual Deploy → Deploy latest commit (o cargá el secret RENDER_DEPLOY_HOOK para que el deploy salga solo)."
           fi
+          # Y CUÁLES son: el desglose por plazo + los títulos, que es lo que se
+          # mira para confirmar que los artículos a 21 días son los que Pablo cargó
+          # así en Mercado Libre (y no una publicación con el plazo mal puesto).
+          if curl -s --max-time 60 -o /tmp/catalogo.json "https://max-tester.onrender.com/api/catalogo"; then
+            {
+              echo ""
+              echo "### Artículos a pedido, por plazo"
+              echo ""
+              echo "| Días | Publicaciones |"
+              echo "|---|---|"
+              jq -r '[.productos[] | select(.d > 0)] | group_by(.d) | .[] | "| \(.[0].d) | \(length) |"' /tmp/catalogo.json
+              echo ""
+              echo "<details><summary>Títulos (hasta 40)</summary>"
+              echo ""
+              jq -r '[.productos[] | select(.d > 0)] | sort_by(-.d) | .[0:40][] | "- \(.d) días — \(.n) ($ \(.p))"' /tmp/catalogo.json
+              echo ""
+              echo "</details>"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
           if [ "$aPedido" = "0" ]; then
             echo "::warning::Ninguna publicación activa declara disponibilidad a X días. Si hay artículos que se entregan a los 21 días, cargá el plazo en la publicación de Mercado Libre (disponibilidad de stock) o agregalos a DEMORAS_MANUALES en src/config.js."
           fi
