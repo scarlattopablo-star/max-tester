@@ -21,6 +21,9 @@ on:
     paths-ignore:
       - "docs/**"
       - "**/*.md"
+      # Tocar un workflow tampoco cambia lo que corre en Render: no hay nada que
+      # deployar, y un deploy de más es un arranque en frío con Max caído.
+      - ".github/workflows/**"
   workflow_dispatch: {} # y a mano, desde la pestaña Actions
 
 concurrency:
