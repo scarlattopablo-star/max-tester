@@ -2461,6 +2461,48 @@ export function eleccionAmbigua(textoUsuario, textoCharla = "") {
   };
 }
 
+// ⛔ El RAZONAMIENTO INTERNO no sale al cliente.
+//
+// En el bucle de herramientas el modelo a veces escribe texto JUNTO con un tool_use.
+// Ese texto es un fragmento INTERMEDIO —lo escribe mientras decide, no como mensaje
+// final— y se guarda en `textoParcial` por si la vuelta final viene vacía. Se usaba
+// tal cual. Caso real (7-sep-2026, producción, con Sonnet 5): el cliente escribió
+// "alfonbra para chebrolet spin" y recibió
+//     "Espera, corrijo: primero preguntame si querés que te avise cuando llegue, ¿te sirve?"
+// que es Max hablándose a sí mismo. `limpiarJerga` no lo agarra: no es jerga ni una
+// nota entre corchetes, es prosa normal dirigida a sí mismo.
+//
+// ⚠️ Se filtra por ORACIÓN, no por texto entero: si no, una sola frase de razonamiento
+// se lleva puesto el mensaje bueno que venía al lado (el mismo error que ya se cometió
+// filtrando el aviso de envío por párrafo).
+//
+// Los patrones son deliberadamente ESTRECHOS. Ante la duda se deja pasar: es peor
+// comerse un mensaje legítimo ("Voy a necesitar el año de tu Strada") que dejar pasar
+// una auto-instrucción rara de vez en cuando.
+const RAZONAMIENTO = [
+  // Se corrige a sí mismo: "Espera, corrijo:", "Perdón, me corrijo:"
+  /\b(me\s+)?corrijo\b/i,
+  // Nombres de herramientas: van en snake_case, nadie habla así.
+  /\b(enviar_foto|consultar_precio|derivar_a_humano|mostrar_capitoneado|mostrar_ecocuero|mostrar_cuero_sport|tomar_pedido|confirmar_transferencia|crear_link_pago|agendar_turno|avisar_stock)\b/,
+  // Se da instrucciones a sí mismo en vez de hablarle al cliente.
+  /\bprimero\s+(preguntame|pregúntame|debo|tengo\s+que)\b/i,
+  /\btengo\s+que\s+(buscar|consultar|preguntar|usar|llamar)\b/i,
+  /\bdebo\s+(buscar|consultar|preguntar|usar|llamar)\b/i,
+  /\b(voy\s+a|déjame|dejame)\s+(llamar\s+a\s+la\s+herramienta|usar\s+la\s+herramienta)\b/i,
+];
+
+export function limpiarRazonamiento(texto) {
+  const t = String(texto || "");
+  if (!t.trim()) return t;
+  // Cortamos después de . ! ? … conservando el signo; "¿...?" queda entero porque el
+  // corte va DESPUÉS del cierre.
+  const oraciones = t.split(/(?<=[.!?…])\s+/);
+  const buenas = oraciones.filter((o) => !RAZONAMIENTO.some((re) => re.test(o)));
+  // Si TODO era razonamiento devolvemos vacío a propósito: el que llama cae al
+  // fallback de siempre, que es mejor que mandarle al cliente un texto sin sentido.
+  return buenas.join(" ").trim();
+}
+
 // Saca las palabras de ADENTRO que se le escapan a Max. Al cliente no le dice nada
 // que algo esté "publicado" o que "figure en el catálogo": eso es de nuestro sistema
 // y suena a excusa. El prompt se lo prohíbe, pero se le escapa igual, así que se
@@ -2831,7 +2873,13 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
     const toolUses = (resp.content || []).filter((b) => b.type === "tool_use");
     if (toolUses.length) {
       const acompanante = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
-      if (acompanante) textoParcial = acompanante;
+      // ⛔ Solo guardamos lo que es PRESENTABLE al cliente: el acompañante de un
+      // tool_use suele ser el modelo pensando en voz alta ("Espera, corrijo: primero
+      // preguntame..."), y de acá salía tal cual cuando la vuelta final venía vacía.
+      // Igual que con `ctx._turno.texto`: si no queda nada limpio NO se pisa lo que ya
+      // había, porque una vuelta de puro razonamiento no puede borrar un mensaje bueno.
+      const presentable = limpiarRazonamiento(acompanante);
+      if (presentable) textoParcial = presentable;
       // Lo que Max le está escribiendo al cliente en ESTE turno: lo mira el guard de
       // derivación para no dejarlo preguntar "¿te paso con un asesor?" y derivar al
       // mismo tiempo. ⚠️ Solo se pisa si hay texto nuevo: una vuelta sin texto no
