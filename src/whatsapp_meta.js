@@ -17,6 +17,7 @@ import { esPdf, notaDocumento } from "./ws_mensaje.js";
 import { registrarCliente } from "./clientes.js";
 import { recordarEnviado, marcaDeCita } from "./citas.js";
 import { diag } from "./diag.js";
+import { recordarEnvio as recordarAvisoEquipo, marcarEntregado as avisoEntregado, marcarRebote as avisoRebotado } from "./avisos_salud.js";
 import {
   enviarTextoMeta, enviarImagenMeta, enviarVideoMeta, enviarPlantillaMeta,
   marcarLeidoEscribiendo, mediaComoDataUri, aWaId, metaConfigurado,
@@ -39,6 +40,53 @@ let ultimaConfirmacionAvisos = 0; // para confirmar el canal de avisos a lo sumo
 // número. Los usamos para pausar a Max (handoff humano).
 function numeroPropio() {
   return aWaId(process.env.NUMERO_BOT || process.env.NUMERO_AVISOS || "");
+}
+
+// Manda UN aviso al equipo a un número. Sale por PLANTILLA (llega esté o no
+// abierta la ventana de 24 h) y cae al texto libre si la plantilla falla.
+// Devuelve el id del mensaje de Meta, que es con lo que después se lo puede atar
+// al status del webhook (entregado o rebotado).
+async function mandarAvisoA(destino, texto) {
+  const plantilla = process.env.PLANTILLA_AVISO ?? "aviso_equipo_max";
+  if (plantilla) {
+    // Los parámetros de plantilla no admiten saltos de línea (regla de Meta).
+    const plano = String(texto || "").replace(/\s+/g, " ").trim().slice(0, 1024);
+    try {
+      const r = await enviarPlantillaMeta(destino, plantilla, "es", [
+        { type: "body", parameters: [{ type: "text", text: plano }] },
+      ]);
+      return r?.messages?.[0]?.id || "";
+    } catch (e) {
+      console.log(`⚠ aviso por plantilla "${plantilla}" falló (${e.message}) — reintento como texto libre`);
+    }
+  }
+  const r = await enviarTextoMeta(destino, texto);
+  return r?.messages?.[0]?.id || "";
+}
+
+// Un aviso al equipo que REBOTÓ. No es un mensaje perdido más: es el equipo
+// quedándose sin derivaciones ni avisos de transferencia. Se grita en el log, se
+// deja en /api/diag y se reintenta por NUMERO_AVISOS_RESPALDO.
+// (18 sep 2026: el 096 empezó a rebotar todo con code 131026 y el equipo estuvo
+// 3 días sin enterarse de nada porque el rebote no despertaba a nadie.)
+async function rescatarAviso(rebote, destinoOriginal, detalle) {
+  diag("aviso_equipo_rebotado", { jid: destinoOriginal, detalle: `${detalle} · ${rebote.consecutivos} seguidos` });
+  console.log(`🚨 AVISO AL EQUIPO REBOTADO (${rebote.consecutivos} seguidos) — el equipo NO se está enterando. Destino ${destinoOriginal}: ${detalle}`);
+
+  const respaldo = aWaId(process.env.NUMERO_AVISOS_RESPALDO || "");
+  if (!respaldo || respaldo === aWaId(destinoOriginal)) {
+    console.log(`🚨 Sin NUMERO_AVISOS_RESPALDO: este aviso se perdió → ${String(rebote.texto).replace(/\s+/g, " ").slice(0, 120)}`);
+    return;
+  }
+  // El rescate NO se recuerda en avisos_salud: si el respaldo también rebota, el
+  // status no dispara otro rescate y no se arma un ida y vuelta infinito.
+  try {
+    await mandarAvisoA(respaldo, `🚨 (rebotó al ${destinoOriginal})\n${rebote.texto}`);
+    diag("aviso_equipo_rescatado", { jid: respaldo });
+    console.log(`✅ aviso rescatado por el número de respaldo ${respaldo}`);
+  } catch (e) {
+    console.log(`🚨 el respaldo ${respaldo} TAMPOCO pudo: ${e.message} → ${String(rebote.texto).replace(/\s+/g, " ").slice(0, 120)}`);
+  }
 }
 
 // caption: si el mensaje que se envió era una FOTO o un VIDEO de un producto, se
@@ -348,22 +396,12 @@ export function montarWebhook(app) {
   // id 4573476226266094): llega SIEMPRE, haya o no ventana abierta. Si la plantilla
   // falla (aún no aprobada / sin fondos en 360dialog), caemos al texto libre, que
   // al menos llega con la ventana abierta. PLANTILLA_AVISO="" la desactiva.
+  // ⚠️ El 200 de Meta NO significa entregado: el rebote llega DESPUÉS, por el
+  // webhook de statuses. Por eso cada aviso se recuerda por su id (avisos_salud.js):
+  // si rebota, ahí abajo se reintenta por el número de respaldo y queda la alarma.
   registrarTransporte(async (texto) => {
     const destino = process.env.NUMERO_AVISOS || "091629784";
-    const plantilla = process.env.PLANTILLA_AVISO ?? "aviso_equipo_max";
-    if (plantilla) {
-      // Los parámetros de plantilla no admiten saltos de línea (regla de Meta).
-      const plano = String(texto || "").replace(/\s+/g, " ").trim().slice(0, 1024);
-      try {
-        await enviarPlantillaMeta(destino, plantilla, "es", [
-          { type: "body", parameters: [{ type: "text", text: plano }] },
-        ]);
-        return;
-      } catch (e) {
-        console.log(`⚠ aviso por plantilla "${plantilla}" falló (${e.message}) — reintento como texto libre`);
-      }
-    }
-    await enviarTextoMeta(destino, texto);
+    recordarAvisoEquipo(await mandarAvisoA(destino, texto), texto);
   });
 
   // 1) VERIFICACIÓN del webhook (Meta hace un GET cuando lo configurás).
@@ -400,10 +438,23 @@ export function montarWebhook(app) {
           // aviso al equipo fuera de la ventana de 24 h → code 131047). Sin esto,
           // los avisos se perdían sin dejar rastro en ningún log.
           for (const st of value.statuses || []) {
+            if (st.status === "delivered" || st.status === "read") {
+              // Si era un aviso al equipo, el canal está vivo: se limpia la alarma.
+              avisoEntregado(st.id);
+              continue;
+            }
             if (st.status !== "failed") continue;
             const err = (st.errors || [])[0] || {};
-            diag("envio_fallido", { jid: st.recipient_id, detalle: `code ${err.code || "?"} · ${err.title || err.message || ""}` });
-            console.log(`⚠ envío a ${st.recipient_id} FALLÓ: code ${err.code || "?"} ${err.title || err.message || ""}`);
+            const detalle = `code ${err.code || "?"} · ${err.title || err.message || ""}`;
+            diag("envio_fallido", { jid: st.recipient_id, detalle });
+            console.log(`⚠ envío a ${st.recipient_id} FALLÓ: ${detalle}`);
+            // Si el que rebotó era un AVISO AL EQUIPO, esto no es un mensaje
+            // perdido más: es el equipo quedándose sin derivaciones ni avisos de
+            // transferencia. Se grita y se reintenta por el número de respaldo.
+            const rebote = avisoRebotado(st.id, err.code, err.title || err.message || "");
+            if (rebote.esAviso) {
+              rescatarAviso(rebote, st.recipient_id, detalle).catch((e) => console.log("⚠ rescate del aviso falló:", e.message));
+            }
           }
         }
       }

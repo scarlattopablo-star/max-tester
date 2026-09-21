@@ -23,6 +23,7 @@ import { ordenesML } from "./ml_ordenes.js";
 import { resumenMensajes } from "./metricas.js";
 import { resumenTransferencias, listarTransferencias, importarTransferencias, borrarTransferencias, marcarVerificada } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
+import { salud as saludAvisos } from "./avisos_salud.js";
 import { obtenerMedia } from "./comprobantes.js";
 import { esHumano, marcarHumano, liberar, liberarTodo } from "./previas.js";
 import { enviarTextoMeta, metaConfigurado } from "./meta_api.js";
@@ -114,6 +115,10 @@ app.get("/api/estado", async (_req, res) => {
       hayQr: false,
       keepAlive: !!(process.env.APP_URL || "").trim(),
     },
+    // ¿Los avisos al equipo están LLEGANDO? `conectado` arriba solo dice que hay
+    // transporte: Meta contesta 200 y recién después rebota por el webhook. Con
+    // `avisos.ok === false` el equipo está mudo aunque todo lo demás se vea bien.
+    avisos: saludAvisos(),
     catalogo: infoCatalogo(), syncML: haySyncML(), ultimaSync: ultimaSync(), mlUsuario: await hayUsuarioML(), mercadoPago: hayMercadoPago(), ia: { proveedor: ia.nombre, modelo: ia.model },
     // QUÉ CÓDIGO está corriendo. Sin esto no había forma honesta de saber si un deploy
     // subió: se usaba `ultimaSync`, que cambia SOLA cada 30 minutos con la sincronización
