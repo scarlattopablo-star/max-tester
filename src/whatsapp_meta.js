@@ -14,6 +14,7 @@ import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
 import { registrarTransporte } from "./notificador.js";
 import { avisarAcciones, pideAtencionDelEquipo } from "./avisos_equipo.js";
 import { esPdf, notaDocumento } from "./ws_mensaje.js";
+import { guardarComprobanteDataUri } from "./comprobantes.js";
 import { registrarCliente } from "./clientes.js";
 import { recordarEnviado, marcaDeCita } from "./citas.js";
 import { diag } from "./diag.js";
@@ -40,6 +41,63 @@ let ultimaConfirmacionAvisos = 0; // para confirmar el canal de avisos a lo sumo
 // número. Los usamos para pausar a Max (handoff humano).
 function numeroPropio() {
   return aWaId(process.env.NUMERO_BOT || process.env.NUMERO_AVISOS || "");
+}
+
+// CHAT QUE TOMÓ UN ASESOR: Max no contesta, pero el ADJUNTO se guarda igual.
+//
+// Hasta el 21 sep 2026 en un chat pausado se guardaba SOLO el cartel "[foto]" o
+// "[mensaje]" y el archivo se descartaba. Un comprobante que llegaba con el chat
+// tomado se perdía entero: no quedaba en el visor, no lo encontraba la auditoría
+// de /api/comprobantes-perdidos y no había forma de recuperarlo desde acá. En un
+// solo día (21 sep) se fueron así 30 adjuntos en 13 chats — y el PDF del banco,
+// que es como llega la mayoría de los comprobantes, caía en "[mensaje]".
+//
+// Parte PURA: con qué texto queda el mensaje en el historial. `id` es el del
+// archivo ya guardado (null si no se pudo). Devuelve el MISMO marcador que usa el
+// camino normal, así el visor y la auditoría lo ven igual.
+export function marcaAdjuntoPausado({ tipo, texto = "", id = null, esPdfDoc = false, notaDoc = "" }) {
+  const partes = [String(texto || "").trim()];
+  if (id) partes.push(esPdfDoc ? `[comprobante-pdf #${id}]` : `[comprobante #${id}]`);
+  else if (tipo === "image") partes.push("[foto]");
+  else if (tipo === "document") partes.push(notaDoc || "[documento]");
+  else if (tipo === "audio") partes.push("[audio]");
+  else if (!partes[0]) partes.push("[mensaje]");
+  return partes.filter(Boolean).join(" ");
+}
+
+// Parte con I/O: baja el adjunto y lo guarda. Nunca rompe el flujo: si falla,
+// devuelve el marcador de siempre y el mensaje igual queda en el historial.
+async function guardarAdjuntoPausado(tel, msg) {
+  const tipo = msg.type;
+  const texto = msg.text?.body || msg.image?.caption || msg.document?.caption || "";
+  const doc = { nombre: msg.document?.filename || "", mime: msg.document?.mime_type || "" };
+  const esPdfDoc = tipo === "document" && esPdf(doc);
+  let dataUri = null;
+  try {
+    if (tipo === "image" && msg.image?.id) {
+      dataUri = await mediaComoDataUri(msg.image.id);
+    } else if (esPdfDoc && msg.document?.id && Number(msg.document?.file_size || 0) <= PDF_MAX_BYTES) {
+      dataUri = await mediaComoDataUri(msg.document.id);
+    }
+  } catch (e) {
+    console.log(`⚠ chat pausado ${tel}: no pude bajar el adjunto: ${e.message}`);
+  }
+  let id = null;
+  if (dataUri) {
+    try { id = await guardarComprobanteDataUri(tel, dataUri); }
+    catch (e) { console.log(`⚠ chat pausado ${tel}: no pude guardar el adjunto: ${e.message}`); }
+  }
+  if (id) {
+    diag("adjunto_guardado_en_pausa", { jid: tel, detalle: `${esPdfDoc ? "pdf" : "foto"} #${id}` });
+    console.log(`📎 chat pausado ${tel}: adjunto guardado (#${id}) — Max no contesta, pero no se pierde`);
+  } else if (tipo === "image" || tipo === "document") {
+    diag("adjunto_perdido_en_pausa", { jid: tel, detalle: tipo });
+    console.log(`⚠ chat pausado ${tel}: adjunto de tipo ${tipo} NO se pudo guardar`);
+  }
+  return marcaAdjuntoPausado({
+    tipo, texto, id, esPdfDoc,
+    notaDoc: tipo === "document" ? notaDocumento({ ...doc, legible: !!id }) : "",
+  });
 }
 
 // Manda UN aviso al equipo a un número. Sale por PLANTILLA (llega esté o no
@@ -195,6 +253,9 @@ async function procesar(tel) {
 
     await avisarAcciones({
       acciones, contacto, texto, chatId: tel, pdfRecibido,
+      // Para la red de seguridad: un comprobante fotografiado no es texto ni PDF,
+      // así que se reconoce por lo que Max dijo que vio en la foto.
+      fotoRecibida: imagenes.length > 0, respuestaMax: respuesta,
       fallbackConversacion: "Buscá la conversación en la bandeja de Meta Business Suite.",
     });
   } catch (e) {
@@ -293,8 +354,9 @@ async function procesarEntrante(msg, value) {
 
   // ¿Un asesor ya tomó esta conversación? Max no participa, pero guarda en memoria.
   if (esHumano(tel)) {
-    const t = msg.text?.body || (msg.type === "audio" ? "[audio]" : msg.type === "image" ? "[foto]" : "[mensaje]");
-    agregar(tel, "user", t);
+    // Max no participa, PERO el adjunto se guarda: un comprobante que llega con el
+    // chat tomado por un asesor tiene que quedar igual (ver guardarAdjuntoPausado).
+    agregar(tel, "user", await guardarAdjuntoPausado(tel, msg));
     diag("pausado_humano", { jid: tel, anuncio: !!anuncio });
     console.log(`🤫 conversación de un asesor en ${tel}: Max no participa`);
     return;

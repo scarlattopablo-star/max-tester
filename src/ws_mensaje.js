@@ -116,6 +116,23 @@ export function dijoQueTransfirio(texto) {
   return RE_YA_TRANSFIRIO.test(plano);
 }
 
+// ¿La respuesta de MAX dice que acaba de VER un pago? Se usa cuando el cliente
+// mandó una FOTO: el comprobante fotografiado (ticket de Abitab, captura de la app
+// del banco) no es texto ni PDF, así que los otros dos disparadores de la red de
+// seguridad no lo agarran. Caso real del 21 sep 2026: "Vi el comprobante de
+// Abitab. Listo, le paso todo al equipo" — y no lo pasó.
+//
+// Se exige un verbo de RECONOCIMIENTO ("vi", "veo", "recibí", "llegó") seguido, EN
+// LA MISMA ORACIÓN, de la palabra del pago. Sin eso, "te paso los medios de pago"
+// y "mandame el comprobante" (Max PIDIENDO, no viendo) dispararían avisos falsos:
+// el mismo día entraron 19 fotos y 18 eran de autos y asientos.
+const RE_VIO_PAGO = /\b(?:vi|veo|recibi|llego|llegaron|tengo)\b[^.!?\n]{0,40}\b(?:comprobante|trans?ferencia|deposito|pago)\b/i;
+
+export function maxVioUnComprobante(respuesta) {
+  const plano = String(respuesta || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return RE_VIO_PAGO.test(plano);
+}
+
 // Teléfono REAL del cliente para armar el link wa.me y para responder a los chats
 // "@lid". Con el nuevo direccionamiento de WhatsApp el remoteJid puede ser un "@lid"
 // (que NO es el número); el número real viene en senderPn/participantPn/participant.

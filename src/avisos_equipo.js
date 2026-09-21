@@ -13,7 +13,7 @@
 // el test de cobertura (avisos_equipo.test.mjs) obliga a escribirle el aviso.
 import { enviarTexto, linkWa } from "./notificador.js";
 import { linkTurno } from "./confirmacion_turno.js";
-import { dijoQueTransfirio } from "./ws_mensaje.js";
+import { dijoQueTransfirio, maxVioUnComprobante } from "./ws_mensaje.js";
 
 /** Herramientas del cerebro que SIEMPRE generan un aviso al equipo. */
 export const HERRAMIENTAS_QUE_AVISAN = Object.freeze([
@@ -42,7 +42,7 @@ const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
  *  WhatsApp ni base de datos.
  *  Devuelve { avisos: [texto...], transferenciaSinRegistrar } — esto último es la
  *  transferencia que detectó la red de seguridad y que el llamador debe registrar. */
-export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fallbackConversacion = "" } = {}) {
+export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fotoRecibida = false, respuestaMax = "", fallbackConversacion = "" } = {}) {
   const avisos = [];
   const lineaCliente = contacto.nombre ? `👤 ${contacto.nombre}` : "";
   const sinLink = fallbackConversacion || "Buscá la conversación del cliente en el WhatsApp del negocio.";
@@ -116,20 +116,28 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
   }
 
   // RED DE SEGURIDAD determinística, para cuando el modelo NO llama la herramienta.
-  // Dos disparadores, los dos por código (no dependen de que la IA acierte):
+  // TRES disparadores, los tres por código (no dependen de que la IA acierte):
   //   1. el cliente dijo con todas las letras que YA transfirió;
-  //   2. llegó un PDF — el comprobante del banco es un PDF y casi nada más lo es.
+  //   2. llegó un PDF — el comprobante del banco es un PDF y casi nada más lo es;
+  //   3. llegó una FOTO y Max dijo que vio un pago en ella.
   // El (2) importa sobre todo porque el cliente suele mandar el PDF SOLO, sin
   // escribir nada, y ahí el disparador (1) no tiene texto donde engancharse.
+  // El (3) se agregó el 21 sep 2026: un ticket de Abitab fotografiado (o una
+  // captura de la app del banco) no es texto ni PDF, así que se colaba entre los
+  // dos primeros. Pasó: $1.000 que Max vio, dijo que pasaba al equipo, y nadie
+  // registró. Mira lo que Max DIJO, no que haya llamado la herramienta.
   // Un aviso de más cuesta 10 segundos; una transferencia que nadie mira, una venta.
+  const comprobanteEnFoto = fotoRecibida && maxVioUnComprobante(respuestaMax);
   let transferenciaSinRegistrar = null;
-  if (!transferenciaAvisada && (dijoQueTransfirio(texto) || pdfRecibido)) {
+  if (!transferenciaAvisada && (dijoQueTransfirio(texto) || pdfRecibido || comprobanteEnFoto)) {
     transferenciaSinRegistrar = {
       chatId,
       nombre: contacto.nombre || "",
       telefono: contacto.tel || "",
-      detalle: String(texto).slice(0, 140),
-      comprobante: pdfRecibido || /comprobante/i.test(texto),
+      detalle: comprobanteEnFoto && !texto
+        ? `Comprobante en FOTO. Max vio: ${String(respuestaMax).replace(/\s+/g, " ").slice(0, 110)}`
+        : String(texto).slice(0, 140),
+      comprobante: pdfRecibido || comprobanteEnFoto || /comprobante/i.test(texto),
     };
     avisos.push(avisoTransferencia(transferenciaSinRegistrar));
   }
@@ -139,8 +147,8 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
 
 /** Arma y MANDA los avisos al WhatsApp del equipo. Un fallo en uno no tumba los
  *  otros: cada aviso se manda por separado y el error queda en el log. */
-export async function avisarAcciones({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fallbackConversacion = "" } = {}) {
-  const { avisos, transferenciaSinRegistrar } = armarAvisos({ acciones, contacto, texto, chatId, pdfRecibido, fallbackConversacion });
+export async function avisarAcciones({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fotoRecibida = false, respuestaMax = "", fallbackConversacion = "" } = {}) {
+  const { avisos, transferenciaSinRegistrar } = armarAvisos({ acciones, contacto, texto, chatId, pdfRecibido, fotoRecibida, respuestaMax, fallbackConversacion });
 
   if (transferenciaSinRegistrar) {
     try {
