@@ -133,6 +133,24 @@ export function maxVioUnComprobante(respuesta) {
   return RE_VIO_PAGO.test(plano);
 }
 
+// ¿En esta charla el NEGOCIO acaba de pasar los datos para pagar? Es el único
+// dato determinístico que queda cuando el chat lo tomó un asesor: ahí Max no
+// razona, no hay respuesta suya donde leer "vi el comprobante", y una foto sola
+// no dice si es un pago o el asiento del auto.
+//
+// Se exige que los datos los haya pasado el negocio (role != user): que el
+// CLIENTE escriba "everbox" es una pregunta, no un cobro. Y son los datos REALES
+// de la cuenta, no hablar de plata: "te paso los medios de pago" NO cuenta, o
+// cada foto mandada después de esa frase entraría al panel como una
+// transferencia que no existió.
+const RE_DATOS_DE_COBRO = /5022900|everbox|abitab/i;
+
+export function huboContextoDePago(mensajes = []) {
+  return (Array.isArray(mensajes) ? mensajes : []).some(
+    (m) => m && m.role !== "user" && RE_DATOS_DE_COBRO.test(String(m.content || "")),
+  );
+}
+
 // Teléfono REAL del cliente para armar el link wa.me y para responder a los chats
 // "@lid". Con el nuevo direccionamiento de WhatsApp el remoteJid puede ser un "@lid"
 // (que NO es el número); el número real viene en senderPn/participantPn/participant.

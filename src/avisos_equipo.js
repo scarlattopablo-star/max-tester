@@ -42,7 +42,7 @@ const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
  *  WhatsApp ni base de datos.
  *  Devuelve { avisos: [texto...], transferenciaSinRegistrar } — esto último es la
  *  transferencia que detectó la red de seguridad y que el llamador debe registrar. */
-export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fotoRecibida = false, respuestaMax = "", fallbackConversacion = "" } = {}) {
+export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fotoRecibida = false, respuestaMax = "", comprobanteExterno = "", fallbackConversacion = "" } = {}) {
   const avisos = [];
   const lineaCliente = contacto.nombre ? `👤 ${contacto.nombre}` : "";
   const sinLink = fallbackConversacion || "Buscá la conversación del cliente en el WhatsApp del negocio.";
@@ -127,17 +127,21 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
   // dos primeros. Pasó: $1.000 que Max vio, dijo que pasaba al equipo, y nadie
   // registró. Mira lo que Max DIJO, no que haya llamado la herramienta.
   // Un aviso de más cuesta 10 segundos; una transferencia que nadie mira, una venta.
+  //   4. comprobanteExterno: el llamador YA decidió que hay un comprobante y dice
+  //      por qué. Lo usa el chat que tomó un asesor, donde Max no razona y por
+  //      lo tanto los disparadores 1 a 3 no tienen de dónde agarrarse.
   const comprobanteEnFoto = fotoRecibida && maxVioUnComprobante(respuestaMax);
+  const detalleFoto = comprobanteEnFoto && !texto
+    ? `Comprobante en FOTO. Max vio: ${String(respuestaMax).replace(/\s+/g, " ").slice(0, 110)}`
+    : "";
   let transferenciaSinRegistrar = null;
-  if (!transferenciaAvisada && (dijoQueTransfirio(texto) || pdfRecibido || comprobanteEnFoto)) {
+  if (!transferenciaAvisada && (dijoQueTransfirio(texto) || pdfRecibido || comprobanteEnFoto || comprobanteExterno)) {
     transferenciaSinRegistrar = {
       chatId,
       nombre: contacto.nombre || "",
       telefono: contacto.tel || "",
-      detalle: comprobanteEnFoto && !texto
-        ? `Comprobante en FOTO. Max vio: ${String(respuestaMax).replace(/\s+/g, " ").slice(0, 110)}`
-        : String(texto).slice(0, 140),
-      comprobante: pdfRecibido || comprobanteEnFoto || /comprobante/i.test(texto),
+      detalle: [comprobanteExterno, detalleFoto, String(texto).trim()].filter(Boolean).join(" · ").slice(0, 200),
+      comprobante: pdfRecibido || comprobanteEnFoto || !!comprobanteExterno || /comprobante/i.test(texto),
     };
     avisos.push(avisoTransferencia(transferenciaSinRegistrar));
   }
@@ -147,8 +151,8 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
 
 /** Arma y MANDA los avisos al WhatsApp del equipo. Un fallo en uno no tumba los
  *  otros: cada aviso se manda por separado y el error queda en el log. */
-export async function avisarAcciones({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fotoRecibida = false, respuestaMax = "", fallbackConversacion = "" } = {}) {
-  const { avisos, transferenciaSinRegistrar } = armarAvisos({ acciones, contacto, texto, chatId, pdfRecibido, fotoRecibida, respuestaMax, fallbackConversacion });
+export async function avisarAcciones({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fotoRecibida = false, respuestaMax = "", comprobanteExterno = "", fallbackConversacion = "" } = {}) {
+  const { avisos, transferenciaSinRegistrar } = armarAvisos({ acciones, contacto, texto, chatId, pdfRecibido, fotoRecibida, respuestaMax, comprobanteExterno, fallbackConversacion });
 
   if (transferenciaSinRegistrar) {
     try {
