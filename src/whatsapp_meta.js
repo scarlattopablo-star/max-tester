@@ -8,12 +8,12 @@
 import "./env.js";
 import { procesarMensaje } from "./handler.js";
 import { sleep, delayEscritura } from "./humano.js";
-import { agregar, cargarConversaciones, historial } from "./memoria.js";
+import { agregar, cargarConversaciones } from "./memoria.js";
 import { registrarMensajeMax } from "./metricas.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
 import { registrarTransporte } from "./notificador.js";
 import { avisarAcciones, pideAtencionDelEquipo } from "./avisos_equipo.js";
-import { esPdf, notaDocumento, dijoQueTransfirio, huboContextoDePago } from "./ws_mensaje.js";
+import { esPdf, notaDocumento, dijoQueTransfirio } from "./ws_mensaje.js";
 import { guardarComprobanteDataUri } from "./comprobantes.js";
 import { registrarCliente } from "./clientes.js";
 import { recordarEnviado, marcaDeCita } from "./citas.js";
@@ -106,26 +106,27 @@ async function guardarAdjuntoPausado(tel, msg) {
 // sale antes de razonar.
 //
 // Acá Max no piensa, así que no hay respuesta suya donde leer "vi el
-// comprobante". Quedan tres señales determinísticas:
-//   · un PDF          → el comprobante del banco es un PDF y casi nada más lo es;
-//   · el cliente ESCRIBIÓ que transfirió;
-//   · una FOTO y el negocio acaba de pasar los datos de la cuenta en esa charla.
-// La tercera es la que importa y la que hay que mantener ajustada: una foto sola
-// no dice si es un pago o el asiento del auto. Medido sobre el 21 sep 2026, el
-// contexto deja 7 de 23 fotos (4 chats), y entre ellas está el Abitab de $1.000
-// que se perdió.
+// comprobante". Solo se registra con señales que dicen que hubo un pago SIN
+// lugar a dudas:
+//   · un PDF → el comprobante del banco es un PDF y casi nada más lo es;
+//   · el cliente ESCRIBIÓ que transfirió.
+//
+// ⛔ UNA FOTO NO ALCANZA, NUNCA. Se probó deducirlo del contexto (que el negocio
+// hubiera pasado los datos de la cuenta justo antes) y está MAL: una foto del
+// auto mandada después de pasar la cuenta entraría al panel como una
+// transferencia que no existió. El panel es el registro de la plata: una fila
+// inventada ahí es peor que la falta que veníamos a tapar. Para agarrar el
+// comprobante fotografiado en un chat tomado hay que LEER la imagen, no
+// adivinarla por el contexto.
 const pagosEnPausa = new Map(); // tel -> ts del último registro
 const PAUSA_DEDUP_MS = 15 * 60 * 1000; // un chat mandó 3 fotos del mismo pago
 
 async function registrarPagoEnChatTomado(tel, msg, nombre) {
   const texto = msg.text?.body || msg.image?.caption || msg.document?.caption || "";
-  const esFoto = msg.type === "image";
   const esPdfDoc = msg.type === "document"
     && esPdf({ nombre: msg.document?.filename || "", mime: msg.document?.mime_type || "" });
   const loEscribio = dijoQueTransfirio(texto);
-  // Los 11 últimos = los 10 previos más el mensaje que se acaba de guardar.
-  const porContexto = esFoto && huboContextoDePago((historial(tel) || []).slice(-11));
-  if (!esPdfDoc && !loEscribio && !porContexto) return;
+  if (!esPdfDoc && !loEscribio) return;
 
   if (Date.now() - (pagosEnPausa.get(tel) || 0) < PAUSA_DEDUP_MS) {
     console.log(`🏦 chat pausado ${tel}: otro comprobante dentro de los 15 min, ya estaba registrado`);
@@ -133,9 +134,7 @@ async function registrarPagoEnChatTomado(tel, msg, nombre) {
   }
   pagosEnPausa.set(tel, Date.now());
 
-  const motivo = esPdfDoc ? "PDF del banco"
-    : loEscribio ? "el cliente escribió que transfirió"
-    : "foto, con la cuenta recién pasada";
+  const motivo = esPdfDoc ? "PDF del banco" : "el cliente escribió que transfirió";
   diag("pago_en_chat_tomado", { jid: tel, detalle: motivo });
   console.log(`🏦 chat pausado ${tel}: comprobante detectado (${motivo}) — se registra igual`);
   try {
