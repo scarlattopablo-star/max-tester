@@ -57,7 +57,7 @@ await caso(
   "producto del LOCAL — sin plazos inventados",
   "hola, precio de la alfombra para el VW Nivus?",
   ({ resp, captions }) => {
-    const inventa = /\b\d+\s*d[ií]as\b/i.test(resp.replace(/2 o 3 d[ií]as/gi, "")) || PLAZO.test(captions);
+    const inventa = /\b\d+\s*d[ií]as\b/i.test(resp.replace(/4 a 5 d[ií]as( h[aá]biles)?/gi, "")) || PLAZO.test(captions);
     return inventa
       ? { pasa: false, detalle: "Metió un plazo que ese artículo no tiene" }
       : { pasa: true, detalle: "Cotizó sin hablar de demoras" };

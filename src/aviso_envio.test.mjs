@@ -1,5 +1,5 @@
 // Cuando la venta se cierra CON ENVÍO, el cliente tiene que enterarse de que la
-// encomienda demora de 2 a 3 días. El texto lo pone el CÓDIGO (no el modelo), igual
+// entrega demora de 4 a 5 días hábiles. El texto lo pone el CÓDIGO (no el modelo), igual
 // que el aviso de colocación, para que salga siempre igual.
 //
 // Regla de diseño: ante la duda NO se manda. Decirle "llega en 2 a 3 días" a alguien
@@ -7,21 +7,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { esVentaConEnvio, armarRespuesta } from "./cerebro.js";
-import { AVISO_ENVIO, AVISO_COLOCACION } from "./config.js";
+import { AVISO_ENVIO, AVISO_COLOCACION, PLAZO_ENVIO } from "./config.js";
 
 const cierreConEnvio = (texto, resultado) =>
   armarRespuesta(texto, [{ herramienta: "tomar_pedido", resultado }], { textoCharla: "" }).texto;
 
-// ⚠️ El plazo es el del DESPACHO: el pedido SALE dentro de los 2 o 3 días. NO es el
-// tiempo de entrega — lo que tarde DAC después no lo controla ni lo promete la casa.
-// Este test existe porque la primera versión decía "llega en 2 a 3 días", que es una
-// promesa distinta y que el negocio no puede cumplir.
-test("el aviso habla del DESPACHO, no de la entrega", () => {
-  assert.match(AVISO_ENVIO, /2 o 3 d[ií]as/i);
-  assert.match(AVISO_ENVIO, /despach/i);
+// 1 oct 2026: Pablo fijó el plazo en una DEMORA DE ENTREGA de 4 a 5 días hábiles
+// (antes era "se despacha dentro de los 2 o 3 días"). Vale para Max y para la web.
+test("el aviso dice la demora de entrega de 4 a 5 días hábiles", () => {
+  assert.equal(PLAZO_ENVIO, "4 a 5 días hábiles");
+  assert.match(AVISO_ENVIO, /demora de entrega de 4 a 5 d[ií]as h[aá]biles/i);
   assert.match(AVISO_ENVIO, /DAC/);
-  assert.doesNotMatch(AVISO_ENVIO, /llega en|en llegar|demora .* en llegar/i,
-    "no prometer un tiempo de ENTREGA: el plazo es el de despacho");
+  assert.doesNotMatch(AVISO_ENVIO, /2 o 3 d/i, "quedó el plazo viejo");
 });
 
 test("venta CON envío: el modelo lo declara", () => {
@@ -60,7 +57,7 @@ test("se borra el plazo que inventó el modelo, NO el resto del mensaje", () => 
   assert.match(salida, /¡Listo, Sergio!/, "se perdió el saludo del cierre");
   assert.match(salida, /Cualquier cosa quedo por acá/, "se perdió el cierre");
   assert.doesNotMatch(salida, /5 a 7 d/, "quedó el plazo inventado por el modelo");
-  assert.match(salida, /se despacha dentro de los 2 o 3 días/, "no salió el plazo oficial");
+  assert.match(salida, /demora de entrega de 4 a 5 días hábiles/, "no salió el plazo oficial");
 });
 
 test("lo mismo con el aviso de colocación (mismo defecto, ya corregido)", () => {
@@ -75,6 +72,6 @@ test("lo mismo con el aviso de colocación (mismo defecto, ya corregido)", () =>
 
 test("venta de retiro: el mensaje sale sin ningún plazo", () => {
   const salida = cierreConEnvio("¡Listo! Te anoté la alfombra. La retirás por el local cuando quieras.", {});
-  assert.doesNotMatch(salida, /2 o 3 días/);
+  assert.doesNotMatch(salida, /4 a 5 días/);
   assert.doesNotMatch(salida, /Sobre el ENVÍO/);
 });

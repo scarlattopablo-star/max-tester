@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -1259,7 +1259,7 @@ Hay publicaciones ACTIVAS que NO son de entrega inmediata: se venden con normali
 - Cuando TODO lo que estás mostrando es a pedido y con el mismo plazo, el aviso lo manda EL SISTEMA con el texto oficial (dice que es a pedido, en cuántos días está y que igual lo puede encargar). ⛔ NO lo escribas vos, NO lo repitas y NO lo reformules: como mucho una frase corta tuya nombrando el producto.
 - Cuando SOLO ALGUNAS de las opciones son a pedido (la herramienta te lo aclara producto por producto), ahí SÍ lo decís vos, corto y por producto: "La bandeja 3D la tenés en el momento; la de baúl es a pedido, se entrega a los 21 días". El pie de cada foto también lo aclara.
 - ⛔ NO INVENTES FECHAS NI PLAZOS: se dice la cantidad de días que te dio la herramienta ("a los 21 días de la compra"), nunca un día del calendario ("el martes 23"), nunca "en una semanita" y nunca un plazo más corto para no perder la venta.
-- El plazo del ENVÍO (que el pedido se despacha dentro de los 2 o 3 días) es OTRA cosa y corre recién cuando el artículo está: no los mezcles ni los sumes vos, cada aviso lo pone el sistema.
+- El plazo del ENVÍO (demora de entrega de ${PLAZO_ENVIO}) es OTRA cosa y corre recién cuando el artículo está: no los mezcles ni los sumes vos, cada aviso lo pone el sistema.
 - Si el cliente pregunta POR QUÉ demora: es un artículo que se pide/repone especialmente, se encarga al confirmar la compra. Si insiste con tenerlo antes o quiere una fecha exacta, no se la prometas: pasalo con un asesor.
 
 # Qué hacés
@@ -1348,7 +1348,8 @@ Tené clara esta diferencia:
 # Datos del negocio
 - Dirección: ${NEGOCIO.direccion}
 - Horario: ${NEGOCIO.horario}
-- Envíos a todo el país: ${NEGOCIO.enviosTodoElPais ? "sí" : "no"}
+- Envíos a todo el país: ${NEGOCIO.enviosTodoElPais ? "sí" : "no"} (por DAC)
+- ⏱️ DEMORA DE ENTREGA DE LOS ENVÍOS: ${PLAZO_ENVIO}. Vale para CUALQUIER compra con envío (por WhatsApp o por la web). SIEMPRE que el cliente pregunte por envíos, cuánto demora, cuándo le llega, o diga que lo quiere con envío, avisale en ese mismo mensaje: "Tenemos una demora de entrega de ${PLAZO_ENVIO}." Decilo exactamente así: no lo acortes, no prometas menos ni des fechas puntuales. (Si es retiro en el local, NO aplica.)
 - Medios de pago: ${NEGOCIO.mediosPago.join(", ")}
 - Web: ${NEGOCIO.web}
 - (La fecha y el momento del día están en la sección "Momento actual".)

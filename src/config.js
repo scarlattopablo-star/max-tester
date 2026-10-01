@@ -33,6 +33,7 @@ export const NEGOCIO = {
 export const ENVIOS = {
   empresa: "DAC",
   detalle: "Los envíos se realizan únicamente por DAC (agencia de encomiendas), a todo el país.",
+  // El texto lo arma AVISO_ENVIO / PLAZO_ENVIO más abajo.
   datosNecesarios: ["nombre completo", "teléfono", "dirección"],
 };
 
@@ -218,21 +219,19 @@ export const AVISO_PASO_ASESOR = `Te paso con un asesor para que te confirme el 
 
 // ───────────────────────────────────────────────────────────────────
 // AVISO DE ENVÍO — texto EXACTO que el CÓDIGO agrega al cerrar una venta
-// que va POR ENVÍO. Pedido de Pablo (14 ago 2026): el cliente tiene que
-// saber cuándo se despacha antes de quedarse esperando.
-// Lo manda el código, NO el modelo, para que el plazo salga siempre igual
-// (un plazo inventado por la IA es una promesa que el negocio no hizo).
-// Si Pablo cambia el plazo, se edita ACÁ y listo.
+// que va POR ENVÍO. Lo manda el código, NO el modelo, para que el plazo salga
+// siempre igual (un plazo inventado por la IA es una promesa que el negocio no hizo).
+// Si Pablo cambia el plazo, se edita PLAZO_ENVIO y listo (lo usan el aviso y el prompt).
 //
-// ⚠️ El plazo es el del DESPACHO, no el de la entrega: el pedido SALE dentro
-// de los 2 o 3 días. Lo que tarde DAC después va por cuenta de la agencia y
-// el negocio no lo promete. Cuidado al reescribir este texto: decir "llega en
-// 2 o 3 días" es prometer algo distinto (y que no depende de la casa).
+// Historia: 14 ago 2026 era "se despacha dentro de los 2 o 3 días" (plazo de
+// DESPACHO). 1 oct 2026 Pablo lo cambió a propósito: toda compra o consulta con
+// envío (Max Y la web) tiene una DEMORA DE ENTREGA de 4 a 5 días hábiles.
 // ───────────────────────────────────────────────────────────────────
+export const PLAZO_ENVIO = "4 a 5 días hábiles";
 export const AVISO_ENVIO = `Sobre el ENVÍO:
 
 • Lo mandamos por DAC (agencia de encomiendas), a todo el país.
-• El pedido se despacha dentro de los 2 o 3 días.`;
+• Tenemos una demora de entrega de ${PLAZO_ENVIO}.`;
 
 // ───────────────────────────────────────────────────────────────────
 // DISPONIBILIDAD A PEDIDO — pedido de Pablo (2 sep 2026). En Mercado Libre hay
