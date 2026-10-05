@@ -52,6 +52,28 @@ async function tokenApp() {
   return _token;
 }
 
+// ── STOCK EN VIVO de UNA publicación (pedido de Pablo, 5 oct 2026) ──
+// El catálogo se sincroniza cada media hora. Si Rodrigo repone una alfombra en ML,
+// durante ese rato Max la seguía viendo agotada. Antes de decirle al cliente que
+// "está entrando", se le pregunta a ML en el momento.
+// Devuelve las unidades disponibles (0 si está pausada o en cero) o null si no se
+// pudo saber (sin credenciales, ML caído): con null se sigue como estaba.
+export async function stockEnVivo(id) {
+  if (!haySyncML() || !id) return null;
+  try {
+    const tk = await tokenApp();
+    const res = await fetch(`${API}/items?ids=${encodeURIComponent(id)}&attributes=id,status,available_quantity`, {
+      headers: { Authorization: `Bearer ${tk}` },
+    });
+    const body = await res.json().catch(() => null);
+    const it = Array.isArray(body) ? body[0]?.body : null;
+    if (!it) return null;
+    return it.status === "active" ? Math.max(0, Number(it.available_quantity) || 0) : 0;
+  } catch {
+    return null;
+  }
+}
+
 // ── DISPONIBILIDAD: ¿este artículo es de ENTREGA INMEDIATA o A PEDIDO? ──
 // Pedido de Pablo (2 sep 2026): activó publicaciones que se venden pero que recién
 // están disponibles a los 21 días, y Max las cotizaba como si estuvieran en el local.
