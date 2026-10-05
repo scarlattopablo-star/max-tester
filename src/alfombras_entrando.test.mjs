@@ -60,4 +60,33 @@ await testAsync("otro producto AGOTADO (cubre volante) -> sigue el aviso de siem
   assert.ok(!ctx._turno.alfombraEntrando);
 });
 
+// ─── Stock EN VIVO: si en ML ya volvió, se vende normal (pedido de Pablo, 5 oct 2026) ───
+await testAsync("ML dice que sigue en cero -> 'está entrando' (no se resincroniza)", async () => {
+  let resync = 0;
+  const ctx = { _ultimoUsuario: "alfombra onix 2025", textoCharla: "alfombra onix 2025", _turno: { busco: false },
+    _stockEnVivo: async () => 0, _sincronizar: async () => { resync++; return { ok: true }; } };
+  const r = await ejecutarHerramienta("consultar_precio", { modelo: "alfombra onix 2025" }, ctx);
+  assert.equal(r.entrando, true);
+  assert.equal(resync, 0);
+});
+
+await testAsync("ML ya tiene stock -> se resincroniza y se vende normal, sin 'entrando'", async () => {
+  const ctx = { _ultimoUsuario: "alfombra onix 2025", textoCharla: "alfombra onix 2025", _turno: { busco: false },
+    _stockEnVivo: async () => 3,
+    // El resync trae la alfombra de vuelta al catálogo de venta.
+    _sincronizar: async () => {
+      actualizarCatalogo(
+        [{ id: "MLU200", n: "Alfombra Chevrolet Onix 2025 Bandeja Rigida 3d Negro", p: 3400, img: "https://http2.mlstatic.com/D_2-O.jpg" }],
+        "test",
+        [{ id: "MLU300", n: "Cubre Volante Chevrolet Onix Cuero Negro", p: 900, img: "https://http2.mlstatic.com/D_3-O.jpg" }]);
+      return { ok: true };
+    } };
+  const r = await ejecutarHerramienta("consultar_precio", { modelo: "alfombra onix 2025" }, ctx);
+  assert.equal(r.encontrado, true);
+  assert.equal(r.entrando, undefined);
+  assert.equal(r.avisoDisponibilidad, undefined);
+  assert.ok(!ctx._turno.alfombraEntrando);
+  assert.equal(r.resultados[0].precio ?? r.resultados[0].p, 3400);
+});
+
 console.log(`\n✅ ${ok} pruebas de ALFOMBRAS QUE ESTÁN ENTRANDO en verde`);

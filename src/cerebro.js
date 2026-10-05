@@ -16,6 +16,7 @@ import { leccionesActuales } from "./aprendizaje.js";
 import { crearLinkPago, hayMercadoPago } from "./pagos.js";
 import { registrarTransferencia } from "./transferencias.js";
 import { resolverPorNombre } from "./ml_stock.js";
+import { stockEnVivo, sincronizar } from "./sync_ml.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CATALOGO = JSON.parse(readFileSync(join(__dirname, "catalogo.json"), "utf8"));
@@ -1824,8 +1825,28 @@ const BUSCAN_CATALOGO = new Set(["enviar_foto", "consultar_precio"]);
 // lo contrario — que hay productos y sobran opciones.
 const faltaUnDato = (r) => !!(r?.falta_modelo || r?.falta_cabina);
 
+// ALFOMBRA "AGOTADA" QUE YA TIENE STOCK EN ML (pedido de Pablo, 5 oct 2026: "en
+// Mercado Libre ya hay varias que marcan stock disponible, que Max esté atento").
+// El catálogo de Max se refresca cada 30 min; si la alfombra aparece agotada pero
+// en ML ya tiene stock, se resincroniza en el momento y se vuelve a buscar: así se
+// vende normal (precio, foto, link) en vez de decirle "está entrando".
+// El resync se limita a uno cada 2 min para no castigar la API de ML.
+let _ultimoResync = 0;
+async function alfombraVolvioAlStock(r, ctx) {
+  if (!r?.entrando || !r.producto_id) return false;
+  const vivo = await (ctx._stockEnVivo || stockEnVivo)(r.producto_id);
+  if (!(vivo > 0)) return false;
+  if (Date.now() - _ultimoResync < 2 * 60 * 1000) return false;
+  _ultimoResync = Date.now();
+  const s = await (ctx._sincronizar || sincronizar)().catch(() => null);
+  return !!s?.ok;
+}
+
 export async function ejecutarHerramienta(nombre, input, ctx = {}) {
-  const r = await _ejecutarHerramienta(nombre, input, ctx);
+  let r = await _ejecutarHerramienta(nombre, input, ctx);
+  if (BUSCAN_CATALOGO.has(nombre) && await alfombraVolvioAlStock(r, ctx)) {
+    r = await _ejecutarHerramienta(nombre, input, ctx);
+  }
   // Memoria del TURNO: qué contestó el catálogo sobre el auto del cliente. La leen las
   // herramientas que ofrecen una línea (ver sinCatalogoParaSuAuto).
   const turno = ctx._turno;
