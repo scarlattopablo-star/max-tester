@@ -282,6 +282,20 @@ export const AVISO_AGOTADO = `Actualmente está agotado, no tenemos en stock. Es
 ¿Querés que te avise apenas llegue?`;
 
 // ───────────────────────────────────────────────────────────────────
+// ALFOMBRAS QUE ESTÁN ENTRANDO — pedido de Pablo (5 oct 2026): "todo lo que es
+// alfombra y la gente consulte ya están entrando, así que para saber el día exacto
+// de la entrega que le comunique a un asesor para que le diga al cliente".
+// Pisa al AVISO_AGOTADO y al AVISO_DISPONIBILIDAD cuando el producto es una
+// ALFOMBRA: en vez de "agotado, ¿te aviso?" o "se entrega a los 21 días", Max dice
+// que ya está entrando y la pasa DIRECTO a un asesor (sin preguntarle al cliente).
+// ⛔ Sin días ni fechas: la fecha exacta la confirma el asesor.
+// ✏️ Cuando dejen de estar entrando, se vuelve a lo de antes poniendo
+// ALFOMBRAS_ENTRANDO en false.
+// ───────────────────────────────────────────────────────────────────
+export const ALFOMBRAS_ENTRANDO = true;
+export const AVISO_ALFOMBRA_ENTRANDO = `Esa alfombra ya está entrando. Para confirmarte el día exacto de entrega te paso con un asesor, que enseguida se comunica con vos.`;
+
+// ───────────────────────────────────────────────────────────────────
 // LO QUE **NO** HACEMOS — pedido de Pablo (31 jul 2026): "Max no puede inventar".
 // Max le dijo a un cliente que le podíamos hacer una ALFOMBRA A MEDIDA. Eso NO
 // existe: La Casa del Cubreasiento no fabrica alfombras a pedido. Todo lo que
