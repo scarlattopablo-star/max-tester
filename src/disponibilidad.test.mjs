@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { actualizarCatalogo, infoCatalogo } from "./catalogo_vivo.js";
 import { diasDeDisponibilidad } from "./sync_ml.js";
 import { demoraDeProductos, demoraDelProducto, ejecutarHerramienta, armarRespuesta } from "./cerebro.js";
-import { AVISO_DISPONIBILIDAD, AVISO_ALFOMBRA_ENTRANDO } from "./config.js";
+import { AVISO_DISPONIBILIDAD } from "./config.js";
 
 let ok = 0;
 function test(nombre, fn) { fn(); ok++; console.log(`  ✓ ${nombre}`); }
@@ -106,9 +106,7 @@ await testAsync("consultar_precio MEZCLADO -> sin texto único, con el detalle p
   const r = await ejecutarHerramienta("consultar_precio", { modelo: "alfombra nivus" }, { _ultimoUsuario: "precio de alfombras para mi nivus" });
   assert.equal(r.encontrado, true);
   assert.equal(r.avisoDisponibilidad, undefined);
-  // La de baúl es ALFOMBRA a pedido: está entrando, sin días (regla del 5 oct 2026).
-  assert.match(r.instruccion, /Baul[^;]*ESTÁ ENTRANDO/);
-  assert.ok(!/Baul[^;]*21 días/.test(r.instruccion));
+  assert.match(r.instruccion, /Baul[\s\S]*21 días/);
 });
 
 await testAsync("producto de ENTREGA INMEDIATA -> no se dice nada de plazos", async () => {
@@ -127,8 +125,7 @@ await testAsync("enviar_foto -> el pie de la foto a pedido lo aclara", async () 
   const { imagenesEnviar } = armarRespuesta("Te comparto las opciones para tu Nivus:", acciones, { _ultimoUsuario: "alfombras para mi nivus", textoCharla: "alfombras para mi nivus" });
   const baul = imagenesEnviar.find((f) => /baul/i.test(f.caption));
   const piso = imagenesEnviar.find((f) => !/baul/i.test(f.caption));
-  assert.match(baul.caption, /está entrando/);
-  assert.ok(!/21 días/.test(baul.caption));
+  assert.match(baul.caption, /a pedido: disponible en 21 días/);
   assert.ok(!/a pedido/.test(piso.caption)); // la que está en el local, sin ruido
 });
 
@@ -176,38 +173,28 @@ await testAsync("tomar_pedido de un artículo del local -> sin aviso", async () 
   assert.equal(r.avisoDisponibilidad, undefined);
 });
 
-// ─── 8) ALFOMBRAS QUE ESTÁN ENTRANDO (pedido de Pablo, 5 oct 2026) ─────
-await testAsync("alfombra A PEDIDO -> 'está entrando', sin días, y va directo al asesor", async () => {
+// ─── 8) ALFOMBRA A PEDIDO = los días de ML (corrección de Rodrigo, 5 oct 2026) ──
+// El "está entrando + asesor" es SOLO para las alfombras AGOTADAS. Las que tienen
+// días de entrega en Mercado Libre se venden con esos días, como cualquier otra.
+await testAsync("alfombra A PEDIDO -> aviso con los días de ML, sin 'entrando' ni asesor", async () => {
   const ctx = { _ultimoUsuario: "cuanto sale la alfombra para mi geely ex2", textoCharla: "alfombra geely ex2", _turno: { busco: false } };
   const r = await ejecutarHerramienta("consultar_precio", { modelo: "alfombra geely ex2" }, ctx);
-  assert.equal(r.avisoDisponibilidad, AVISO_ALFOMBRA_ENTRANDO);
-  assert.equal(r.alfombraEntrando, true);
-  assert.equal(ctx._turno.alfombraEntrando, true);
-  // Max escribe su propio plazo y encima pregunta si lo pasa: se va todo eso.
-  const acciones = [{ herramienta: "consultar_precio", input: {}, resultado: r }];
-  const { texto, acciones: acc } = armarRespuesta(
-    "La alfombra bandeja 3D para tu Geely EX2 sale $ 4.200. Se entrega a los 25 días. ¿Querés que te pase con un asesor?",
-    acciones, ctx);
-  assert.match(texto, /\$ 4\.200/);           // el precio no se pierde
-  assert.ok(!/25 días/.test(texto));          // sin días
-  assert.equal(texto.split("ya está entrando").length - 1, 1);
-  assert.ok(!/Querés que te pase/.test(texto)); // no se pregunta: se deriva
-  assert.ok(acc.some((a) => a.herramienta === "derivar_a_humano"));
-});
-
-await testAsync("cubreasiento A PEDIDO -> sigue igual (21 días, sin 'entrando')", async () => {
-  const r = await ejecutarHerramienta("consultar_precio", { modelo: "cubreasiento hilux" }, { _ultimoUsuario: "cubreasiento hilux" });
-  assert.equal(r.avisoDisponibilidad, AVISO_DISPONIBILIDAD(21));
+  assert.equal(r.avisoDisponibilidad, AVISO_DISPONIBILIDAD(25));
   assert.equal(r.alfombraEntrando, undefined);
+  assert.ok(!ctx._turno.alfombraEntrando);
+  const { texto } = armarRespuesta("La alfombra bandeja 3D para tu Geely EX2 sale $ 4.200.",
+    [{ herramienta: "consultar_precio", input: {}, resultado: r }], ctx);
+  assert.match(texto, /\$ 4\.200/);
+  assert.match(texto, /25 días/);
+  assert.ok(!/está entrando/.test(texto));
 });
 
-await testAsync("tomar_pedido de una alfombra a pedido -> 'está entrando', sin días", async () => {
+await testAsync("tomar_pedido de una alfombra a pedido -> los días de ML", async () => {
   const r = await ejecutarHerramienta("tomar_pedido", {
     producto: "Alfombra Geely Ex2 Bandeja 3d Premium Negro", cantidad: 1,
     nombre: "Juan", telefono: "099111222", entrega: "retira en el local",
   }, {});
-  assert.equal(r.avisoDisponibilidad, AVISO_ALFOMBRA_ENTRANDO);
-  assert.ok(!/25/.test(r.instruccion || ""));
+  assert.equal(r.avisoDisponibilidad, AVISO_DISPONIBILIDAD(25));
 });
 
 console.log(`\n✅ ${ok} pruebas de DISPONIBILIDAD en verde`);
