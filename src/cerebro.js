@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -192,11 +192,22 @@ function conDisponibilidad(res, lista) {
   if (!d) return res;
   const out = { ...res, demora: d };
   let nota;
+  // ALFOMBRAS QUE ESTÁN ENTRANDO: si todo lo que se muestra es a pedido y son
+  // alfombras, no se habla de días: está entrando y la fecha la confirma un asesor.
+  const visibles = (lista || []).filter(Boolean);
+  if (d.productos.length === visibles.length && d.productos.every((x) => alfombraEntrando(x.nombre))) {
+    out.avisoDisponibilidad = AVISO_ALFOMBRA_ENTRANDO;
+    out.alfombraEntrando = true;
+    out.instruccion = res.instruccion ? `${res.instruccion}\n\n${NOTA_ALFOMBRA_ENTRANDO}` : NOTA_ALFOMBRA_ENTRANDO;
+    return out;
+  }
   if (d.todos) {
     out.avisoDisponibilidad = AVISO_DISPONIBILIDAD(d.dias);
     nota = `⏳ ESE PRODUCTO ES A PEDIDO: se entrega a los ${d.dias} días de la compra, no en el momento. El sistema ya se lo avisa al cliente con el texto oficial, así que NO lo repitas ni lo reformules y NO inventes otros plazos ni fechas. Ojo: NO está agotado y NO se ofrece "te aviso cuando llegue" — se puede comprar hoy, con esa demora. Seguí la venta normal.`;
   } else {
-    const detalle = d.productos.map((x) => `${x.nombre} (${x.dias} días)`).join("; ");
+    const detalle = d.productos.map((x) => alfombraEntrando(x.nombre)
+      ? `${x.nombre} (ESTÁ ENTRANDO: no des días; si la quiere, el día exacto se lo confirma un asesor — derivá con "derivar_a_humano")`
+      : `${x.nombre} (${x.dias} días)`).join("; ");
     nota = `⏳ OJO CON LA DISPONIBILIDAD: de lo que encontré, esto NO es entrega inmediata, se entrega a pedido: ${detalle}. Lo demás se lleva en el día. Aclarale al cliente, en una frase corta y por producto, cuál tiene demora y de cuántos días, ANTES de cerrar la venta. ⛔ No inventes fechas exactas y ⛔ no digas que está agotado: se puede comprar hoy.`;
   }
   out.instruccion = res.instruccion ? `${res.instruccion}\n\n${nota}` : nota;
@@ -320,6 +331,10 @@ const CATEGORIAS = {
   cubreauto: /(cubre ?auto|cubreauto|antigranizo|cobertor)/,
   cubreasiento: /(cubre ?asiento|cubreasiento|funda|butaca|tapizado)/,
 };
+// ¿Es una ALFOMBRA que está entrando? (pedido de Pablo, 5 oct 2026 — ver
+// AVISO_ALFOMBRA_ENTRANDO en config.js). Se mira el NOMBRE del producto.
+const alfombraEntrando = (nombre) => ALFOMBRAS_ENTRANDO && CATEGORIAS.alfombra.test(_normTxt(String(nombre || "")));
+const NOTA_ALFOMBRA_ENTRANDO = "⏳ ESA ALFOMBRA ESTÁ ENTRANDO (regla del dueño del 5 oct 2026). El sistema ya le dice al cliente que está entrando y que un asesor le confirma el día exacto de entrega. ⛔ NO lo repitas ni lo reformules, ⛔ NO digas que está agotada ni sin stock, ⛔ NO ofrezcas \"te aviso cuando llegue\" y ⛔ NO des días ni fechas. ➡️ LO PASÁS CON UN ASESOR, NO SE LO PREGUNTÁS: en ESTE mismo turno llamá a \"derivar_a_humano\" (motivo \"otro\") con la alfombra y el vehículo. Como mucho, una frase corta y cálida tuya nombrando el producto.";
 function nombreCategoria(consulta) {
   const q = _normTxt(consulta);
   if (CATEGORIAS.volante.test(q)) return "volante";
@@ -990,6 +1005,21 @@ export function sinStockOInexistente(consulta, dijoElCliente = "") {
   // el "agotado, ¿te aviso cuando llegue?" — de eso no hay nada que esperar.
   const esCubreasiento = esConsultaDeCubreasiento(consulta);
   const ago = esCubreasiento ? null : buscarAgotado(consulta);
+  // ALFOMBRA agotada: ya está entrando (regla del dueño del 5 oct 2026). Sigue siendo
+  // un producto que EXISTE (agotado: true, para que no cuente como "no lo tenemos"),
+  // pero no se ofrece el aviso: se dice que entra y va directo a un asesor.
+  if (ago && alfombraEntrando(ago.nombre)) {
+    return {
+      encontrado: false,
+      agotado: true,
+      entrando: true,
+      alfombraEntrando: true,
+      producto_id: ago.id,
+      producto: ago.nombre,
+      avisoDisponibilidad: AVISO_ALFOMBRA_ENTRANDO,
+      mensaje: `"${ago.nombre}" ESTÁ ENTRANDO. ⛔ NO des precio. ${NOTA_ALFOMBRA_ENTRANDO}`,
+    };
+  }
   if (ago) {
     return {
       encontrado: false,
@@ -1233,6 +1263,7 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramienta te dice cuál de los CUATRO casos es. No son lo mismo y se responden distinto:
 - 🚗 CASO 0 — te devuelve **falta_modelo: true**: todavía no sabés qué auto tiene. ⛔ PROHIBIDO dar precio, nombrar un producto o mandar fotos: lo que hay en el sistema es de OTROS modelos y le estarías cotizando el de otro auto. Preguntale marca y modelo en una frase corta y amable ("¿Para qué vehículo es? Decime marca y modelo así te paso el precio exacto") y cuando te conteste, buscá de nuevo. Esto NO es decirle que no tenemos: es que todavía no sabés qué buscar.
 ⚠️ ORDEN DE PRIORIDAD (no lo inviertas): si la herramienta dice **agotado: true**, ESO MANDA SIEMPRE y vas al CASO 1 — aunque el vehículo sea JMC, aunque sea una Strada. Las excepciones de más abajo son SOLO para el CASO 2. Un producto agotado es un producto que existe: ofrecele el aviso, no lo mandes al asesor. Y si dice **aMedida: true**, vas al CASO 3 y ahí NO se habla de stock para nada.
+- 🧶 ALFOMBRAS QUE ESTÁN ENTRANDO (regla del dueño del 5 oct 2026 — va ANTES que el CASO 1): si la herramienta te devuelve **entrando: true** (alfombra agotada) o te dice que una ALFOMBRA es a pedido, esa alfombra YA ESTÁ ENTRANDO. ⛔ NO digas que está agotada, ⛔ NO ofrezcas "te aviso cuando llegue" y ⛔ NO des días ni fechas. El sistema le dice al cliente que está entrando y que un asesor le confirma el día exacto de entrega: vos NO lo repitas. ➡️ LO PASÁS CON UN ASESOR, NO SE LO PREGUNTÁS: en ese mismo turno llamá a "derivar_a_humano" (motivo "otro") con la alfombra y el vehículo.
 - 📦 CASO 1 — te devuelve **agotado: true** (con producto y producto_id): esa publicación EXISTE pero se quedó sin stock. ⛔ PROHIBIDO derivar y PROHIBIDO dar precio.
   · El aviso de agotado lo manda EL SISTEMA, con el texto exacto del dueño, y termina preguntándole al cliente si quiere que le avisemos. ⛔ NO lo escribas vos, NO lo repitas y NO lo reformules: si lo hacés, el cliente lee dos veces lo mismo. Vos como mucho ponés UNA frase corta ANTES, nombrando el producto ("Justo la alfombra bandeja 3D para tu Yuan Pro..."). Podés no escribir nada y está perfecto.
   · Cuando el cliente conteste que SÍ, llamá a "avisar_cuando_llegue" con el producto_id EXACTO que te dio la herramienta y confirmale corto ("Listo, quedás anotado: te escribo apenas entre"). Si dice que no, seguí la charla normal.
@@ -1259,6 +1290,7 @@ Hay publicaciones ACTIVAS que NO son de entrega inmediata: se venden con normali
 - Cuando TODO lo que estás mostrando es a pedido y con el mismo plazo, el aviso lo manda EL SISTEMA con el texto oficial (dice que es a pedido, en cuántos días está y que igual lo puede encargar). ⛔ NO lo escribas vos, NO lo repitas y NO lo reformules: como mucho una frase corta tuya nombrando el producto.
 - Cuando SOLO ALGUNAS de las opciones son a pedido (la herramienta te lo aclara producto por producto), ahí SÍ lo decís vos, corto y por producto: "La bandeja 3D la tenés en el momento; la de baúl es a pedido, se entrega a los 21 días". El pie de cada foto también lo aclara.
 - ⛔ NO INVENTES FECHAS NI PLAZOS: se dice la cantidad de días que te dio la herramienta ("a los 21 días de la compra"), nunca un día del calendario ("el martes 23"), nunca "en una semanita" y nunca un plazo más corto para no perder la venta.
+- 🧶 EXCEPCIÓN ALFOMBRAS (5 oct 2026): si el artículo a pedido es una ALFOMBRA, NO se habla de días: ya está entrando y el día exacto de entrega lo confirma un asesor (ver "ALFOMBRAS QUE ESTÁN ENTRANDO"). Se deriva en el mismo turno, sin preguntarle.
 - El plazo del ENVÍO (demora de entrega de ${PLAZO_ENVIO}) es OTRA cosa y corre recién cuando el artículo está: no los mezcles ni los sumes vos, cada aviso lo pone el sistema.
 - Si el cliente pregunta POR QUÉ demora: es un artículo que se pide/repone especialmente, se encarga al confirmar la compra. Si insiste con tenerlo antes o quiere una fecha exacta, no se la prometas: pasalo con un asesor.
 
@@ -1804,6 +1836,8 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   // Lo lee el guard de derivar_a_humano y el cierre de armarRespuesta, que si no
   // descartan la derivación cuando Max la escribe como pregunta.
   if (turno && r?.aMedida) turno.cubreasientoAMedida = true;
+  // ALFOMBRA que está entrando: también va DERECHO al asesor (regla del 5 oct 2026).
+  if (turno && r?.alfombraEntrando) turno.alfombraEntrando = true;
   if (turno && BUSCAN_CATALOGO.has(nombre)) {
     if (r?.ok === true || r?.encontrado === true || (r?.fotos || []).length) turno.hayCatalogo = true;
     // Agotado NO cuenta como vacío: el producto existe y tiene su propio flujo.
@@ -1937,7 +1971,9 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // Antes de pagar tiene que saber si ese artículo es A PEDIDO: pagar y enterarse
       // después de que recién lo tiene en 21 días es el reclamo asegurado.
       const diasLink = demoraDelProducto(input.producto_catalogo || input.titulo);
-      const dispLink = diasLink > 0
+      const dispLink = diasLink > 0 && alfombraEntrando(input.producto_catalogo || input.titulo)
+        ? { avisoDisponibilidad: AVISO_ALFOMBRA_ENTRANDO, alfombraEntrando: true, notaDisponibilidad: NOTA_ALFOMBRA_ENTRANDO }
+        : diasLink > 0
         ? { avisoDisponibilidad: AVISO_DISPONIBILIDAD(diasLink), notaDisponibilidad: `⏳ Ese artículo es A PEDIDO (${diasLink} días). El sistema ya se lo avisa al cliente junto con el link: no repitas el plazo ni inventes fechas.` }
         : {};
       return { ok: true, link: r.link, monto: r.monto, ...dispLink, instruccion: `Pasale este link al cliente para que pague directo. Es por el monto exacto de su compra.${dispLink.notaDisponibilidad ? " " + dispLink.notaDisponibilidad : ""}` };
@@ -2052,7 +2088,11 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // aunque ya se lo hayamos dicho al cotizar. Es el momento en que el cliente
       // decide, y el plazo del despacho (AVISO_ENVIO) recién corre desde que está.
       const diasPedido = demoraDelProducto(input.producto);
-      if (diasPedido > 0) {
+      if (diasPedido > 0 && alfombraEntrando(input.producto)) {
+        extra.avisoDisponibilidad = AVISO_ALFOMBRA_ENTRANDO;
+        extra.alfombraEntrando = true;
+        extra.instruccion = `${extra.instruccion ? extra.instruccion + " " : ""}${NOTA_ALFOMBRA_ENTRANDO}`;
+      } else if (diasPedido > 0) {
         extra.avisoDisponibilidad = AVISO_DISPONIBILIDAD(diasPedido);
         extra.instruccion = `${extra.instruccion ? extra.instruccion + " " : ""}⏳ Ese artículo es A PEDIDO (${diasPedido} días): el sistema ya se lo avisa al cliente con el texto oficial. NO repitas el plazo ni des fechas.`;
       }
@@ -2070,7 +2110,8 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const r = await registrarTransferencia({ ...input, chatId: ctx.chatId, nombre: input.nombre || ctx.contacto?.nombre, telefono: input.telefono || ctx.contacto?.tel });
       const extra = esVentaConEnvio(input.detalle) ? { avisoEnvio: AVISO_ENVIO } : {};
       const diasTransf = demoraDelProducto(input.detalle);
-      if (diasTransf > 0) extra.avisoDisponibilidad = AVISO_DISPONIBILIDAD(diasTransf);
+      if (diasTransf > 0 && alfombraEntrando(input.detalle)) Object.assign(extra, { avisoDisponibilidad: AVISO_ALFOMBRA_ENTRANDO, alfombraEntrando: true });
+      else if (diasTransf > 0) extra.avisoDisponibilidad = AVISO_DISPONIBILIDAD(diasTransf);
       if (esCubreasientoColocable(input.detalle, ctx.textoCharla)) {
         return { ...r, ...extra, avisoColocacion: AVISO_COLOCACION, instruccion: "El sistema ya le manda al cliente el aviso de COLOCACIÓN. NO lo repitas ni lo resumas vos." };
       }
@@ -2103,7 +2144,7 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // DIRECTA por decisión del dueño (28 ago 2026), así que aunque Max lo escriba
       // como pregunta —le sale solo— el asesor recibe la consulta igual. Preguntar y
       // no derivar era lo peor de los dos mundos: el cliente que no contesta se pierde.
-      if (turno.ofrecioAsesor && !derivaDirecto(turno)) {
+      if (turno.ofrecioAsesor && !derivaDirecto(turno) && !turno.alfombraEntrando) {
         return {
           ok: false,
           mensaje: "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) Le estás PREGUNTANDO si quiere que lo pases con un asesor, así que todavía no lo derives: mandale solo esa pregunta, tal como la escribiste, y esperá la respuesta. Si te dice que sí, en ESE turno llamás a \"derivar_a_humano\".",
@@ -2588,7 +2629,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
     // El pie lleva el precio y, si el artículo NO es de entrega inmediata, el plazo:
     // así el aviso viaja pegado a la opción que lo tiene (una lista donde solo una es
     // a pedido no se puede aclarar con un texto único al final).
-    caption: `${i + 1}) ${f.nombre}${f.precio ? ` - ${_fmtPrecio(f.precio, f.moneda)}` : ""}${Number(f.demora_dias) > 0 ? ` (a pedido: disponible en ${Math.round(Number(f.demora_dias))} días)` : ""}`,
+    caption: `${i + 1}) ${f.nombre}${f.precio ? ` - ${_fmtPrecio(f.precio, f.moneda)}` : ""}${Number(f.demora_dias) > 0 ? (alfombraEntrando(f.nombre) ? " (está entrando)" : ` (a pedido: disponible en ${Math.round(Number(f.demora_dias))} días)`) : ""}`,
     // ⚠️ INTERNO: qué línea se estaba mostrando con esta foto. NO se le manda al
     // cliente (los canales solo usan url + caption): handler.js lo escribe en la nota
     // interna del historial para que eleccionAmbigua siga sabiendo qué se mostró,
@@ -2670,6 +2711,8 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
       ? `⚠️ Max estuvo por dar un precio que NO salió del catálogo ($${inventado.toLocaleString("es-UY")}). Se le borró esa frase antes de que saliera. Pasale vos el precio correcto.`
       : (ctx._turno?.frenoLinea || (ctx._turno?.cubreasientoSinCatalogo && !ctx._turno?.hayCatalogo))
         ? "Cliente que preguntó por CUBREASIENTOS para un vehículo del que NO tenemos nada en el catálogo. Max no le ofreció ninguna línea (regla del dueño del 18 ago 2026): confirmale vos la disponibilidad y el precio para su auto."
+        : ctx._turno?.alfombraEntrando
+        ? "Cliente que consultó por una ALFOMBRA que está entrando. Max le dijo que ya está entrando y que un asesor le confirma el día exacto de entrega: confirmale vos la fecha."
         : (prometioAsesor(limpio) ? "Max le dijo al cliente que lo consultaba con un asesor / que lo pasaba con una persona. Continuá vos la conversación." : null);
   if (motivoDerivacion && !acciones.some((a) => a.herramienta === "derivar_a_humano")) {
     const input = { motivo: "otro", resumen: motivoDerivacion };
@@ -2697,6 +2740,12 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // PRECIO (el modelo suele meter todo en una sola oración: "sale $9.500 y se
   // entrega a los 21 días"), se deja el texto como estaba. Repetir el plazo molesta;
   // dejar al cliente sin la respuesta que pidió es peor.
+  // ALFOMBRA ENTRANDO: el texto oficial ya dice que entra y que lo pasa con un
+  // asesor; se van las oraciones del modelo que hablen de stock, avisos, plazos o
+  // del asesor, para que no le llegue dos veces ni se contradiga ("está agotada").
+  if (ctx._turno?.alfombraEntrando && avisoDisponibilidad === AVISO_ALFOMBRA_ENTRANDO && limpio) {
+    limpio = _sacarOraciones(limpio, /agotad|sin stock|\bstock\b|reingres|repon|entrand|lleg[aeu]|avis|asesor|compa[ñn]er|vendedor|se comunica|te contact|a pedido|disponib|demora|\btarda|\bencarg|\bfecha|\bd[ií]as?\b/i);
+  }
   if (avisoDisponibilidad && limpio) {
     const podado = _sacarOraciones(limpio, /a pedido|disponibilidad|disponible en|\bdemora|\btarda|\bencarg|\b\d+\s*d[ií]as?\b/i);
     if (podado && /\$/.test(podado) === /\$/.test(limpio)) limpio = podado;
@@ -2792,7 +2841,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
     // El CUBREASIENTO A MEDIDA se deriva SIEMPRE, escriba Max lo que escriba: es la
     // decisión del dueño del 28 ago 2026 ("cuando no encuentre el material que piden,
     // que lo envíe a un asesor"). El resto sigue igual: si preguntó, se espera el sí.
-    const pregunta = !derivaDirecto(ctx._turno)
+    const pregunta = !derivaDirecto(ctx._turno) && !ctx._turno?.alfombraEntrando
       && /[¿?][^?]*\b(quer[eé]s|quiere|te parece|quer[ií]a)\b[^?]*\b(pas[eoa]r?|pase|paso|derive|derivar|consulta|asesor|compa[ñn]ero|vendedor)\b[^?]*\?/i.test(textoFinal);
     const accion = acciones.find((a) => a.herramienta === "derivar_a_humano");
     if (pregunta) {
