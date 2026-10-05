@@ -20,6 +20,27 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
+## 🧶 SESIÓN 5 oct — ALFOMBRAS: STOCK Y DÍAS DE ENTREGA DE MERCADO LIBRE (LO MÁS NUEVO)
+
+Pedido de Pablo y Rodrigo (PRs #13, #14 y #15, en producción desde el commit `7098d56`).
+Regla final, todo sale de Mercado Libre:
+
+- **Alfombra CON stock en ML** → se vende normal (precio, foto, link). Sin cambios.
+- **Alfombra A PEDIDO** (con días de entrega en ML) → se vende con los días de ML
+  (`AVISO_DISPONIBILIDAD`), igual que cualquier otro producto a pedido.
+- **Alfombra AGOTADA** (pausada o en cero en ML) → ya NO va el "agotado, ¿te aviso?".
+  Max manda `AVISO_ALFOMBRA_ENTRANDO` ("ya está entrando… te paso con un asesor para el
+  día exacto") y deriva DIRECTO, sin preguntar (la derivación se registra aunque el modelo
+  no la llame). Interruptor: `ALFOMBRAS_ENTRANDO` en `config.js`.
+- **Stock en vivo:** antes de decir "está entrando", `stockEnVivo()` (sync_ml.js) consulta esa
+  publicación en ML; si ya tiene stock, resincroniza en el momento (máx. 1 cada 2 min) y la
+  vende normal. El sync general sigue cada 30 min.
+- Cubreasientos, cubre volantes, etc.: sin cambios (el agotado sigue ofreciendo el aviso).
+
+Tests: `src/alfombras_entrando.test.mjs` + `src/disponibilidad.test.mjs` (56/56 en verde).
+⚠️ El workflow `deploy-a-render` falla por falta del secret `RENDER_DEPLOY_HOOK`, pero Render
+deploya solo en cada push a `main` (verificado con `/api/estado` → `build.commit`).
+
 ## ⏳ SESIÓN 2 sep — ARTÍCULOS A PEDIDO: LA DISPONIBILIDAD A 21 DÍAS (LO MÁS NUEVO)
 
 Reportado por Pablo. Activó/despausó publicaciones en Mercado Libre que **se venden pero
