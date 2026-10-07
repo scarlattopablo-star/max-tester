@@ -13,7 +13,7 @@
 // el test de cobertura (avisos_equipo.test.mjs) obliga a escribirle el aviso.
 import { enviarTexto, linkWa } from "./notificador.js";
 import { linkTurno } from "./confirmacion_turno.js";
-import { dijoQueTransfirio, maxVioUnComprobante } from "./ws_mensaje.js";
+import { dijoQueTransfirio, maxVioUnComprobante, esPagoPorTransferencia } from "./ws_mensaje.js";
 
 /** Herramientas del cerebro que SIEMPRE generan un aviso al equipo. */
 export const HERRAMIENTAS_QUE_AVISAN = Object.freeze([
@@ -29,11 +29,30 @@ export const HERRAMIENTAS_QUE_AVISAN = Object.freeze([
 const pedidosAvisados = new Set();
 const turnosAvisados = new Set();
 
+// ⛔ TRANSFERENCIAS: AL EQUIPO SOLO CON EL COMPROBANTE EN LA MANO (7 oct 2026).
+// Antes se avisaba con el "ya transferí" o con el pedido por transferencia, y el
+// equipo salía a cerrar ventas cuya plata nunca aparecía. Ahora:
+//   · "ya transferí" sin comprobante → se REGISTRA (queda en /admin) pero NO avisa;
+//   · pedido por transferencia → queda EN ESPERA (sin aviso) atado al chat;
+//   · llega el comprobante → UN aviso, con el pedido en espera adentro, para cerrar.
+const pedidosEsperandoComprobante = new Map(); // chatId -> [pedido]
+const ESPERA_MAX_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** ¿Esta acción le manda un aviso al equipo? (las transferencias, solo con comprobante) */
+function accionAvisa(a) {
+  if (!HERRAMIENTAS_QUE_AVISAN.includes(a?.herramienta)) return false;
+  if (a.herramienta === "confirmar_transferencia") {
+    return !!(a.resultado?.transferencia?.comprobante ?? a.input?.comprobante);
+  }
+  if (a.herramienta === "tomar_pedido") return !esPagoPorTransferencia(a.resultado?.pedido?.medioPago);
+  return true;
+}
+
 /** ¿Esta respuesta necesita atención del equipo? Los transportes lo usan para
- *  dejar el chat SIN LEER: así el asesor lo encuentra resaltado en la bandeja. */
-export function pideAtencionDelEquipo(acciones = [], texto = "") {
-  if ((acciones || []).some((a) => HERRAMIENTAS_QUE_AVISAN.includes(a.herramienta))) return true;
-  return dijoQueTransfirio(texto);
+ *  dejar el chat SIN LEER: así el asesor lo encuentra resaltado en la bandeja.
+ *  Un "ya transferí" sin comprobante NO: todavía no hay nada que cerrar. */
+export function pideAtencionDelEquipo(acciones = [], _texto = "") {
+  return (acciones || []).some(accionAvisa);
 }
 
 const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
@@ -53,13 +72,14 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
   };
   const linkConversacion = linkA();
 
-  const avisoTransferencia = (t = {}) => {
+  const avisoTransferencia = (t = {}, pedidos = []) => {
     const datosCliente = [t.nombre, t.telefono].filter(Boolean).join(" · ");
     return [
-      t.comprobante
-        ? "🏦 COMPROBANTE DE TRANSFERENCIA RECIBIDO — verificá que la plata esté en la cuenta"
-        : "🏦 UN CLIENTE AVISA QUE TRANSFIRIÓ — verificá que la plata esté en la cuenta",
+      pedidos.length
+        ? "🏦 COMPROBANTE DE TRANSFERENCIA RECIBIDO — verificá la plata y cerrá la venta"
+        : "🏦 COMPROBANTE DE TRANSFERENCIA RECIBIDO — verificá que la plata esté en la cuenta",
       t.monto ? `💵 Monto: ${fmt(t.monto)}` : "",
+      ...pedidos.map((p) => `🛒 Pedido: ${p.producto || "?"}${p.modeloVehiculo ? ` · ${p.modeloVehiculo}` : ""}${p.notas ? ` · ${p.notas}` : ""}`),
       t.detalle ? `📝 ${t.detalle}` : "",
       datosCliente ? `👤 ${datosCliente}` : lineaCliente,
       "⚠️ Max no ve la cuenta bancaria: el pago hay que confirmarlo a mano y avisarle al cliente.",
@@ -67,7 +87,10 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
     ].filter(Boolean).join("\n");
   };
 
+  // Transferencias de este turno: se avisan al FINAL, así el pedido en espera
+  // entra en el aviso aunque tomar_pedido venga después en la lista.
   let transferenciaAvisada = false;
+  const comprobantes = [];
 
   for (const a of acciones || []) {
     if (a.herramienta === "derivar_a_humano") {
@@ -82,6 +105,14 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
       const p = a.resultado?.pedido;
       if (!p || pedidosAvisados.has(p.id)) continue;
       pedidosAvisados.add(p.id);
+      if (esPagoPorTransferencia(p.medioPago)) {
+        // Sin comprobante no hay venta que cerrar: espera, y sale con el comprobante.
+        const enEspera = (pedidosEsperandoComprobante.get(chatId) || [])
+          .filter((x) => Date.now() - x.ts < ESPERA_MAX_MS);
+        enEspera.push({ ...p, ts: Date.now() });
+        pedidosEsperandoComprobante.set(chatId, enEspera);
+        continue;
+      }
       avisos.push([
         "🛒 NUEVA VENTA — Max cerró un pedido",
         `Producto: ${p.producto || "?"}${p.modeloVehiculo ? ` · ${p.modeloVehiculo}` : ""}`,
@@ -92,9 +123,10 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
       ].filter(Boolean).join("\n"));
 
     } else if (a.herramienta === "confirmar_transferencia") {
-      // SIEMPRE, aunque el pedido ya se haya avisado antes: este es el momento en
-      // que el equipo tiene que ir a mirar la cuenta bancaria.
-      avisos.push(avisoTransferencia(a.resultado?.transferencia || a.input || {}));
+      // Ya quedó registrada (la herramienta lo hace). Al equipo va SOLO si trae
+      // el comprobante: este es el momento en que tiene que mirar la cuenta.
+      const t = a.resultado?.transferencia || a.input || {};
+      if (t.comprobante) comprobantes.push(t);
       transferenciaAvisada = true;
 
     } else if (a.herramienta === "solicitar_turno") {
@@ -141,9 +173,17 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
       nombre: contacto.nombre || "",
       telefono: contacto.tel || "",
       detalle: [comprobanteExterno, detalleFoto, String(texto).trim()].filter(Boolean).join(" · ").slice(0, 200),
-      comprobante: pdfRecibido || comprobanteEnFoto || !!comprobanteExterno || /comprobante/i.test(texto),
+      // Comprobante = un ARCHIVO que llegó. "Te pasé el comprobante" escrito sin
+      // adjunto no lo es: se registra, pero el aviso espera al comprobante real.
+      comprobante: pdfRecibido || comprobanteEnFoto || !!comprobanteExterno || (fotoRecibida && /comprobante/i.test(texto)),
     };
-    avisos.push(avisoTransferencia(transferenciaSinRegistrar));
+    if (transferenciaSinRegistrar.comprobante) comprobantes.push(transferenciaSinRegistrar);
+  }
+
+  if (comprobantes.length) {
+    const pedidos = pedidosEsperandoComprobante.get(chatId) || [];
+    pedidosEsperandoComprobante.delete(chatId);
+    comprobantes.forEach((t, i) => avisos.push(avisoTransferencia(t, i === 0 ? pedidos : [])));
   }
 
   return { avisos, transferenciaSinRegistrar };
