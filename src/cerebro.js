@@ -1389,7 +1389,7 @@ Tené clara esta diferencia:
 
 # Datos del negocio
 - Dirección: ${NEGOCIO.direccion}
-- Horario: ${NEGOCIO.horario}
+- Horario: ${NEGOCIO.horario} ⚠️ Al mediodía el local CIERRA de 12:30 a 13:00: si el cliente quiere pasar en ese rato, avisale y ofrecele venir antes de las 12:30 o después de las 13:00. Decí el horario TAL CUAL, sin inventar otro.
 - Envíos a todo el país: ${NEGOCIO.enviosTodoElPais ? "sí" : "no"} (por DAC)
 - ⏱️ DEMORA DE ENTREGA DE LOS ENVÍOS: ${PLAZO_ENVIO}. Vale para CUALQUIER compra con envío (por WhatsApp o por la web). SIEMPRE que el cliente pregunte por envíos, cuánto demora, cuándo le llega, o diga que lo quiere con envío, avisale en ese mismo mensaje: "Tenemos una demora de entrega de ${PLAZO_ENVIO}." Decilo exactamente así: no lo acortes, no prometas menos ni des fechas puntuales. (Si es retiro en el local, NO aplica.)
 - Medios de pago: ${NEGOCIO.mediosPago.join(", ")}
