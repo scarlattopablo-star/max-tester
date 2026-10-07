@@ -14,6 +14,7 @@
 import { enviarTexto, linkWa } from "./notificador.js";
 import { linkTurno } from "./confirmacion_turno.js";
 import { dijoQueTransfirio, maxVioUnComprobante, esPagoPorTransferencia } from "./ws_mensaje.js";
+import { pedidosWebDe, marcarPedidosWebAvisados, pedirMailComprobante } from "./pedidos_web_espera.js";
 
 /** Herramientas del cerebro que SIEMPRE generan un aviso al equipo. */
 export const HERRAMIENTAS_QUE_AVISAN = Object.freeze([
@@ -61,7 +62,7 @@ const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
  *  WhatsApp ni base de datos.
  *  Devuelve { avisos: [texto...], transferenciaSinRegistrar } — esto último es la
  *  transferencia que detectó la red de seguridad y que el llamador debe registrar. */
-export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fotoRecibida = false, respuestaMax = "", comprobanteExterno = "", fallbackConversacion = "" } = {}) {
+export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fotoRecibida = false, respuestaMax = "", comprobanteExterno = "", fallbackConversacion = "", pedidosWeb = [] } = {}) {
   const avisos = [];
   const lineaCliente = contacto.nombre ? `👤 ${contacto.nombre}` : "";
   const sinLink = fallbackConversacion || "Buscá la conversación del cliente en el WhatsApp del negocio.";
@@ -72,14 +73,27 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
   };
   const linkConversacion = linkA();
 
-  const avisoTransferencia = (t = {}, pedidos = []) => {
+  // Pedido de la TIENDA WEB que esperaba este comprobante: va entero, con el link
+  // que lo marca pagado y baja el stock en ML (el mismo que antes iba al checkout).
+  const lineasPedidoWeb = (w) => [
+    `🌐 Pedido WEB #${String(w.orderId || "").slice(0, 8).toUpperCase()} — Total ${fmt(w.total || 0)}`,
+    ...(w.items || []).map((l) => `   • ${l.qty}x ${l.nombre}${l.color ? ` · ${l.color}` : ""}`),
+    w.entrega === "dac"
+      ? `   📦 Envío DAC a: ${w.cliente?.direccion || "?"}, ${w.cliente?.ciudad || "?"}`
+      : "   🏪 Retiro en el local",
+    w.cliente?.nombre ? `   👤 ${[w.cliente.nombre, w.cliente.telefono].filter(Boolean).join(" · ")}` : "",
+    w.confirmarUrl ? `   ✅ Si la plata llegó, CONFIRMÁ la venta acá (marca pagado y baja el stock en ML): ${w.confirmarUrl}` : "",
+  ].filter(Boolean).join("\n");
+
+  const avisoTransferencia = (t = {}, pedidos = [], web = []) => {
     const datosCliente = [t.nombre, t.telefono].filter(Boolean).join(" · ");
     return [
-      pedidos.length
+      pedidos.length || web.length
         ? "🏦 COMPROBANTE DE TRANSFERENCIA RECIBIDO — verificá la plata y cerrá la venta"
         : "🏦 COMPROBANTE DE TRANSFERENCIA RECIBIDO — verificá que la plata esté en la cuenta",
       t.monto ? `💵 Monto: ${fmt(t.monto)}` : "",
       ...pedidos.map((p) => `🛒 Pedido: ${p.producto || "?"}${p.modeloVehiculo ? ` · ${p.modeloVehiculo}` : ""}${p.notas ? ` · ${p.notas}` : ""}`),
+      ...web.map(lineasPedidoWeb),
       t.detalle ? `📝 ${t.detalle}` : "",
       datosCliente ? `👤 ${datosCliente}` : lineaCliente,
       "⚠️ Max no ve la cuenta bancaria: el pago hay que confirmarlo a mano y avisarle al cliente.",
@@ -180,19 +194,34 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
     if (transferenciaSinRegistrar.comprobante) comprobantes.push(transferenciaSinRegistrar);
   }
 
+  let pedidosWebAvisados = [];
   if (comprobantes.length) {
     const pedidos = pedidosEsperandoComprobante.get(chatId) || [];
     pedidosEsperandoComprobante.delete(chatId);
-    comprobantes.forEach((t, i) => avisos.push(avisoTransferencia(t, i === 0 ? pedidos : [])));
+    pedidosWebAvisados = pedidosWeb || [];
+    comprobantes.forEach((t, i) => avisos.push(avisoTransferencia(t, i === 0 ? pedidos : [], i === 0 ? pedidosWebAvisados : [])));
   }
 
-  return { avisos, transferenciaSinRegistrar };
+  return { avisos, transferenciaSinRegistrar, pedidosWebAvisados };
 }
 
 /** Arma y MANDA los avisos al WhatsApp del equipo. Un fallo en uno no tumba los
  *  otros: cada aviso se manda por separado y el error queda en el log. */
 export async function avisarAcciones({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fotoRecibida = false, respuestaMax = "", comprobanteExterno = "", fallbackConversacion = "" } = {}) {
-  const { avisos, transferenciaSinRegistrar } = armarAvisos({ acciones, contacto, texto, chatId, pdfRecibido, fotoRecibida, respuestaMax, comprobanteExterno, fallbackConversacion });
+  // Pedidos de la tienda web de este cliente que esperan el comprobante. Solo se
+  // buscan si en este turno PUEDE haber un comprobante (adjunto o herramienta).
+  const puedeHaberComprobante = pdfRecibido || fotoRecibida || !!comprobanteExterno
+    || (acciones || []).some((a) => a.herramienta === "confirmar_transferencia");
+  const pedidosWeb = puedeHaberComprobante
+    ? await pedidosWebDe({ telefono: contacto.tel || chatId, texto }).catch(() => [])
+    : [];
+  const { avisos, transferenciaSinRegistrar, pedidosWebAvisados } = armarAvisos({ acciones, contacto, texto, chatId, pdfRecibido, fotoRecibida, respuestaMax, comprobanteExterno, fallbackConversacion, pedidosWeb });
+
+  if (pedidosWebAvisados.length) {
+    await marcarPedidosWebAvisados(pedidosWebAvisados.map((w) => w.orderId));
+    // El mail lo manda la web (Resend vive allá): ahora sí, con el comprobante.
+    for (const w of pedidosWebAvisados) await pedirMailComprobante(w.orderId);
+  }
 
   if (transferenciaSinRegistrar) {
     try {

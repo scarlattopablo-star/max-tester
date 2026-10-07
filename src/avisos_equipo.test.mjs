@@ -151,3 +151,36 @@ test("pedidos y turnos no se avisan dos veces (dedup por id)", () => {
   assert.equal(armarAvisos({ acciones: [pedido], contacto }).avisos.length, 1);
   assert.equal(armarAvisos({ acciones: [pedido], contacto }).avisos.length, 0);
 });
+
+// 7 oct 2026: los pedidos de la TIENDA WEB por transferencia ya no avisan en el
+// checkout. Quedan en espera y salen con el comprobante que el cliente manda por WhatsApp.
+test("PEDIDO WEB: el comprobante sale con el pedido web y el link para confirmar", () => {
+  const web = { orderId: "2e35635e-aaaa-bbbb-cccc-000000000000", total: 4050, entrega: "dac",
+    items: [{ qty: 1, nombre: "Alfombra Ford Territory Híbrido Bandeja 4d" }],
+    cliente: { nombre: "Ana", telefono: "099123456", direccion: "Brasil 416", ciudad: "Flores" },
+    confirmarUrl: "https://lacasadelcubreasiento.com.uy/api/confirmar?x=1" };
+  const { avisos, pedidosWebAvisados } = armarAvisos({ acciones: [], contacto, chatId: "w1", pdfRecibido: true, pedidosWeb: [web] });
+  assert.equal(avisos.length, 1);
+  assert.match(avisos[0], /cerrá la venta/);
+  assert.match(avisos[0], /Pedido WEB #2E35635E — Total \$ 4\.050/);
+  assert.match(avisos[0], /Ford Territory/);
+  assert.match(avisos[0], /CONFIRMÁ la venta acá .*https:\/\/lacasadelcubreasiento/);
+  assert.equal(pedidosWebAvisados.length, 1);
+});
+
+test("PEDIDO WEB: sin comprobante no sale nada (ni se marca avisado)", () => {
+  const { avisos, pedidosWebAvisados } = armarAvisos({ acciones: [], contacto, chatId: "w2", texto: "ya transferí", pedidosWeb: [{ orderId: "x" }] });
+  assert.equal(avisos.length, 0);
+  assert.equal(pedidosWebAvisados.length, 0);
+});
+
+test("PEDIDO WEB: se encuentra por teléfono (últimos 8) o por el código del pedido", async () => {
+  delete process.env.DATABASE_URL;
+  const { guardarPedidoWebEnEspera, pedidosWebDe, marcarPedidosWebAvisados } = await import("./pedidos_web_espera.js");
+  const orderId = `abcd1234-${Date.now()}`;
+  await guardarPedidoWebEnEspera({ orderId, medio: "transferencia", total: 100, cliente: { telefono: "098 765 432" } });
+  assert.ok((await pedidosWebDe({ telefono: "59898765432" })).some((p) => p.orderId === orderId), "por teléfono");
+  assert.ok((await pedidosWebDe({ telefono: "59811111111", texto: "Hice el pedido #ABCD1234 por transferencia" })).some((p) => p.orderId === orderId), "por código");
+  await marcarPedidosWebAvisados([orderId]);
+  assert.ok(!(await pedidosWebDe({ telefono: "59898765432" })).some((p) => p.orderId === orderId), "ya avisado no vuelve");
+});
