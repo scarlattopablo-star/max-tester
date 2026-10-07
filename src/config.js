@@ -13,7 +13,8 @@ export const NEGOCIO = {
   web: "https://lacasadelcubreasiento.com.uy",
   facebook: "https://facebook.com/lacasadelcubreasiento",
   instagram: "@lacasadelcubreasiento",
-  horario: "Lunes a viernes de 9:00 a 17:45 hs. Sábados y domingos cerrado.",
+  // Cortado al mediodía (cierra de 12:30 a 13:00) desde el 7 oct 2026.
+  horario: "Lunes a viernes de 9:00 a 12:30 y de 13:00 a 18:00 hs (cerrado de 12:30 a 13:00). Sábados y domingos cerrado.",
   enviosTodoElPais: true,
   mediosPago: ["Tarjetas Visa, OCA y Master (hasta 6 pagos)", "Mercado Pago", "Transferencia bancaria (10% de descuento)", "Efectivo en el local"],
   descuentoTransferencia: 10, // % de descuento si paga por transferencia
