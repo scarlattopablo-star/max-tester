@@ -24,6 +24,7 @@ import { resumenMensajes } from "./metricas.js";
 import { resumenTransferencias, listarTransferencias, importarTransferencias, borrarTransferencias, marcarVerificada } from "./transferencias.js";
 import { ultimosEventos } from "./diag.js";
 import { salud as saludAvisos } from "./avisos_salud.js";
+import { guardarPedidoWebEnEspera } from "./pedidos_web_espera.js";
 import { obtenerMedia } from "./comprobantes.js";
 import { esHumano, marcarHumano, liberar, liberarTodo } from "./previas.js";
 import { enviarTextoMeta, metaConfigurado } from "./meta_api.js";
@@ -901,6 +902,16 @@ app.post("/api/notificar-venta", async (req, res) => {
   const auth = req.headers.authorization || "";
   const token = process.env.NOTIFY_TOKEN;
   if (!token || auth !== `Bearer ${token}`) return res.status(401).json({ error: "no autorizado" });
+  // Pedido WEB por transferencia: NO se avisa todavía. Queda en espera hasta que
+  // el cliente mande el comprobante por WhatsApp (ver pedidos_web_espera.js).
+  if (req.body?.esperarComprobante && req.body?.medio === "transferencia") {
+    try {
+      return res.json(await guardarPedidoWebEnEspera(req.body));
+    } catch (e) {
+      console.error("No pude guardar el pedido web en espera:", e.message);
+      return res.status(500).json({ ok: false });
+    }
+  }
   if (!hayWhatsApp()) return res.status(503).json({ ok: false, whatsapp: false });
   try {
     await enviarAviso(req.body || {});

@@ -20,6 +20,20 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
+## 🌐 SESIÓN 7 oct (noche) — PEDIDOS WEB POR TRANSFERENCIA: AVISO RECIÉN CON EL COMPROBANTE
+
+La tienda web mandaba mail + WhatsApp ("Pedido por transferencia (esperando comprobante)")
+en el checkout, antes de que el cliente pagara. Ahora:
+- El checkout de la web hace `POST /api/notificar-venta` con `esperarComprobante: true`:
+  Max lo guarda en Neon (`pedidos_web_espera`, 14 días) y **no avisa**.
+- La página de gracias manda al cliente al WhatsApp **091 629 784 = Max** con "Hice el pedido
+  #XXXXXXXX… Les mando el comprobante".
+- Llega el comprobante → el aviso al equipo trae el pedido web entero (ítems, total, entrega,
+  cliente) + el link para CONFIRMAR la venta. Se busca por teléfono (últimos 8 dígitos) o por
+  el código `#XXXXXXXX` del mensaje. Y Max le pide a la web `POST /api/aviso-comprobante`
+  → recién ahí sale el **mail** (Resend vive en la web).
+- ⚠️ Deploy: primero Max, después la web (si la web sale antes, Max viejo avisa en el checkout).
+
 ## 🧩 SESIÓN 7 oct — ALFOMBRAS 3D / 4D / 5D TAL CUAL ML (pedido de Rodrigo)
 
 Son productos distintos con precio distinto y hay modelos con más de una (Dongfeng Vigo:
