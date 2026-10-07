@@ -116,6 +116,12 @@ export function dijoQueTransfirio(texto) {
   return RE_YA_TRANSFIRIO.test(plano);
 }
 
+// ¿El medio de pago de un pedido es transferencia/depósito bancario? (esos pedidos
+// esperan el comprobante antes de avisarle al equipo — ver avisos_equipo.js)
+export function esPagoPorTransferencia(medio) {
+  return /trans?f|dep[oó]sit/i.test(String(medio || ""));
+}
+
 // ¿La respuesta de MAX dice que acaba de VER un pago? Se usa cuando el cliente
 // mandó una FOTO: el comprobante fotografiado (ticket de Abitab, captura de la app
 // del banco) no es texto ni PDF, así que los otros dos disparadores de la red de

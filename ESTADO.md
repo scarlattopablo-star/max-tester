@@ -20,7 +20,35 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
-## 🧶 SESIÓN 5 oct — ALFOMBRAS: STOCK Y DÍAS DE ENTREGA DE MERCADO LIBRE (LO MÁS NUEVO)
+## 🧩 SESIÓN 7 oct — ALFOMBRAS 3D / 4D / 5D TAL CUAL ML (pedido de Rodrigo)
+
+Son productos distintos con precio distinto y hay modelos con más de una (Dongfeng Vigo:
+3D $4.900, 4D $3.900). Antes: el que pedía la 3D recibía también la 4D, y la "4D" no existía
+para la búsqueda ("4 D" separado, como la del Swift, daba cero).
+- `buscarPrecio`: si el cliente nombra 3D/4D/5D, se sacan las publicaciones que dicen OTRA
+  versión (las que no dicen ninguna se quedan). Si de ese modelo no hay la pedida, muestra
+  lo que hay. "4 D"/"3 D" se pegan en `ERRATAS_ML`. Tests: `src/alfombras_version.test.mjs`.
+- Prompt (REGLAS DE ORO): nombrar cada alfombra con la versión de su título y su precio,
+  no inventar diferencias entre versiones (solo lo que dicen los títulos).
+
+## 🏦 SESIÓN 7 oct — TRANSFERENCIAS: AL EQUIPO SOLO CON EL COMPROBANTE (LO MÁS NUEVO)
+
+Max avisaba al equipo apenas el cliente decía "ya transferí" (o al tomar un pedido por
+transferencia), antes de tener el comprobante. Ahora **el equipo se entera recién cuando
+llega el comprobante**, y ese aviso trae el pedido para cerrar la venta.
+
+- "ya transferí" sin comprobante → se **registra** (sigue en `/admin`) pero **no avisa**.
+  Max le pide el comprobante al cliente y no dice "ya le aviso al equipo".
+- `tomar_pedido` con medio transferencia → el aviso de venta queda **en espera** por chat
+  (`pedidosEsperandoComprobante` en `avisos_equipo.js`, en memoria, 7 días).
+- Llega el comprobante (herramienta con `comprobante=true`, PDF, o foto que Max reconoce)
+  → **un** aviso: "COMPROBANTE … verificá la plata y cerrá la venta" + el pedido.
+- Chat tomado por un asesor: solo el PDF avisa; el "ya transferí" escrito se registra callado.
+- Pedidos por otro medio (efectivo, MP, tarjeta) se avisan al momento, como antes.
+- ⚠️ Si Render reinicia entre el pedido y el comprobante, el aviso sale igual pero sin la
+  línea del pedido (el detalle de la transferencia suele traer producto y monto).
+
+## 🧶 SESIÓN 5 oct — ALFOMBRAS: STOCK Y DÍAS DE ENTREGA DE MERCADO LIBRE
 
 Pedido de Pablo y Rodrigo (PRs #13, #14 y #15, en producción desde el commit `7098d56`).
 Regla final, todo sale de Mercado Libre:

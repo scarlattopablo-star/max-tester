@@ -15,6 +15,7 @@ import { registrarCliente } from "./clientes.js";
 import { leccionesActuales } from "./aprendizaje.js";
 import { crearLinkPago, hayMercadoPago } from "./pagos.js";
 import { registrarTransferencia } from "./transferencias.js";
+import { esPagoPorTransferencia } from "./ws_mensaje.js";
 import { resolverPorNombre } from "./ml_stock.js";
 import { stockEnVivo, sincronizar } from "./sync_ml.js";
 
@@ -105,6 +106,9 @@ const ERRATAS_ML = [
   // lo que hay. Igual la marca Dongfeng, que en algunos títulos va separada ("Dong Feng").
   [/\bu nit\b/g, "unit"],
   [/\bdong feng\b/g, "dongfeng"],
+  // La versión de la alfombra bandeja: ML la escribe pegada ("4d") o separada ("4 D",
+  // "3 D") según la publicación. Se pega, para que 3D/4D/5D sean siempre una palabra.
+  [/\b([345]) d\b/g, "$1d"],
 ];
 
 // Palabras que describen el PRODUCTO, no el auto. Van aparte de STOP_BUSQUEDA porque
@@ -117,7 +121,7 @@ const ERRATAS_ML = [
 // cual, y "Alfombra Bual Bandeja 3d" son 4 publicaciones ACTIVAS. Sin estas, "alfombra
 // bual" pasaba como si dijera el auto y devolvía el Dolphin, el Nammi y el HB20 juntos.
 const NO_ES_AUTO = new Set([
-  "antiderrame", "antiderrames", "latex", "bandejas", "3d", "5d", "baul", "baules",
+  "antiderrame", "antiderrames", "latex", "bandejas", "3d", "4d", "5d", "baul", "baules",
   "caja", "cajas", "socalo", "socalos", "cubresocalos", "cubresocalo", "pisadera",
   "pisaderas", "lluvero", "lluveros", "gotero", "goteros",
   "antiderame", "bual", "buales", "cubesocales", "cubresocales",
@@ -130,7 +134,12 @@ const NO_ES_AUTO = new Set([
 // filtra, igual que la marca: lo que la trae queda primero.
 // ⚠️ NO entran acá "caja", "baul" ni "socalo". Esas son PIEZAS distintas del mismo auto y
 // cambiárselas al cliente es venderle lo que no pidió: siguen siendo obligatorias.
-const ACABADO_PRODUCTO = new Set(["3d", "5d", "antiderrame", "antiderrames", "latex"]);
+const ACABADO_PRODUCTO = new Set(["3d", "4d", "5d", "antiderrame", "antiderrames", "latex"]);
+
+// 3D, 4D y 5D son productos DISTINTOS, con precio distinto, y hay modelos con más de
+// una (Dongfeng Vigo: 3D a $4.900 y 4D a $3.900). Pedido de Rodrigo, 7 oct 2026: que
+// Max las tome TAL CUAL están en Mercado Libre. Devuelve la versión del texto o null.
+const versionAlfombra = (texto) => (_tituloDe(texto).match(/\b([345]d)\b/) || [])[1] || null;
 // Título del producto, normalizado, sin puntuación y con las erratas corregidas. Es el
 // texto contra el que se busca — la MISMA cocina que se le aplica a la consulta, para
 // que "T-Cross" y "t cross" sean la misma cosa. Los títulos del catálogo no se tocan.
@@ -800,11 +809,19 @@ export function buscarPrecio(consulta, lista = null) {
     const sinAcabado = sinMarca.filter((w) => !ACABADO_PRODUCTO.has(w));
     const exigidas = sinAcabado.length ? sinAcabado : (sinMarca.length ? sinMarca : obligatorias);
     // ESTRICTO: el producto DEBE contener TODAS las exigidas. Sin comodín a genéricos.
-    const res = pool
+    let res = pool
       .filter((item) => { const m = _tituloDe(item.n); return exigidas.every((d) => _incluye(m, d)); })
       .map((item) => ({ item, sc: distintivas.filter((d) => _incluye(_tituloDe(item.n), d)).length }))
       .sort((a, b) => b.sc - a.sc) // más específicos primero
       .map((x) => x.item);
+    // Pidió 3D/4D/5D: fuera las publicaciones que dicen OTRA versión (las que no dicen
+    // ninguna se quedan: "Alfombra Montana Bandeja" es la rígida). Si de ese modelo no
+    // hay la que pidió, se muestra lo que hay y el nombre dice qué versión es.
+    const dPedida = versionAlfombra(texto);
+    if (dPedida) {
+      const f = res.filter((item) => { const d = versionAlfombra(item.n); return !d || d === dPedida; });
+      if (f.length) res = f;
+    }
     return aplicarCab(res).slice(0, 6).map(_mapProd);
   }
 
@@ -863,7 +880,7 @@ const FAMILIAS_PRODUCTO = [
   // la 5D. La pieza va primero porque es lo más específico: "Alfombra De Caja ... 3d"
   // es la de la caja.
   [["caja", /\bcaja\b/], ["baul", /\bbaul\b/], ["socalo", /\bsocalo|z[oó]calo/],
-   ["5d", /\b5 ?d\b/], ["3d", /\b3 ?d\b/], ["bandeja", /bandeja/], ["goma", /\bgoma\b|engomad/]],
+   ["5d", /\b5 ?d\b/], ["4d", /\b4 ?d\b/], ["3d", /\b3 ?d\b/], ["bandeja", /bandeja/], ["goma", /\bgoma\b|engomad/]],
 ];
 const _valorFamilia = (texto, familia) => (familia.find(([, re]) => re.test(texto)) || [null])[0];
 function mismoProducto(consulta, titulo) {
@@ -1146,8 +1163,10 @@ ${medios}
    y recién cuando elija uno, le pasás los datos concretos de ese medio.
 4. ⚠️ REGLA DE ORO: CADA VEZ que nombres, preguntes o enumeres medios de pago, mencioná SÍ O SÍ que la transferencia tiene ${NEGOCIO.descuentoTransferencia}% de descuento (es un beneficio que el negocio quiere que TODOS conozcan). Si el cliente la elige, decile además el monto final YA descontado, redondeado.
 5. Después de pasar los datos de pago, preguntá cómo desea recibir el producto (envío o retiro; y en CUBREASIENTOS también colocación; ver sección de ENTREGA).
-6. Cuando diga que pagó, tomá el pedido (tomar_pedido) y avisá que el equipo confirma el pago a la brevedad. NUNCA inventes números de cuenta, alias ni links.
-7. ⚠️ TRANSFERENCIAS — AVISO AL EQUIPO OBLIGATORIO (REGLA DE ORO, esto te estuvo fallando y se PERDIERON VENTAS): CADA VEZ que el cliente diga que YA transfirió/depositó/giró la plata, O que mande la FOTO o el ARCHIVO del comprobante, tu PRIMERA acción de ese turno es llamar a "confirmar_transferencia" (con comprobante=true si mandó el comprobante, false si solo avisó). Frases típicas que SIEMPRE la disparan: "ya transferí", "ya te giré", "listo, transferido", "ya envié", "ya hice el depósito", "ahí te pasé la seña", "te pasé el comprobante". Decir en tu texto "le aviso al equipo" NO alcanza: si no llamás la herramienta, NADIE del equipo se entera del pago y el cliente queda esperando días. Llamála aunque ya hayas tomado el pedido antes con tomar_pedido, y llamála DE NUEVO cuando llegue el comprobante aunque ya la hayas llamado por el aviso.
+6. Cuando diga que pagó, tomá el pedido (tomar_pedido). NUNCA inventes números de cuenta, alias ni links. Si pagó por TRANSFERENCIA, mirá la regla 7: sin comprobante todavía NO le digas que el equipo confirma el pago.
+7. ⚠️ TRANSFERENCIAS — SIN COMPROBANTE NO HAY AVISO AL EQUIPO (REGLA DE ORO): el equipo se entera de una transferencia RECIÉN cuando llega el COMPROBANTE (foto o archivo), y ahí cierra la venta.
+   · Si el cliente dice que YA transfirió ("ya transferí", "ya te giré", "listo, transferido", "ya hice el depósito", "ahí te pasé la seña") pero NO mandó el comprobante: llamá a "confirmar_transferencia" con comprobante=false (queda registrado) y PEDILE EL COMPROBANTE. Ej: "¡Gracias! ¿Me podría enviar el comprobante de la transferencia? Apenas lo recibo se lo paso al equipo para confirmar el pedido." ⛔ NO digas "ya le aviso al equipo" ni "el equipo verifica el pago" todavía: sin comprobante nadie del equipo se entera.
+   · Cuando LLEGA el comprobante (foto o archivo): tu PRIMERA acción de ese turno es llamar a "confirmar_transferencia" con comprobante=true (aunque ya la hayas llamado antes por el aviso, y aunque ya hayas tomado el pedido). Recién ahí decile que se lo pasaste al equipo para verificar el pago y cerrar el pedido.
 8. ⛔ NUNCA digas que el pago "llegó", "se acreditó" o "fue recibido correctamente": vos NO podés ver la cuenta bancaria. Aunque el comprobante se vea perfecto, decí siempre algo como "¡Gracias! Le paso el comprobante al equipo para que verifique el pago y te confirme a la brevedad". Confirmar plata que no llegó es un problema grave para el negocio.`;
 }
 
@@ -1383,6 +1402,7 @@ ${datosPagoTexto()}
 
 # REGLAS DE ORO (no las rompas nunca)
 - Las ALFOMBRAS BANDEJA son de GOMA / caucho rígido. NUNCA digas que son de cuero.
+- ALFOMBRAS 3D, 4D y 5D — TAL CUAL ESTÁN EN MERCADO LIBRE (pedido del equipo): son productos DISTINTOS con precio DISTINTO, y hay modelos que tienen más de una (ej: Dongfeng Vigo 3D y 4D). Nombrá cada alfombra con la versión que dice SU título y dale SU precio. ⛔ NUNCA le digas "3D" a una 4D o 5D (ni al revés), ni le pases el precio de una para la otra. Si el modelo tiene más de una versión y el cliente no eligió, mostrale las dos con su precio y que elija. Si pidió una versión que de ese modelo no hay, decile cuál hay ("de ese modelo tenemos la 4D") en vez de hacerla pasar por la que pidió. Al cerrar (tomar_pedido, link de pago) usá el nombre y el precio exactos de la que eligió. ⛔ Si pregunta la DIFERENCIA entre versiones, NO la inventes (nada de "corte más preciso" ni "mejor terminación"): decile solo lo que dicen los títulos (ej: "la 5D cubre el zócalo", "esta viene con la del baúl") y el precio de cada una; si quiere más detalle técnico, ofrecele consultarlo con un asesor.
 - Los CUBREASIENTOS a medida SÍ son de cuero ecológico premium en el FRENTE (eso está bien); la parte de ATRÁS (respaldo trasero) es de LICRA. Si preguntan el material, aclarale las dos partes (frente cuero ecológico, atrás licra).
 - PRECIOS: cuando te preguntan cuánto sale CUALQUIER cosa (cubreasiento, alfombra, cubre volante, cubreauto, llavero, accesorio…), usá SIEMPRE la herramienta "consultar_precio" con lo que pide (producto + modelo del auto) y decile el precio que te devuelve (ej: "El cubre volante de cuero sale $X."). Tenés TODO el catálogo de Mercado Libre cargado, así que casi siempre vas a encontrar el precio. ⚠️ Si el precio que pasás es de un CUBREASIENTO, agregá SIEMPRE en el mismo mensaje que es sin colocación y que la colocación se cotiza aparte (regla PRECIO SIN COLOCACIÓN).
 - Si la herramienta devuelve varios resultados parecidos, ofrecé las opciones cortitas (no más de 2-3) y preguntá cuál es el modelo/versión exacta.
@@ -1638,7 +1658,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "confirmar_transferencia",
-      description: "Registra que el cliente AVISÓ que hizo una TRANSFERENCIA BANCARIA (a la cuenta Itaú del negocio) o que ENVIÓ el comprobante de esa transferencia, y le avisa al equipo asesor para que verifique la plata en la cuenta. Usar SIEMPRE cuando el cliente diga que ya transfirió o mande el comprobante de una transferencia bancaria. ⛔ SOLO para transferencias bancarias: NO usarla si el cliente pagó con el link de Mercado Pago, con tarjeta, en efectivo, ni si el comprobante dice 'Mercado Pago' (esos pagos se verifican solos por otro canal). Si primero avisa y después manda el comprobante, llamarla las dos veces (con comprobante=false y luego true).",
+      description: "Registra que el cliente AVISÓ que hizo una TRANSFERENCIA BANCARIA (a la cuenta Itaú del negocio) o que ENVIÓ el comprobante de esa transferencia. Al equipo asesor se le avisa SOLO cuando comprobante=true (para que verifique la plata y cierre la venta); con comprobante=false solo queda registrado y hay que pedirle el comprobante al cliente. Usar SIEMPRE cuando el cliente diga que ya transfirió o mande el comprobante de una transferencia bancaria. ⛔ SOLO para transferencias bancarias: NO usarla si el cliente pagó con el link de Mercado Pago, con tarjeta, en efectivo, ni si el comprobante dice 'Mercado Pago' (esos pagos se verifican solos por otro canal). Si primero avisa y después manda el comprobante, llamarla las dos veces (con comprobante=false y luego true).",
       parameters: {
         type: "object",
         properties: {
@@ -2097,6 +2117,11 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // aunque ya se lo hayamos dicho al cotizar. Es el momento en que el cliente
       // decide, y el plazo del despacho (AVISO_ENVIO) recién corre desde que está.
       const diasPedido = demoraDelProducto(input.producto);
+      // Pedido por TRANSFERENCIA: el equipo recién se entera con el comprobante
+      // (el aviso del pedido queda en espera en avisos_equipo.js).
+      const notaTransf = esPagoPorTransferencia(input.medioPago)
+        ? "🏦 Es por TRANSFERENCIA: el equipo se entera RECIÉN cuando llegue el comprobante. Si el cliente todavía no lo mandó, pedíselo (foto o archivo). ⛔ No digas que ya le avisaste al equipo hasta tener el comprobante."
+        : "";
       if (diasPedido > 0) {
         extra.avisoDisponibilidad = AVISO_DISPONIBILIDAD(diasPedido);
         extra.instruccion = `${extra.instruccion ? extra.instruccion + " " : ""}⏳ Ese artículo es A PEDIDO (${diasPedido} días): el sistema ya se lo avisa al cliente con el texto oficial. NO repitas el plazo ni des fechas.`;
@@ -2107,12 +2132,17 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
         // ⚠️ Esta rama REESCRIBE la instrucción, así que lo de la disponibilidad se
         // vuelve a sumar acá: si no, el cubreasiento colocable a pedido mandaba el
         // aviso pero sin decirle al modelo que no lo repita.
-        return { ...r, ...extra, avisoColocacion: AVISO_COLOCACION, instruccion: `El sistema ya le manda al cliente el aviso de COLOCACIÓN (que va aparte, que la coordina el equipo y que no se acerque al local hasta tener fecha y hora confirmadas). NO lo repitas ni lo resumas vos: como mucho una frase corta aparte.${conEnvio ? " También le manda solo el plazo del ENVÍO: no inventes plazos." : ""}${diasPedido > 0 ? ` También le avisa que ese artículo es A PEDIDO (${diasPedido} días): no repitas el plazo ni des fechas.` : ""}` };
+        return { ...r, ...extra, avisoColocacion: AVISO_COLOCACION, instruccion: `El sistema ya le manda al cliente el aviso de COLOCACIÓN (que va aparte, que la coordina el equipo y que no se acerque al local hasta tener fecha y hora confirmadas). NO lo repitas ni lo resumas vos: como mucho una frase corta aparte.${conEnvio ? " También le manda solo el plazo del ENVÍO: no inventes plazos." : ""}${diasPedido > 0 ? ` También le avisa que ese artículo es A PEDIDO (${diasPedido} días): no repitas el plazo ni des fechas.` : ""}${notaTransf ? ` ${notaTransf}` : ""}` };
       }
+      if (notaTransf) extra.instruccion = `${extra.instruccion ? extra.instruccion + " " : ""}${notaTransf}`;
       return { ...r, ...extra };
     }
     if (nombre === "confirmar_transferencia") {
       const r = await registrarTransferencia({ ...input, chatId: ctx.chatId, nombre: input.nombre || ctx.contacto?.nombre, telefono: input.telefono || ctx.contacto?.tel });
+      // Sin comprobante el equipo NO se entera (avisos_equipo.js): lo que falta es pedírselo.
+      if (!input.comprobante) {
+        return { ...r, instruccion: "Registrado, pero el equipo TODAVÍA NO fue avisado: se le avisa recién con el comprobante. Pedile al cliente que te mande el COMPROBANTE de la transferencia (foto o archivo). ⛔ NO digas que ya le avisaste al equipo ni que el equipo verifica el pago. NUNCA afirmes que la plata ya llegó." };
+      }
       const extra = esVentaConEnvio(input.detalle) ? { avisoEnvio: AVISO_ENVIO } : {};
       const diasTransf = demoraDelProducto(input.detalle);
       if (diasTransf > 0) extra.avisoDisponibilidad = AVISO_DISPONIBILIDAD(diasTransf);

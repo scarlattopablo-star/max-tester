@@ -140,7 +140,8 @@ async function registrarPagoEnChatTomado(tel, msg, nombre) {
   try {
     await avisarAcciones({
       acciones: [], contacto: { nombre, tel }, texto, chatId: tel,
-      comprobanteExterno: `Comprobante en un chat que tomó un asesor (${motivo})`,
+      // Solo el PDF es comprobante: el "ya transferí" escrito se registra sin avisar.
+      comprobanteExterno: esPdfDoc ? `Comprobante en un chat que tomó un asesor (${motivo})` : "",
       fallbackConversacion: "Buscá la conversación en la bandeja de Meta Business Suite.",
     });
   } catch (e) {
