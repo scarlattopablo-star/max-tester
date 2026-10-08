@@ -1885,7 +1885,15 @@ function notaPiezasAlfombra(nombres) {
     .filter(([, p]) => p);
   if (!items.length) return null;
   const detalle = items.map(([n, p]) => `"${n}" → ${QUE_TRAE[p]}`).join("; ");
-  return `🧩 QUÉ TRAE CADA ALFOMBRA (tal cual su título de Mercado Libre): ${detalle}. ⛔ Cada publicación es un producto aparte, con SU precio. NO digas que la de piso viene con / incluye / se complementa con la del baúl si su título no lo dice, NO armes un "juego" o "conjunto" de piso + baúl y NO sumes los precios de dos publicaciones. Si el cliente pregunta si trae la del baúl, contestale según esto.`;
+  const piezas = new Set(items.map(([, p]) => p));
+  // Si TODO lo que vino es de una sola pieza, la otra no está: Max igual la ofrecía
+  // ("para el HB20 sedán también tenemos la de piso", 8 oct 2026, con solo la de baúl).
+  const falta = piezas.size === 1 && piezas.has("baul")
+    ? " ⛔ De este modelo SOLO hay alfombra de BAÚL: NO digas que también hay de piso, NO la ofrezcas ni le preguntes si la busca. Si la pide, decile que de piso para ese modelo no tenemos por ahora."
+    : piezas.size === 1 && piezas.has("piso")
+      ? " ⛔ De este modelo NO hay alfombra de baúl ni ninguna que la traiga: NO ofrezcas \"el juego completo\" ni la del baúl. Si la pide, decile que de baúl para ese modelo no tenemos por ahora."
+      : "";
+  return `🧩 QUÉ TRAE CADA ALFOMBRA (tal cual su título de Mercado Libre): ${detalle}. ⛔ Cada publicación es un producto aparte, con SU precio. NO digas que la de piso viene con / incluye / se complementa con la del baúl si su título no lo dice, NO armes un "juego" o "conjunto" de piso + baúl y NO sumes los precios de dos publicaciones. Si el cliente pregunta si trae la del baúl, contestale según esto.${falta}`;
 }
 
 export async function ejecutarHerramienta(nombre, input, ctx = {}) {
@@ -2657,6 +2665,33 @@ export function limpiarJerga(texto) {
 
 // Arma la respuesta final: texto + fotos numeradas sin duplicados (compartido por ambos caminos).
 // Cada producto se envía como SU PROPIA foto, con su nombre y precio en el caption.
+// ANTI-JUEGO PISO + BAÚL: el prompt y la nota de la herramienta no alcanzaron. Probado
+// contra producción el 8 oct 2026: con la Tucson (que solo tiene la de piso) Max le
+// preguntó al cliente "¿te interesa llevar el juego completo?". Si en la charla no
+// apareció NINGUNA alfombra que traiga las dos (título con "+ ... Baul"), se borra la
+// oración que ofrece el juego o dice que la de piso trae la del baúl. Las que lo NIEGAN
+// ("la de piso no trae la del baúl") se dejan: dicen la verdad.
+const _OFRECE_JUEGO = /juego complet|conjunto|\bkit\b|(viene|vienen|incluye|incluyen|trae|traen|lleva|llevan)\b[^.?!]{0,25}\bbaul|piso (y|\+|con|mas) (el |la )?(alfombra )?(del |de )?baul|baul (y|\+|con|mas) (el |la )?(alfombra )?(del |de )?piso/;
+const _NIEGA_JUEGO = /\bno\b|\bsolo\b|\bsolamente\b|aparte|por separado|separad|cada una/;
+export function filtrarJuegoAlfombras(texto, acciones = [], textoCharla = "") {
+  const original = String(texto || "");
+  if (!original.trim()) return original;
+  const nombres = acciones.flatMap((a) => [...(a.resultado?.resultados || []), ...(a.resultado?.fotos || [])]).map((x) => x?.nombre);
+  if (nombres.some((n) => piezaAlfombra(n) === "piso+baul")) return original;
+  const charla = _normTxt(textoCharla);
+  if (/al[fo]{1,2}m?bra[^\]\n.?!]*\+[^\]\n.?!]*\b(baul|bual)\b/.test(charla)) return original;
+  if (!CATEGORIAS.alfombra.test(`${charla} ${_normTxt(original)}`)) return original;
+  // Si en ESTE turno se habló de cubreasientos, "juego completo" puede ser el de asientos.
+  if (CATEGORIAS.cubreasiento.test(_normTxt(original))) return original;
+  const queda = (o) => { const n = _normTxt(o); return !_OFRECE_JUEGO.test(n) || _NIEGA_JUEGO.test(n); };
+  // Por oración y respetando los párrafos: cada párrafo sale como un mensaje aparte.
+  return original
+    .split(/\n\s*\n/)
+    .map((par) => par.split(/(?<=[.!?…])[ \t]+/).filter(queda).join(" ").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export function armarRespuesta(texto, acciones, ctx = {}) {
   const CON_FOTOS = new Set(["enviar_foto", "mostrar_capitoneado", "mostrar_ecocuero", "mostrar_cuero_sport"]);
   // ⛔ Red de seguridad del "no se ofrece lo que no tenemos": el guard de las
@@ -2756,6 +2791,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // peor que no dar precio: o perdemos plata sosteniéndolo, o le quedamos mal.
   const { texto: sinPrecios, inventado } = filtrarPrecios(limpio, acciones, ctx.textoCharla);
   limpio = sinPrecios;
+  limpio = filtrarJuegoAlfombras(limpio, acciones, ctx.textoCharla);
   // ANTI-LÍNEA-EQUIVOCADA: si el cliente eligió por color y ese color está en más de
   // una línea, el guard de las herramientas ya le negó cotizar. Pero el modelo puede
   // escribir el precio igual, de memoria, sin llamar a nada: acá se le cae la frase y
