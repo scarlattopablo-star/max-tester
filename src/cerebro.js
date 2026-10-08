@@ -9,7 +9,7 @@ import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACIO
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
-import { productos as productosML, agotados as agotadosML, agotadoPorId } from "./catalogo_vivo.js";
+import { productos as productosML, agotados as agotadosML, agotadoPorId, esperarCatalogoFresco } from "./catalogo_vivo.js";
 import { anotarEspera, anotarPreventa, hayEsperas } from "./esperas.js";
 import { registrarCliente } from "./clientes.js";
 import { leccionesActuales } from "./aprendizaje.js";
@@ -1967,6 +1967,9 @@ export function notaCotizadas(acciones = []) {
 }
 
 export async function ejecutarHerramienta(nombre, input, ctx = {}) {
+  // Recién arrancado, el catálogo en memoria es el snapshot del repo: se espera la
+  // primera sync con ML antes de mirar productos (ver catalogo_vivo.js).
+  await esperarCatalogoFresco();
   let r = await _ejecutarHerramienta(nombre, input, ctx);
   if (BUSCAN_CATALOGO.has(nombre) && await alfombraVolvioAlStock(r, ctx)) {
     r = await _ejecutarHerramienta(nombre, input, ctx);
