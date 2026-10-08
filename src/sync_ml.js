@@ -12,7 +12,7 @@
 //   ML_CLIENT_SECRET -> Secret key de esa aplicación
 // Sin credenciales, la sincronización se salta (el bot sigue con el snapshot).
 import "./env.js";
-import { actualizarCatalogo, infoCatalogo } from "./catalogo_vivo.js";
+import { actualizarCatalogo, infoCatalogo, iniciarEsperaSync, marcarCatalogoFresco } from "./catalogo_vivo.js";
 import { SELLER_ML_ID, DEMORAS_MANUALES } from "./config.js";
 
 const API = "https://api.mercadolibre.com";
@@ -370,7 +370,10 @@ export function programarSync(horas = 6) {
     console.log("ℹ Sync ML desactivado (faltan ML_CLIENT_ID / ML_CLIENT_SECRET). Catálogo:", JSON.stringify(infoCatalogo()));
     return;
   }
-  sincronizar();
+  // Hasta que termine esta primera sync, las herramientas del catálogo esperan (si
+  // falla, se sigue con lo que haya: mejor el snapshot que dejar al cliente mudo).
+  iniciarEsperaSync();
+  sincronizar().finally(marcarCatalogoFresco);
   setInterval(sincronizar, horas * 3600 * 1000);
   console.log(`⏰ Sync con Mercado Libre programado cada ${horas} h.`);
 }
