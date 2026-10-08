@@ -6,7 +6,7 @@
 process.env.CATALOGO_SIN_DISCO = "1";
 import assert from "node:assert/strict";
 import { actualizarCatalogo } from "./catalogo_vivo.js";
-import { armarRespuesta, pideAnioDeMas, filtrarPrecios } from "./cerebro.js";
+import { armarRespuesta, pideAnioDeMas, filtrarPrecios, filtrarInventos } from "./cerebro.js";
 import { FRASE_CONSULTO } from "./config.js";
 
 let ok = 0;
@@ -74,6 +74,27 @@ test("un precio que no sale del catálogo se sigue frenando", () => {
 test("el 10% de un precio inventado tampoco pasa", () => {
   const r = filtrarPrecios("Sale $2.565 por transferencia.", [], "te dije que sale $ 2.850");
   assert.equal(r.inventado, 2565);
+});
+
+// ─── Las otras dos causas del asesor de más (producción, 8 oct 2026) ───
+const derivoR = (r) => r.acciones.some((a) => a.herramienta === "derivar_a_humano" && a.resultado?.ok !== false);
+const CTX_TUCSON = () => ({ _ultimoUsuario: "y trae la del baul tambien?", dichoPorElCliente: "alfombras tucson y trae la del baul tambien?", textoCharla: CHARLA_TUCSON, _turno: { busco: false } });
+
+test("ofrecer esperar/encargar la pieza que NO hay: se cae esa oración, sin asesor", () => {
+  for (const cola of ["¿Te sirve solo la del piso, o preferís esperar a que entre la del baúl?", "La del baúl te la conseguimos a pedido.", "La del baúl la podemos encargar."]) {
+    const r = armarRespuesta(`No, es solo la del piso. Para el Tucson no tenemos alfombra de baúl. ${cola}`, [], CTX_TUCSON());
+    assert.equal(r.texto, "No, es solo la del piso. Para el Tucson no tenemos alfombra de baúl.", cola);
+    assert.equal(derivoR(r), false, cola);
+  }
+});
+
+test("'es a pedido' cuando de verdad hay artículos a pedido: no es invento", () => {
+  const t = "La 2 trae las dos. La 1 es solo de baúl y es a pedido. ¿Cuál te va mejor?";
+  assert.equal(filtrarInventos(t, "alfombras", true).invento, null);
+  // Sin artículos a pedido en la charla, sigue siendo sospechoso.
+  assert.ok(filtrarInventos(t, "alfombras", false).invento);
+  // Y "a medida" nunca: las alfombras no se fabrican.
+  assert.ok(filtrarInventos("Esa alfombra te la hacemos a medida.", "alfombras", true).invento);
 });
 
 console.log(`\n${ok} OK`);
