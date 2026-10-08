@@ -6,7 +6,7 @@
 process.env.CATALOGO_SIN_DISCO = "1";
 import assert from "node:assert/strict";
 import { actualizarCatalogo } from "./catalogo_vivo.js";
-import { piezaAlfombra, ejecutarHerramienta, buscarPrecio, filtrarJuegoAlfombras } from "./cerebro.js";
+import { piezaAlfombra, ejecutarHerramienta, buscarPrecio, filtrarJuegoAlfombras, notaPiezasMostradas, eleccionAmbigua } from "./cerebro.js";
 
 let ok = 0;
 const test = (nombre, fn) => { fn(); ok++; console.log(`  ✓ ${nombre}`); };
@@ -105,6 +105,39 @@ await testAsync("solo de baúl: la nota le prohíbe decir que hay de piso", asyn
   actualizarCatalogo([{ id: "MLU4", n: "Alfombra Baúl Hb20 Sedan Bandeja 3d Negro", p: 2625, img: "https://http2.mlstatic.com/D_4-O.jpg" }], "test");
   const r = await ejecutarHerramienta("enviar_foto", { producto: "alfombra hb20 sedan" }, { _ultimoUsuario: "alfombras para HB20 sedán" });
   assert.match(r.instruccion, /SOLO hay alfombra de BAÚL/);
+});
+
+// ─── La repregunta, contestada de memoria (sin herramienta) ────────────
+const nota = (caps, resp = "Te comparto las opciones.") =>
+  `${resp}\u2063[Contexto interno — opciones que le mostré al cliente con foto, numeradas: ${caps.map((c, i) => `${i + 1}) ${c}`).join("; ")}.${notaPiezasMostradas(caps.map((c) => c.replace(/\s+-\s+\$.*$/, "")))} Si el cliente elige un número ("la 1", "el 2", "quiero la primera"), corresponde a ESTA lista; NO vuelvas a mostrar las opciones: avanzá con la que eligió.]`;
+
+test("la nota del historial dice qué trae cada una y qué pieza no hay", () => {
+  const n = nota(["Alfombra Hyundai Tucson 2021+  Goma Negro - $ 2.700"]);
+  assert.match(n, /opción 1: solo la del PISO/);
+  assert.match(n, /NO hay alfombra de baúl/);
+});
+
+test("Tucson, repregunta: se cae 'la del baúl también la tenemos'", () => {
+  const charla = `alfombras para Hyundai Tucson 2022 ${nota(["Alfombra Hyundai Tucson 2021+  Goma Negro - $ 2.700"])} y trae la del baul tambien?`;
+  const r = filtrarJuegoAlfombras("No, esa es solo la alfombra de piso. La del baúl es aparte y también la tenemos disponible para tu Tucson. ¿Te muestro la de baúl también, o te va bien solo con la de piso?", [], charla);
+  assert.equal(r, "No, esa es solo la alfombra de piso.");
+});
+
+test("Onix hatch (solo baúl), repregunta: se cae 'para el piso tenemos opciones'", () => {
+  const charla = `alfombras onix hatch ${nota(["Alfombra Baul Onix Hatch Engomadas 100 % Impermeables Negro - $ 1.890", "Alfombra Baul Onix Hatch Bandeja 3d Negro - $ 2.800"])} la de piso viene con la del baul?`;
+  const r = filtrarJuegoAlfombras("No, la alfombra de piso y la del baúl son publicaciones separadas, cada una con su precio. Para el piso del Onix Hatch tenemos opciones también.", [], charla);
+  assert.equal(r, "No, la alfombra de piso y la del baúl son publicaciones separadas, cada una con su precio.");
+});
+
+test("decir que NO hay la otra pieza se deja", () => {
+  const charla = `alfombras hb20 sedan ${nota(["Alfombra Baúl Hb20 Sedan Bandeja 3d Negro - $ 2.625"])}`;
+  const t = "Para el piso del HB20 sedán estamos sin stock por ahora.";
+  assert.equal(filtrarJuegoAlfombras(t, [], charla), t);
+});
+
+test("la nota nueva no rompe la elección por número", () => {
+  const charla = nota(["Alfombra Baul Onix Hatch Engomadas 100 % Impermeables Negro - $ 1.890", "Alfombra Baul Onix Hatch Bandeja 3d Negro - $ 2.800"]);
+  assert.equal(eleccionAmbigua("quiero la 2", charla).ambigua, false);
 });
 
 console.log(`\n${ok} OK`);

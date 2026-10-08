@@ -1896,6 +1896,30 @@ function notaPiezasAlfombra(nombres) {
   return `🧩 QUÉ TRAE CADA ALFOMBRA (tal cual su título de Mercado Libre): ${detalle}. ⛔ Cada publicación es un producto aparte, con SU precio. NO digas que la de piso viene con / incluye / se complementa con la del baúl si su título no lo dice, NO armes un "juego" o "conjunto" de piso + baúl y NO sumes los precios de dos publicaciones. Si el cliente pregunta si trae la del baúl, contestale según esto.${falta}`;
 }
 
+// ⚠️ Sin ";" ni "1)": la nota la parsean _ultimosMostrados y eleccionAmbigua.
+// Para la NOTA INTERNA del historial (handler.js): qué trae cada alfombra que se le
+// mostró. Sin esto, en la repregunta ("¿y trae la del baúl?") Max contesta de memoria,
+// sin la nota de la herramienta, y volvía a inventar: "la del baúl también la tenemos"
+// para la Tucson, que no tiene (probado contra producción el 8 oct 2026).
+export function notaPiezasMostradas(nombres) {
+  const items = (nombres || []).map((n) => piezaAlfombra(n)).filter(Boolean);
+  if (!items.length) return "";
+  const piezas = new Set(items);
+  let falta = "";
+  if (nombres.length < 4 && piezas.size === 1 && piezas.has("piso")) falta = " De este modelo NO hay alfombra de baúl ni ninguna que la traiga: no la ofrezcas ni digas que la tenemos.";
+  if (nombres.length < 4 && piezas.size === 1 && piezas.has("baul")) falta = " De este modelo SOLO hay alfombra de baúl: no ofrezcas ni digas que tenemos la de piso.";
+  return ` Qué trae cada alfombra (título de Mercado Libre): ${items.map((p, i) => `opción ${i + 1}: ${QUE_TRAE[p]}`).join(" · ")}.${falta}`;
+}
+
+// Nombres de los productos de la ÚLTIMA tanda de fotos que quedó en la charla.
+function _ultimosMostrados(textoCharla) {
+  const notas = [...String(textoCharla || "").matchAll(_RE_NOTA_FOTOS)];
+  if (!notas.length) return [];
+  return notas[notas.length - 1][1].split(/;\s*/)
+    .map((c) => (c.match(/^\s*\d+\)\s*(.*?)(?:\s+-\s+(?:\$|U\$S|USD).*)?$/) || [])[1])
+    .filter(Boolean);
+}
+
 export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   let r = await _ejecutarHerramienta(nombre, input, ctx);
   if (BUSCAN_CATALOGO.has(nombre) && await alfombraVolvioAlStock(r, ctx)) {
@@ -2672,6 +2696,9 @@ export function limpiarJerga(texto) {
 // oración que ofrece el juego o dice que la de piso trae la del baúl. Las que lo NIEGAN
 // ("la de piso no trae la del baúl") se dejan: dicen la verdad.
 const _OFRECE_JUEGO = /juego complet|conjunto|\bkit\b|(viene|vienen|incluye|incluyen|trae|traen|lleva|llevan)\b[^.?!]{0,25}\bbaul|piso (y|\+|con|mas) (el |la )?(alfombra )?(del |de )?baul|baul (y|\+|con|mas) (el |la )?(alfombra )?(del |de )?piso/;
+// "La del baúl también la tenemos", "¿te muestro la de piso?": ofrece la otra pieza.
+const _OFRECE_PIEZA = /tenemos|tengo|\bhay\b|disponible|muestro|mostrar|paso|interesa|queres|quieres|ofrec|opciones/;
+const _NO_HAY_PIEZA = /\bno (la |lo |las |los )?(tenemos|tengo|hay)|sin stock|agotad|no contamos/;
 const _NIEGA_JUEGO = /\bno\b|\bsolo\b|\bsolamente\b|aparte|por separado|separad|cada una/;
 export function filtrarJuegoAlfombras(texto, acciones = [], textoCharla = "") {
   const original = String(texto || "");
@@ -2683,7 +2710,15 @@ export function filtrarJuegoAlfombras(texto, acciones = [], textoCharla = "") {
   if (!CATEGORIAS.alfombra.test(`${charla} ${_normTxt(original)}`)) return original;
   // Si en ESTE turno se habló de cubreasientos, "juego completo" puede ser el de asientos.
   if (CATEGORIAS.cubreasiento.test(_normTxt(original))) return original;
-  const queda = (o) => { const n = _normTxt(o); return !_OFRECE_JUEGO.test(n) || _NIEGA_JUEGO.test(n); };
+  // Lo que se le mostró: lo de ESTE turno o, si no buscó, la última tanda de la charla.
+  const turno = nombres.filter(Boolean);
+  const mostrados = turno.length ? turno : _ultimosMostrados(textoCharla);
+  const piezas = new Set(mostrados.map((n) => piezaAlfombra(n)).filter(Boolean));
+  // Con menos de 4 fotos la búsqueda no se recortó: lo que no vino, no hay.
+  const completa = mostrados.length > 0 && mostrados.length < 4 && piezas.size === 1;
+  const noHay = completa && piezas.has("piso") ? /\bbaul/ : completa && piezas.has("baul") ? /\bpiso\b/ : null;
+  const ofreceOtra = (n) => noHay && noHay.test(n) && _OFRECE_PIEZA.test(n) && !_NO_HAY_PIEZA.test(n);
+  const queda = (o) => { const n = _normTxt(o); return (!_OFRECE_JUEGO.test(n) || _NIEGA_JUEGO.test(n)) && !ofreceOtra(n); };
   // Por oración y respetando los párrafos: cada párrafo sale como un mensaje aparte.
   return original
     .split(/\n\s*\n/)
