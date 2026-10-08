@@ -87,6 +87,9 @@ const ERRATAS_ML = [
   [/\b(cuberasiento|curbeasiento|cubrasiento|cubreasinto)(s?)\b/g, "cubreasiento$2"],
   [/\bchervolet\b/g, "chevrolet"],
   [/\bhyudndai\b/g, "hyundai"],
+  // "Bual" = baúl: así está escrito en 4 publicaciones activas ("Alfombra Hb20 Sedan 3d +
+  // Alfombra Bual 3d"). Sin corregirlo, esas no contaban como alfombra de baúl.
+  [/\bbual(es)?\b/g, "baul$1"],
   // Modelos que el catálogo escribe de las dos formas y el cliente también: se llevan
   // todos a UNA sola, la separada, para que "ecosport" y "Eco Sport" sean lo mismo.
   [/\b(ecosport|eco esport|ecoesport)\b/g, "eco sport"],
@@ -1402,7 +1405,8 @@ ${datosPagoTexto()}
 
 # REGLAS DE ORO (no las rompas nunca)
 - Las ALFOMBRAS BANDEJA son de GOMA / caucho rígido. NUNCA digas que son de cuero.
-- ALFOMBRAS 3D, 4D y 5D — TAL CUAL ESTÁN EN MERCADO LIBRE (pedido del equipo): son productos DISTINTOS con precio DISTINTO, y hay modelos que tienen más de una (ej: Dongfeng Vigo 3D y 4D). Nombrá cada alfombra con la versión que dice SU título y dale SU precio. ⛔ NUNCA le digas "3D" a una 4D o 5D (ni al revés), ni le pases el precio de una para la otra. Si el modelo tiene más de una versión y el cliente no eligió, mostrale las dos con su precio y que elija. Si pidió una versión que de ese modelo no hay, decile cuál hay ("de ese modelo tenemos la 4D") en vez de hacerla pasar por la que pidió. Al cerrar (tomar_pedido, link de pago) usá el nombre y el precio exactos de la que eligió. ⛔ Si pregunta la DIFERENCIA entre versiones, NO la inventes (nada de "corte más preciso" ni "mejor terminación"): decile solo lo que dicen los títulos (ej: "la 5D cubre el zócalo", "esta viene con la del baúl") y el precio de cada una; si quiere más detalle técnico, ofrecele consultarlo con un asesor.
+- ALFOMBRAS 3D, 4D y 5D — TAL CUAL ESTÁN EN MERCADO LIBRE (pedido del equipo): son productos DISTINTOS con precio DISTINTO, y hay modelos que tienen más de una (ej: Dongfeng Vigo 3D y 4D). Nombrá cada alfombra con la versión que dice SU título y dale SU precio. ⛔ NUNCA le digas "3D" a una 4D o 5D (ni al revés), ni le pases el precio de una para la otra. Si el modelo tiene más de una versión y el cliente no eligió, mostrale las dos con su precio y que elija. Si pidió una versión que de ese modelo no hay, decile cuál hay ("de ese modelo tenemos la 4D") en vez de hacerla pasar por la que pidió. Al cerrar (tomar_pedido, link de pago) usá el nombre y el precio exactos de la que eligió. ⛔ Si pregunta la DIFERENCIA entre versiones, NO la inventes (nada de "corte más preciso" ni "mejor terminación"): decile solo lo que dicen los títulos (ej: "la 5D cubre el zócalo", y SOLO si su título lo dice, "esta trae también la del baúl") y el precio de cada una; si quiere más detalle técnico, ofrecele consultarlo con un asesor.
+- ALFOMBRA DE PISO Y ALFOMBRA DE BAÚL — TAL CUAL ESTÁN EN MERCADO LIBRE (pedido de Pablo, 8 oct 2026): hay publicaciones que traen las dos (su título dice "+ Alfombra Baul") y la MAYORÍA NO: la de piso y la de baúl son publicaciones APARTE, cada una con SU precio. La herramienta te dice qué trae cada una ("QUÉ TRAE CADA ALFOMBRA"): guiate solo por eso. ⛔ NUNCA digas que la alfombra de piso viene con la del baúl, que la incluye o que es "el juego completo con el baúl" si su título no lo dice. ⛔ NO armes vos un "juego" o "conjunto" de piso + baúl, y NO sumes los precios de las dos. Si entre las opciones aparece una de baúl, va como una opción más, con su número y su precio, no como parte de la de piso.
 - Los CUBREASIENTOS a medida SÍ son de cuero ecológico premium en el FRENTE (eso está bien); la parte de ATRÁS (respaldo trasero) es de LICRA. Si preguntan el material, aclarale las dos partes (frente cuero ecológico, atrás licra).
 - PRECIOS: cuando te preguntan cuánto sale CUALQUIER cosa (cubreasiento, alfombra, cubre volante, cubreauto, llavero, accesorio…), usá SIEMPRE la herramienta "consultar_precio" con lo que pide (producto + modelo del auto) y decile el precio que te devuelve (ej: "El cubre volante de cuero sale $X."). Tenés TODO el catálogo de Mercado Libre cargado, así que casi siempre vas a encontrar el precio. ⚠️ Si el precio que pasás es de un CUBREASIENTO, agregá SIEMPRE en el mismo mensaje que es sin colocación y que la colocación se cotiza aparte (regla PRECIO SIN COLOCACIÓN).
 - Si la herramienta devuelve varios resultados parecidos, ofrecé las opciones cortitas (no más de 2-3) y preguntá cuál es el modelo/versión exacta.
@@ -1852,10 +1856,46 @@ async function alfombraVolvioAlStock(r, ctx) {
   return !!s?.ok;
 }
 
+// QUÉ TRAE CADA ALFOMBRA — tal cual el título de Mercado Libre (pedido de Pablo, 8 oct
+// 2026: "Max está ofreciendo con las alfombras de piso las del baúl, y no para todos
+// es así"). Hay publicaciones que traen las dos ("Alfombra Hb20 Sedan 3d + Alfombra
+// Bual 3d") y la mayoría no: la de piso y la de baúl son publicaciones aparte, cada
+// una con su precio. Lo único que lo dice es el título, así que se lee de ahí.
+// Devuelve "piso", "baul", "piso+baul", "caja" o null (no es una alfombra).
+export function piezaAlfombra(nombre) {
+  const partes = _normTxt(nombre).split("+").map(_tituloDe);
+  if (!/\balfombras?\b/.test(partes[0])) return null;
+  const baul = (p) => /\bbaul\b/.test(p);
+  if (/\bcaja\b/.test(partes[0])) return "caja";
+  if (baul(partes[0])) return "baul";
+  if (partes.slice(1).some(baul)) return "piso+baul";
+  return "piso";
+}
+
+const QUE_TRAE = {
+  piso: "solo la del PISO, NO trae la del baúl",
+  baul: "solo la del BAÚL, NO trae la del piso",
+  "piso+baul": "piso + baúl (lo dice su título)",
+  caja: "solo la de la CAJA de la camioneta",
+};
+
+function notaPiezasAlfombra(nombres) {
+  const items = [...new Set(nombres.filter(Boolean))]
+    .map((n) => [n, piezaAlfombra(n)])
+    .filter(([, p]) => p);
+  if (!items.length) return null;
+  const detalle = items.map(([n, p]) => `"${n}" → ${QUE_TRAE[p]}`).join("; ");
+  return `🧩 QUÉ TRAE CADA ALFOMBRA (tal cual su título de Mercado Libre): ${detalle}. ⛔ Cada publicación es un producto aparte, con SU precio. NO digas que la de piso viene con / incluye / se complementa con la del baúl si su título no lo dice, NO armes un "juego" o "conjunto" de piso + baúl y NO sumes los precios de dos publicaciones. Si el cliente pregunta si trae la del baúl, contestale según esto.`;
+}
+
 export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   let r = await _ejecutarHerramienta(nombre, input, ctx);
   if (BUSCAN_CATALOGO.has(nombre) && await alfombraVolvioAlStock(r, ctx)) {
     r = await _ejecutarHerramienta(nombre, input, ctx);
+  }
+  if (BUSCAN_CATALOGO.has(nombre) && r) {
+    const nota = notaPiezasAlfombra([...(r.resultados || []), ...(r.fotos || [])].map((x) => x?.nombre));
+    if (nota) r = { ...r, instruccion: r.instruccion ? `${r.instruccion}\n\n${nota}` : nota };
   }
   // Memoria del TURNO: qué contestó el catálogo sobre el auto del cliente. La leen las
   // herramientas que ofrecen una línea (ver sinCatalogoParaSuAuto).
