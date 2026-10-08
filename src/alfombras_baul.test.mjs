@@ -140,4 +140,33 @@ test("la nota nueva no rompe la elección por número", () => {
   assert.equal(eleccionAmbigua("quiero la 2", charla).ambigua, false);
 });
 
+// ─── Sedán / hatch: lo que dijo el cliente manda (producción, 8 oct 2026) ──
+await testAsync("pidió HB20 SEDÁN y Max buscó 'alfombra hb20': no sale la del hatch", async () => {
+  actualizarCatalogo([
+    { id: "MLU10", n: "Alfombra Baúl Hb20 Hatch  Bandeja 3d Negro", p: 2900, img: "https://http2.mlstatic.com/D_10-O.jpg" },
+    { id: "MLU11", n: "Alfombra Baúl Hb20 Sedan Bandeja 3d Negro", p: 2625, img: "https://http2.mlstatic.com/D_11-O.jpg" },
+  ], "test");
+  const ctx = { _ultimoUsuario: "Hola, alfombras para HB20 sedán?", dichoPorElCliente: "Hola, alfombras para HB20 sedán?" };
+  const f = await ejecutarHerramienta("enviar_foto", { producto: "alfombra hb20" }, ctx);
+  assert.deepEqual(f.fotos.map((x) => x.nombre), ["Alfombra Baúl Hb20 Sedan Bandeja 3d Negro"]);
+  const p = await ejecutarHerramienta("consultar_precio", { modelo: "alfombra hb20" }, ctx);
+  assert.deepEqual(p.resultados.map((x) => x.nombre), ["Alfombra Baúl Hb20 Sedan Bandeja 3d Negro"]);
+});
+
+await testAsync("si no dijo sedán ni hatch, se muestran las dos", async () => {
+  const f = await ejecutarHerramienta("enviar_foto", { producto: "alfombra hb20" }, { _ultimoUsuario: "alfombras para hb20", dichoPorElCliente: "alfombras para hb20" });
+  assert.equal(f.fotos.length, 2);
+});
+
+await testAsync("vale lo ÚLTIMO que dijo (corrigió de sedán a hatch)", async () => {
+  const ctx = { _ultimoUsuario: "perdón, es hatch", dichoPorElCliente: "alfombras hb20 sedan perdón, es hatch" };
+  const f = await ejecutarHerramienta("enviar_foto", { producto: "alfombra hb20" }, ctx);
+  assert.deepEqual(f.fotos.map((x) => x.nombre), ["Alfombra Baúl Hb20 Hatch  Bandeja 3d Negro"]);
+});
+
+await testAsync("la nota pide nombrar la pieza al presentarlas", async () => {
+  const f = await ejecutarHerramienta("enviar_foto", { producto: "alfombra hb20 sedan" }, { _ultimoUsuario: "alfombras hb20 sedan", dichoPorElCliente: "alfombras hb20 sedan" });
+  assert.match(f.instruccion, /decí de qué pieza es cada una/);
+});
+
 console.log(`\n${ok} OK`);
