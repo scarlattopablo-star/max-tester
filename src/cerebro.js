@@ -2542,10 +2542,17 @@ export function filtrarPrecios(texto, acciones = [], textoCharla = "") {
   // (descuento, sumas), porque ahí el número salió del catálogo hace un segundo.
   const delCatalogo = new Set();
   for (const p of [...productosML(), ...agotadosML()]) for (const v of [p.p, p.l]) if (Number.isFinite(v) && v > 0) delCatalogo.add(v);
+  const reales = [];
   for (const m of String(textoCharla || "").matchAll(_PRECIO_EN_TEXTO)) {
     const v = _aNumero(m[1] ?? m[2]);
-    if (Number.isFinite(v) && delCatalogo.has(v)) permitidos.add(v);
+    if (Number.isFinite(v) && delCatalogo.has(v)) { permitidos.add(v); if (!reales.includes(v)) reales.push(v); }
   }
+  // Sobre esos precios REALES ya dichos también valen el 10% de transferencia y las
+  // sumas. Sin esto, en la repregunta (sin herramienta) "sale $2.700, o $2.430 por
+  // transferencia" se tomaba como inventado: se borraba la oración y se derivaba al
+  // asesor por nada (producción, 8 oct 2026, Tucson). Un número inventado sigue sin
+  // poder autorizarse solo: la base tiene que estar en el catálogo.
+  for (const v of _preciosPermitidos(reales.slice(-6))) permitidos.add(v);
   const malos = [];
   for (const m of original.matchAll(_PRECIO_EN_TEXTO)) {
     const v = _aNumero(m[1] ?? m[2]);

@@ -6,7 +6,7 @@
 process.env.CATALOGO_SIN_DISCO = "1";
 import assert from "node:assert/strict";
 import { actualizarCatalogo } from "./catalogo_vivo.js";
-import { armarRespuesta, pideAnioDeMas } from "./cerebro.js";
+import { armarRespuesta, pideAnioDeMas, filtrarPrecios } from "./cerebro.js";
 import { FRASE_CONSULTO } from "./config.js";
 
 let ok = 0;
@@ -55,6 +55,25 @@ test("año de más: alfombra + auto conocido + no buscó → se frena", () => {
   assert.ok(!pideAnioDeMas("¿Para qué auto y de qué año?", { _ultimoUsuario: "hola tienen alfombras?", dichoPorElCliente: "hola tienen alfombras?", _turno: { busco: false } }));
   // Cubreasientos: el año sí hace falta.
   assert.ok(!pideAnioDeMas("Decime el año.", { _ultimoUsuario: "cubreasiento capitoneado hb20", dichoPorElCliente: "cubreasiento capitoneado hb20", _turno: { busco: false } }));
+});
+
+// La causa real del asesor de más en la repregunta: el filtro de precios.
+actualizarCatalogo([{ id: "MLU1", n: "Alfombra Hyundai Tucson 2021+  Goma Negro", p: 2700 }], "test");
+const CHARLA_TUCSON = "alfombras tucson [Contexto interno — opciones que le mostré al cliente con foto, numeradas: 1) Alfombra Hyundai Tucson 2021+  Goma Negro - $ 2.700.] y trae la del baul?";
+
+test("repregunta sin herramienta: el 10% de transferencia de un precio real NO es inventado", () => {
+  const t = "No, es solo la de piso. Sale $2.700, o $2.430 por transferencia.";
+  assert.deepEqual(filtrarPrecios(t, [], CHARLA_TUCSON), { texto: t, inventado: null });
+});
+
+test("un precio que no sale del catálogo se sigue frenando", () => {
+  const r = filtrarPrecios("No, es solo la de piso. Sale $2.850.", [], CHARLA_TUCSON);
+  assert.equal(r.inventado, 2850);
+});
+
+test("el 10% de un precio inventado tampoco pasa", () => {
+  const r = filtrarPrecios("Sale $2.565 por transferencia.", [], "te dije que sale $ 2.850");
+  assert.equal(r.inventado, 2565);
 });
 
 console.log(`\n${ok} OK`);
