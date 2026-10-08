@@ -6,7 +6,7 @@
 process.env.CATALOGO_SIN_DISCO = "1";
 import assert from "node:assert/strict";
 import { actualizarCatalogo } from "./catalogo_vivo.js";
-import { piezaAlfombra, ejecutarHerramienta, buscarPrecio } from "./cerebro.js";
+import { piezaAlfombra, ejecutarHerramienta, buscarPrecio, filtrarJuegoAlfombras } from "./cerebro.js";
 
 let ok = 0;
 const test = (nombre, fn) => { fn(); ok++; console.log(`  ✓ ${nombre}`); };
@@ -68,6 +68,43 @@ test("pidió la de baúl: entra también la que trae piso + 'Bual'", () => {
     { id: "MLU5", n: "Alfombra Hb20 Sedan Bandeja 3d Negro", p: 3360 },
   ], "test");
   assert.deepEqual(buscarPrecio("alfombra baul hb20 sedan").map((x) => x.id).sort(), ["MLU3", "MLU4"]);
+});
+
+// ─── Lo que pasó probando producción el 8 oct 2026 ─────────────────────
+const TUCSON = [{ herramienta: "enviar_foto", resultado: { ok: true, fotos: [{ nombre: "Alfombra Hyundai Tucson 2021+  Goma Negro" }] } }];
+
+test("Tucson (solo piso): se cae el 'juego completo' y queda la verdad", () => {
+  const r = filtrarJuegoAlfombras("La de piso que te mostré es solo de piso. ¿Te interesa llevar el juego completo?", [], "alfombras para Hyundai Tucson 2022");
+  assert.equal(r, "La de piso que te mostré es solo de piso.");
+});
+
+test("se cae 'viene con la del baúl' y respeta los párrafos", () => {
+  const r = filtrarJuegoAlfombras("Sí, tenemos para tu Tucson.\n\nLa alfombra viene con la del baúl. Sale $2.700.\n\n¿La querés?", TUCSON, "alfombra tucson");
+  assert.equal(r, "Sí, tenemos para tu Tucson.\n\nSale $2.700.\n\n¿La querés?");
+});
+
+test("la que lo NIEGA se deja", () => {
+  const t = "No, la de piso y la de baúl son publicaciones aparte, cada una con su precio.";
+  assert.equal(filtrarJuegoAlfombras(t, TUCSON, "alfombra tucson"), t);
+});
+
+test("si hay una que trae las dos (en el turno o ya mostrada), no se toca", () => {
+  const t = "Esta viene con la del baúl, sale $5.900.";
+  const hb20 = [{ herramienta: "enviar_foto", resultado: { ok: true, fotos: [{ nombre: "Alfombra Hb20 Sedan 3d + Alfombra Bual 3d Negro" }] } }];
+  assert.equal(filtrarJuegoAlfombras(t, hb20, "alfombra hb20"), t);
+  const charla = "[Contexto interno — opciones que le mostré al cliente con foto, numeradas: 1) Alombra Onix Sedan Bandeja 3d+ Baul 3d Negro - $ 5.900]";
+  assert.equal(filtrarJuegoAlfombras(t, [], charla), t);
+});
+
+test("cubreasientos: 'juego completo' no se toca", () => {
+  const t = "El juego completo de cubreasientos para tu Polo sale $2.990.";
+  assert.equal(filtrarJuegoAlfombras(t, [], "cubreasiento polo"), t);
+});
+
+await testAsync("solo de baúl: la nota le prohíbe decir que hay de piso", async () => {
+  actualizarCatalogo([{ id: "MLU4", n: "Alfombra Baúl Hb20 Sedan Bandeja 3d Negro", p: 2625, img: "https://http2.mlstatic.com/D_4-O.jpg" }], "test");
+  const r = await ejecutarHerramienta("enviar_foto", { producto: "alfombra hb20 sedan" }, { _ultimoUsuario: "alfombras para HB20 sedán" });
+  assert.match(r.instruccion, /SOLO hay alfombra de BAÚL/);
 });
 
 console.log(`\n${ok} OK`);
