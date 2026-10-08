@@ -1926,8 +1926,8 @@ export function notaPiezasMostradas(nombres) {
   if (!items.length) return "";
   const piezas = new Set(items);
   let falta = "";
-  if (nombres.length < 4 && piezas.size === 1 && piezas.has("piso")) falta = " De este modelo NO hay alfombra de baúl ni ninguna que la traiga: no la ofrezcas ni digas que la tenemos.";
-  if (nombres.length < 4 && piezas.size === 1 && piezas.has("baul")) falta = " De este modelo SOLO hay alfombra de baúl: no ofrezcas ni digas que tenemos la de piso.";
+  if (nombres.length < 4 && piezas.size === 1 && piezas.has("piso")) falta = " De este modelo NO hay alfombra de baúl ni ninguna que la traiga: no la ofrezcas, no digas que la tenemos y no le ofrezcas esperarla, encargarla ni conseguirla.";
+  if (nombres.length < 4 && piezas.size === 1 && piezas.has("baul")) falta = " De este modelo SOLO hay alfombra de baúl: no ofrezcas ni digas que tenemos la de piso, ni le ofrezcas esperarla, encargarla ni conseguirla.";
   return ` Qué trae cada alfombra (título de Mercado Libre): ${items.map((p, i) => `opción ${i + 1}: ${QUE_TRAE[p]}`).join(" · ")}.${falta}`;
 }
 
@@ -2418,7 +2418,10 @@ function _frases(texto) {
 // contexto: la charla previa. Sirve cuando la promesa NO nombra el producto ("no la
 // tengo publicada, pero la hacemos igual a medida"): ahí el producto es el último
 // del que se venía hablando. Es EL caso que le pasó a Pablo con la MG ZS.
-export function filtrarInventos(texto, contexto = "") {
+// `hayAPedido`: en la charla hay artículos que Mercado Libre entrega A PEDIDO (con días).
+// Ahí "es a pedido" es la verdad, no una promesa de fabricarlo: borrarlo mandaba al
+// cliente al asesor por nada (producción, 8 oct 2026).
+export function filtrarInventos(texto, contexto = "", hayAPedido = false) {
   const original = String(texto || "");
   if (!original.trim()) return { texto: original, invento: null };
   const t = _plano(original);
@@ -2439,7 +2442,8 @@ export function filtrarInventos(texto, contexto = "") {
   if (!productos.some((p) => p.tipo === "sin_medida")) return { texto: original, invento: null };
 
   const promesas = [
-    ..._ocurrencias(t, PROMESA_FABRICAR, "fabricar"),
+    ..._ocurrencias(t, PROMESA_FABRICAR, "fabricar")
+      .filter((o) => !(hayAPedido && /^(a|sobre) pedido$/.test(t.slice(o.i, o.fin)))),
     ..._ocurrencias(t, PROMESA_COLOCAR, "colocar"),
   ].sort((a, b) => a.i - b.i);
   if (!promesas.length) return { texto: original, invento: null };
@@ -2724,7 +2728,7 @@ export function limpiarJerga(texto) {
 // ("la de piso no trae la del baúl") se dejan: dicen la verdad.
 const _OFRECE_JUEGO = /juego complet|conjunto|\bkit\b|(viene|vienen|incluye|incluyen|trae|traen|lleva|llevan)\b[^.?!]{0,25}\bbaul|piso (y|\+|con|mas) (el |la )?(alfombra )?(del |de )?baul|baul (y|\+|con|mas) (el |la )?(alfombra )?(del |de )?piso/;
 // "La del baúl también la tenemos", "¿te muestro la de piso?": ofrece la otra pieza.
-const _OFRECE_PIEZA = /tenemos|tengo|\bhay\b|disponible|muestro|mostrar|paso|interesa|queres|quieres|ofrec|opciones/;
+const _OFRECE_PIEZA = /tenemos|tengo|\bhay\b|disponible|muestro|mostrar|paso|interesa|queres|quieres|ofrec|opciones|esper|entre\b|llegue|ingres|consig|encarg|pedido|traer|traemos|conseguir/;
 const _NO_HAY_PIEZA = /\bno (la |lo |las |los )?(tenemos|tengo|hay)|sin stock|agotad|no contamos/;
 const _NIEGA_JUEGO = /\bno\b|\bsolo\b|\bsolamente\b|aparte|por separado|separad|cada una/;
 export function filtrarJuegoAlfombras(texto, acciones = [], textoCharla = "") {
@@ -2881,7 +2885,13 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // ANTI-INVENTO: si Max prometió algo que el negocio NO hace (típico: "te hacemos
   // la alfombra a medida"), se le borra esa frase, se le dice al cliente que lo
   // consulta con un asesor y se DERIVA para que una persona lo resuelva.
-  const { texto: sinInventos, invento } = filtrarInventos(limpio, ctx.textoCharla);
+  // Primero el juego piso + baúl y la pieza que no hay: si Max ofrece "encargarla" o
+  // "conseguirla", esa oración se va acá y no termina en el filtro de inventos, que la
+  // mandaría al asesor (producción, 8 oct 2026).
+  limpio = filtrarJuegoAlfombras(limpio, acciones, ctx.textoCharla);
+  const hayAPedido = acciones.some((a) => [...(a.resultado?.resultados || []), ...(a.resultado?.fotos || [])].some((x) => Number(x?.demora_dias) > 0))
+    || /a pedido: disponible en/i.test(String(ctx.textoCharla || ""));
+  const { texto: sinInventos, invento } = filtrarInventos(limpio, ctx.textoCharla, hayAPedido);
   limpio = sinInventos;
   // ANTI-PRECIO-INVENTADO: el precio lo manda la herramienta, nunca la memoria de Max.
   // Le dijo a un cliente que la bandeja del HB20 salía $2.850 cuando sale $3.360 (5 ago
@@ -2889,7 +2899,6 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // peor que no dar precio: o perdemos plata sosteniéndolo, o le quedamos mal.
   const { texto: sinPrecios, inventado } = filtrarPrecios(limpio, acciones, ctx.textoCharla);
   limpio = sinPrecios;
-  limpio = filtrarJuegoAlfombras(limpio, acciones, ctx.textoCharla);
   // ANTI-LÍNEA-EQUIVOCADA: si el cliente eligió por color y ese color está en más de
   // una línea, el guard de las herramientas ya le negó cotizar. Pero el modelo puede
   // escribir el precio igual, de memoria, sin llamar a nada: acá se le cae la frase y
