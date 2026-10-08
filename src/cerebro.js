@@ -1739,6 +1739,26 @@ const AVISO_CABINA_SIN_CONFIRMAR = (cab) => `⚠️ El cliente dijo que la suya 
 
 // Cuando la búsqueda trae cabina simple Y doble, y ni Max ni el cliente dijeron cuál
 // es, no se cotiza: se pregunta. Son vehículos distintos y el precio cambia.
+// SEDÁN o HATCH: si el cliente lo dijo, se respeta aunque Max no lo ponga en la
+// búsqueda. Probado contra producción el 8 oct 2026: el cliente pidió "alfombras para
+// HB20 sedán", Max buscó "alfombra hb20" y le mandó también la del HB20 Hatch, con su
+// precio. Vale lo ÚLTIMO que dijo (si cambia de auto en la charla, manda el nuevo).
+// Los títulos que no dicen ninguna de las dos se quedan: pueden servir para las dos.
+const CARROCERIAS = [["sedan", /\bsedan\b/g], ["hatch", /\bhatch(?:back)?\b/g]];
+function carroceriaDicha(texto) {
+  const t = _normTxt(texto);
+  let ultima = null, pos = -1;
+  for (const [c, re] of CARROCERIAS) for (const m of t.matchAll(re)) if (m.index > pos) { pos = m.index; ultima = c; }
+  return ultima;
+}
+function porCarroceria(lista, ctx = {}) {
+  const dicha = carroceriaDicha(`${ctx.dichoPorElCliente || ""} ${ctx._ultimoUsuario || ""}`);
+  if (!dicha) return lista;
+  const de = (item) => carroceriaDicha(item.nombre || item.n || "");
+  if (!lista.some((x) => de(x) === dicha)) return lista; // ninguna lo dice: no se adivina
+  return lista.filter((x) => { const c = de(x); return !c || c === dicha; });
+}
+
 function faltaCabina(encontrados, consulta, textoCliente) {
   if (cabinaDe(consulta) || cabinaDe(textoCliente || "")) return null;
   if (!mezclaCabinas(encontrados)) return null;
@@ -1893,7 +1913,7 @@ function notaPiezasAlfombra(nombres) {
     : piezas.size === 1 && piezas.has("piso")
       ? " ⛔ De este modelo NO hay alfombra de baúl ni ninguna que la traiga: NO ofrezcas \"el juego completo\" ni la del baúl. Si la pide, decile que de baúl para ese modelo no tenemos por ahora."
       : "";
-  return `🧩 QUÉ TRAE CADA ALFOMBRA (tal cual su título de Mercado Libre): ${detalle}. ⛔ Cada publicación es un producto aparte, con SU precio. NO digas que la de piso viene con / incluye / se complementa con la del baúl si su título no lo dice, NO armes un "juego" o "conjunto" de piso + baúl y NO sumes los precios de dos publicaciones. Si el cliente pregunta si trae la del baúl, contestale según esto.${falta}`;
+  return `🧩 QUÉ TRAE CADA ALFOMBRA (tal cual su título de Mercado Libre): ${detalle}. ⛔ Cada publicación es un producto aparte, con SU precio. NO digas que la de piso viene con / incluye / se complementa con la del baúl si su título no lo dice, NO armes un "juego" o "conjunto" de piso + baúl y NO sumes los precios de dos publicaciones. Al presentarlas, decí de qué pieza es cada una (de piso, de baúl o las dos): el cliente no lo puede adivinar por la foto. Si el cliente pregunta si trae la del baúl, contestale según esto.${falta}`;
 }
 
 // ⚠️ Sin ";" ni "1)": la nota la parsean _ultimosMostrados y eleccionAmbigua.
@@ -2085,7 +2105,7 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // Va ANTES de buscar: ver el comentario de preventaTesla().
       const pvPrecio = preventaTesla(consulta, ctx._ultimoUsuario);
       if (pvPrecio) return pvPrecio;
-      const encontrados = buscarPrecio(consulta);
+      const encontrados = porCarroceria(buscarPrecio(consulta), ctx);
       if (!encontrados.length) return { ...sinStockOInexistente(consulta, ctx._ultimoUsuario) };
       // Si no sabemos QUÉ AUTO tiene, lo que encontramos es de un modelo cualquiera:
       // darle ese precio es mentirle. Se le pregunta el vehículo primero.
@@ -2142,7 +2162,7 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // Mandar una foto ES cotizar (el pie lleva el precio), asi que el mismo freno.
       const pvFoto = preventaTesla(consulta, ctx._ultimoUsuario);
       if (pvFoto) return { ok: false, ...pvFoto };
-      const hallados = buscarPrecio(consulta);
+      const hallados = porCarroceria(buscarPrecio(consulta), ctx);
       // Solo cuando NO hay nada del producto miramos si está agotado o si no lo
       // trabajamos: si hay productos pero ninguno tiene foto, es otro problema.
       if (!hallados.length) return { ok: false, ...sinStockOInexistente(consulta, ctx._ultimoUsuario) };
