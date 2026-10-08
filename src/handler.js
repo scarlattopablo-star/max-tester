@@ -1,6 +1,6 @@
 // Handler único e independiente del canal.
 // Lo usan por igual el simulador, WhatsApp (Baileys) e Instagram.
-import { responder, notaPiezasMostradas } from "./cerebro.js";
+import { responder, notaPiezasMostradas, notaCotizadas } from "./cerebro.js";
 import { historial, agregar } from "./memoria.js";
 import { respuestaInstagram } from "./instagram.js";
 import { guardarComprobanteDataUri } from "./comprobantes.js";
@@ -74,6 +74,11 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
     // Para alfombras, qué trae cada una (piso / baúl / las dos), para la repregunta.
     const piezas = notaPiezasMostradas(imagenesEnviar.map((f) => f.caption.replace(/^\d+\)\s*/, "").replace(/\s+-\s+(?:\$|U\$S|USD).*$/, "")));
     contenidoAssistant = `${respuesta}⁣[Contexto interno — opciones que le mostré al cliente con foto, numeradas: ${ops}.${piezas} Si el cliente elige un número ("la 1", "el 2", "quiero la primera"), corresponde a ESTA lista; NO vuelvas a mostrar las opciones: avanzá con la que eligió.]`;
+  }
+  // Alfombras cotizadas SIN foto: igual se anota qué se le cotizó (piezas y precios).
+  if (!imagenesEnviar.length) {
+    const cot = notaCotizadas(acciones || []);
+    if (cot) contenidoAssistant += `${contenidoAssistant.includes("⁣") ? " " : "⁣"}${cot}`;
   }
   if (videosEnviar.length) {
     const vids = videosEnviar.map((v) => v.caption).join("; ");
