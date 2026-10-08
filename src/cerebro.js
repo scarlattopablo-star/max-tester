@@ -1931,13 +1931,39 @@ export function notaPiezasMostradas(nombres) {
   return ` Qué trae cada alfombra (título de Mercado Libre): ${items.map((p, i) => `opción ${i + 1}: ${QUE_TRAE[p]}`).join(" · ")}.${falta}`;
 }
 
-// Nombres de los productos de la ÚLTIMA tanda de fotos que quedó en la charla.
+// Notas internas con lo que se le mostró al cliente: con foto (handler.js) o cotizado
+// sin foto (notaCotizadas). Las escribe el SISTEMA, no Max: nombres y precios salen
+// del catálogo en ese momento.
+const _RE_NOTA_OPCIONES = /\[Contexto interno — opciones que le (?:mostr[ée] al cliente con foto, numeradas|cotic[ée] sin foto):([^\]]*)\]/gi;
+const _itemsDeNota = (cuerpo) => cuerpo.split(/;\s*/)
+  .map((c) => c.match(/^\s*\d+\)\s*(.*?)(?:\s+-\s+(?:\$|U\$S|USD)\s*([\d.,]+).*)?$/))
+  .filter((m) => m && m[1])
+  .map((m) => ({ nombre: m[1], precio: m[2] ? _aNumero(m[2]) : null }));
+// Nombres de los productos de la ÚLTIMA tanda que quedó en la charla.
 function _ultimosMostrados(textoCharla) {
-  const notas = [...String(textoCharla || "").matchAll(_RE_NOTA_FOTOS)];
+  const notas = [...String(textoCharla || "").matchAll(_RE_NOTA_OPCIONES)];
   if (!notas.length) return [];
-  return notas[notas.length - 1][1].split(/;\s*/)
-    .map((c) => (c.match(/^\s*\d+\)\s*(.*?)(?:\s+-\s+(?:\$|U\$S|USD).*)?$/) || [])[1])
-    .filter(Boolean);
+  return _itemsDeNota(notas[notas.length - 1][1]).map((x) => x.nombre);
+}
+// Precios que el SISTEMA le mostró al cliente (pies de foto / cotizaciones), en toda la charla.
+function _preciosMostrados(textoCharla) {
+  return [...String(textoCharla || "").matchAll(_RE_NOTA_OPCIONES)]
+    .flatMap((m) => _itemsDeNota(m[1]).map((x) => x.precio))
+    .filter((v) => Number.isFinite(v) && v > 0);
+}
+
+// Para handler.js: si Max cotizó ALFOMBRAS sin mandar foto (consultar_precio), igual
+// queda registrado qué se le cotizó. Sin esto, en la repregunta no se sabía qué tenía
+// a la vista el cliente y Max ofrecía "la del baúl para completar el juego" de una
+// Tucson que no tiene (producción, 8 oct 2026).
+export function notaCotizadas(acciones = []) {
+  const items = acciones
+    .filter((a) => a.herramienta === "consultar_precio" && a.resultado?.encontrado)
+    .flatMap((a) => a.resultado.resultados || [])
+    .filter((x) => x?.nombre && piezaAlfombra(x.nombre));
+  if (!items.length) return "";
+  const ops = items.slice(0, 6).map((x, i) => `${i + 1}) ${x.nombre}${x.precio ? ` - ${_fmtPrecio(x.precio, x.moneda)}` : ""}`).join("; ");
+  return `[Contexto interno — opciones que le coticé sin foto: ${ops}.${notaPiezasMostradas(items.slice(0, 6).map((x) => x.nombre))}]`;
 }
 
 export async function ejecutarHerramienta(nombre, input, ctx = {}) {
@@ -2546,7 +2572,12 @@ export function filtrarPrecios(texto, acciones = [], textoCharla = "") {
   // (descuento, sumas), porque ahí el número salió del catálogo hace un segundo.
   const delCatalogo = new Set();
   for (const p of [...productosML(), ...agotadosML()]) for (const v of [p.p, p.l]) if (Number.isFinite(v) && v > 0) delCatalogo.add(v);
-  const reales = [];
+  // Los precios que el SISTEMA puso en los pies de foto / cotizaciones son reales aunque
+  // el catálogo se haya resincronizado después: en ML el precio de algunas alfombras
+  // cambia de una sync a otra ($2.672 ↔ $2.625 la de baúl del HB20, 8 oct 2026), y
+  // la repregunta lo tomaba como inventado → oración borrada y asesor por nada.
+  const reales = [...new Set(_preciosMostrados(textoCharla))];
+  for (const v of reales) permitidos.add(v);
   for (const m of String(textoCharla || "").matchAll(_PRECIO_EN_TEXTO)) {
     const v = _aNumero(m[1] ?? m[2]);
     if (Number.isFinite(v) && delCatalogo.has(v)) { permitidos.add(v); if (!reales.includes(v)) reales.push(v); }
@@ -2726,7 +2757,7 @@ export function limpiarJerga(texto) {
 // apareció NINGUNA alfombra que traiga las dos (título con "+ ... Baul"), se borra la
 // oración que ofrece el juego o dice que la de piso trae la del baúl. Las que lo NIEGAN
 // ("la de piso no trae la del baúl") se dejan: dicen la verdad.
-const _OFRECE_JUEGO = /juego complet|conjunto|\bkit\b|(viene|vienen|incluye|incluyen|trae|traen|lleva|llevan)\b[^.?!]{0,25}\bbaul|piso (y|\+|con|mas) (el |la )?(alfombra )?(del |de )?baul|baul (y|\+|con|mas) (el |la )?(alfombra )?(del |de )?piso/;
+const _OFRECE_JUEGO = /juego complet|complet\w* (el|tu|su) juego|armar (el|un) juego|conjunto|\bkit\b|(viene|vienen|incluye|incluyen|trae|traen|lleva|llevan)\b[^.?!]{0,25}\b(tambien|ademas|junt\w*|con) [^.?!]{0,12}\bbaul|piso (y|\+|con|mas) (el |la )?(alfombra )?(del |de )?baul|baul (y|\+|con|mas) (el |la )?(alfombra )?(del |de )?piso/;
 // "La del baúl también la tenemos", "¿te muestro la de piso?": ofrece la otra pieza.
 const _OFRECE_PIEZA = /tenemos|tengo|\bhay\b|disponible|muestro|mostrar|paso|interesa|queres|quieres|ofrec|opciones|esper|entre\b|llegue|ingres|consig|encarg|pedido|traer|traemos|conseguir/;
 const _NO_HAY_PIEZA = /\bno (la |lo |las |los )?(tenemos|tengo|hay)|sin stock|agotad|no contamos/;
@@ -2748,7 +2779,10 @@ export function filtrarJuegoAlfombras(texto, acciones = [], textoCharla = "") {
   // Con menos de 4 fotos la búsqueda no se recortó: lo que no vino, no hay.
   const completa = mostrados.length > 0 && mostrados.length < 4 && piezas.size === 1;
   const noHay = completa && piezas.has("piso") ? /\bbaul/ : completa && piezas.has("baul") ? /\bpiso\b/ : null;
-  const ofreceOtra = (n) => noHay && noHay.test(n) && _OFRECE_PIEZA.test(n) && !_NO_HAY_PIEZA.test(n);
+  // "¿...o preferís esperar?" sin nombrar la pieza también promete que va a llegar.
+  const ofreceOtra = (n) => noHay && !_NO_HAY_PIEZA.test(n)
+    && ((noHay.test(n) && _OFRECE_PIEZA.test(n))
+      || (/\besper(ar|as|arla|arlo)\b|a tener las dos/.test(n) && !/\bno (hace falta|tenes que|necesitas)|sin esperar/.test(n)));
   const queda = (o) => { const n = _normTxt(o); return (!_OFRECE_JUEGO.test(n) || _NIEGA_JUEGO.test(n)) && !ofreceOtra(n); };
   // Por oración y respetando los párrafos: cada párrafo sale como un mensaje aparte.
   return original
@@ -3180,7 +3214,7 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
     }
 
     const texto = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
-    // Pidió el año sin buscar la alfombra: una vuelta más, con la consigna de buscar.
+      // Pidió el año sin buscar la alfombra: una vuelta más, con la consigna de buscar.
     if (!ctx._turno.frenoAnio && vuelta < 5 && pideAnioDeMas(texto, ctx)) {
       ctx._turno.frenoAnio = true;
       messages.push({ role: "assistant", content: resp.content });

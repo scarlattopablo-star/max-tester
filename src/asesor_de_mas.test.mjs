@@ -6,7 +6,7 @@
 process.env.CATALOGO_SIN_DISCO = "1";
 import assert from "node:assert/strict";
 import { actualizarCatalogo } from "./catalogo_vivo.js";
-import { armarRespuesta, pideAnioDeMas, filtrarPrecios, filtrarInventos } from "./cerebro.js";
+import { armarRespuesta, pideAnioDeMas, filtrarPrecios, filtrarInventos, filtrarJuegoAlfombras, notaCotizadas } from "./cerebro.js";
 import { FRASE_CONSULTO } from "./config.js";
 
 let ok = 0;
@@ -95,6 +95,42 @@ test("'es a pedido' cuando de verdad hay artículos a pedido: no es invento", ()
   assert.ok(filtrarInventos(t, "alfombras", false).invento);
   // Y "a medida" nunca: las alfombras no se fabrican.
   assert.ok(filtrarInventos("Esa alfombra te la hacemos a medida.", "alfombras", true).invento);
+});
+
+// ─── Precio que cambió en ML entre una sync y otra ─────────────────────
+test("precio que el sistema mostró en la foto vale aunque el catálogo ya cambió", () => {
+  actualizarCatalogo([{ id: "MLU11", n: "Alfombra Baúl Hb20 Sedan Bandeja 3d Negro", p: 2625 }], "test"); // antes era 2.672
+  const charla = "alfombras hb20 sedan [Contexto interno — opciones que le mostré al cliente con foto, numeradas: 1) Alfombra Baúl Hb20 Sedan Bandeja 3d Negro - $ 2.672.] cual trae la del baul?";
+  const t = "La opción 1 es la del baúl, a $2.672 (o $2.405 por transferencia).";
+  assert.deepEqual(filtrarPrecios(t, [], charla), { texto: t, inventado: null });
+  // Lo que Max escribió de memoria (fuera de la nota) no se auto-autoriza.
+  assert.equal(filtrarPrecios("Sale $2.850.", [], "Max: sale $ 2.850").inventado, 2850);
+});
+
+// ─── Cotizó sin foto: igual queda anotado qué se le mostró ─────────────
+test("cotizado sin foto: la nota guarda piezas y precios, y el filtro la usa", () => {
+  const acc = [{ herramienta: "consultar_precio", resultado: { encontrado: true, resultados: [{ nombre: "Alfombra Hyundai Tucson 2021+  Goma Negro", precio: 2700 }] } }];
+  const nota = notaCotizadas(acc);
+  assert.match(nota, /opciones que le coticé sin foto: 1\) Alfombra Hyundai Tucson 2021\+  Goma Negro - \$ 2\.700\./);
+  assert.match(nota, /NO hay alfombra de baúl/);
+  const charla = `alfombra para tucson Tenemos la de piso.\u2063${nota} viene con la del baúl?`;
+  const r = filtrarJuegoAlfombras("No, esa es solo la de piso. ¿Te interesa también la del baúl para completar el juego?", [], charla);
+  assert.equal(r, "No, esa es solo la de piso.");
+  assert.equal(notaCotizadas([{ herramienta: "consultar_precio", resultado: { encontrado: true, resultados: [{ nombre: "Cubreasiento Hilux Negro", precio: 9000 }] } }]), "");
+});
+
+test("'la opción que te mostré trae la del baúl' (es la de baúl): no se borra", () => {
+  const charla = "alfombras hb20 sedan [Contexto interno — opciones que le mostré al cliente con foto, numeradas: 1) Alfombra Baúl Hb20 Sedan Bandeja 3d Negro - $ 2.625.]";
+  const t = "La opción que te mostré trae la del baúl. Es la única que tenemos para el HB20 sedán.";
+  assert.equal(filtrarJuegoAlfombras(t, [], charla), t);
+  // Pero "la de piso trae también la del baúl" sí.
+  assert.equal(filtrarJuegoAlfombras("Sí. La de piso trae también la del baúl.", [], "alfombra tucson [Contexto interno — opciones que le mostré al cliente con foto, numeradas: 1) Alfombra Hyundai Tucson 2021+  Goma Negro - $ 2.700.]"), "Sí.");
+});
+
+test("'¿o preferís esperar?' sin nombrar la pieza que no hay: también se cae", () => {
+  const charla = "alfombra tucson [Contexto interno — opciones que le mostré al cliente con foto, numeradas: 1) Alfombra Hyundai Tucson 2021+  Goma Negro - $ 2.700.]";
+  assert.equal(filtrarJuegoAlfombras("No, es solo la de piso. ¿Te interesa la del piso igual, o preferís esperar?", [], charla), "No, es solo la de piso.");
+  assert.equal(filtrarJuegoAlfombras("No hace falta esperar: la tenés en el momento.", [], charla), "No hace falta esperar: la tenés en el momento.");
 });
 
 console.log(`\n${ok} OK`);
