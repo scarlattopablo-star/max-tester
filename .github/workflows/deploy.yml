@@ -7,6 +7,12 @@
 # de las cabinas JMC quedó en `main` sin llegar a producción (26 ago 2026).
 # Acá vive en el repo, así que no se pierde nunca más.
 #
+# DESDE OCT 2026 el auto-deploy nativo de Render SÍ dispara (producción levantaba cada
+# merge a los ~30 s aunque este workflow fallaba por no tener el secret). Disparar el
+# hook igual = DOS deploys por merge = dos arranques en frío con Max caído. Por eso
+# primero se espera a que Render lo levante solo, y el hook queda de RESPALDO: se
+# dispara solo si el nativo no aparece (ya se cortó una vez y puede volver a pasar).
+#
 # SETUP (una sola vez): Settings → Secrets and variables → Actions → New repository
 # secret, nombre `RENDER_DEPLOY_HOOK`, valor = la URL del Deploy Hook de Render
 # (Render → servicio max-tester → Settings → Deploy Hook). Es la MISMA URL que estaba
@@ -34,7 +40,29 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Disparar el Deploy Hook de Render
+      - name: Esperar a que Render lo levante solo (auto-deploy nativo)
+        id: nativo
+        run: |
+          esperado="${GITHUB_SHA:0:7}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Disparado a mano: voy directo al Deploy Hook."
+            echo "listo=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          for i in $(seq 1 18); do   # 18 × 20s = 6 min
+            actual=$(curl -s --max-time 30 "https://max-tester.onrender.com/api/estado" \
+              | jq -r '.build.commit // empty' 2>/dev/null || true)
+            echo "intento $i -> corriendo: ${actual:-(sin respuesta)}"
+            if [ "$actual" = "$esperado" ]; then
+              echo "✅ Render lo levantó solo: no hace falta el hook"
+              echo "listo=true" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            sleep 20
+          done
+          echo "El auto-deploy nativo no apareció en 6 min: paso al Deploy Hook."
+          echo "listo=false" >> "$GITHUB_OUTPUT"
+
+      - name: Disparar el Deploy Hook de Render (respaldo)
+        if: steps.nativo.outputs.listo != 'true'
         env:
           HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
@@ -51,6 +79,7 @@ jobs:
           esac
 
       - name: Esperar a que Render levante este commit
+        if: steps.nativo.outputs.listo != 'true'
         # No hace fallar el job: en el plan free el build + arranque en frío puede
         # pasarse de este margen sin que nada esté mal. Si no converge, avisa fuerte.
         continue-on-error: true
