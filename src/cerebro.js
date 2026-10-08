@@ -2747,6 +2747,42 @@ export function filtrarJuegoAlfombras(texto, acciones = [], textoCharla = "") {
     .join("\n\n");
 }
 
+// ASESOR DE MÁS (probado contra producción el 8 oct 2026): con la alfombra ya mostrada
+// y el precio dado, Max cerraba igual con "Dejame consultarlo con un asesor así te
+// confirmo bien; enseguida se comunican con vos". Esa frase dispara una derivación
+// (ver prometioAsesor): el equipo recibe una consulta que ya estaba resuelta y el
+// cliente queda esperando un llamado que no hacía falta. Si de la ALFOMBRA ya se le
+// mostró lo que hay y el cliente no pidió hablar con una persona, la frase se cae.
+const _PIDE_PERSONA = /asesor|humano|persona|vendedor|alguien|hablar con|llam(a|en|ame|ar)\b|atiend/;
+const _OFRECIO_ASESOR = /[¿?][^?]*\b(quer[eé]s|quiere|te parece)\b[^?]*\b(pas[eoa]r?|pase|paso|derive|derivar|asesor|compa[ñn]ero|vendedor)\b[^?]*\?/i;
+function asesorDeMas(ctx = {}, acciones = []) {
+  const cliente = _normTxt(ctx.dichoPorElCliente || ctx._ultimoUsuario || "");
+  const ultimo = _normTxt(ctx._ultimoUsuario || "");
+  if (!CATEGORIAS.alfombra.test(cliente) || CATEGORIAS.cubreasiento.test(ultimo)) return false;
+  if (_PIDE_PERSONA.test(ultimo)) return false;
+  // Si Max le OFRECIÓ el asesor en el mensaje anterior, el "sí" del cliente es para eso.
+  if (_OFRECIO_ASESOR.test(String(ctx.textoCharla || "").slice(-700))) return false;
+  const t = ctx._turno || {};
+  if (t.alfombraEntrando || t.preventa || t.cubreasientoAMedida || t.frenoLinea) return false;
+  const pend = t.derivacionPendiente;
+  if (pend && DERIVACION_DIRECTA.has(String(pend.motivo || ""))) return false;
+  const nombres = acciones.flatMap((a) => [...(a.resultado?.resultados || []), ...(a.resultado?.fotos || [])]).map((x) => x?.nombre);
+  const mostro = nombres.some((n) => piezaAlfombra(n)) || _ultimosMostrados(ctx.textoCharla).some((n) => piezaAlfombra(n));
+  return mostro;
+}
+
+// AÑO DE MÁS (producción, 8 oct 2026): "alfombras para HB20 sedán" → "Tenemos opciones
+// para tu HB20 sedán. Decime el año y te paso todo", sin haber buscado nada. Para una
+// alfombra, con el auto alcanza para buscar: el año no cambia lo que hay publicado.
+export function pideAnioDeMas(texto, ctx = {}) {
+  if (ctx._turno?.busco) return false;
+  const t = _normTxt(texto);
+  if (!/\bano\b/.test(t) || !/\?|decime|pasame|contame|indicame|necesito/.test(t)) return false;
+  const cliente = ctx.dichoPorElCliente || ctx._ultimoUsuario || "";
+  return CATEGORIAS.alfombra.test(_normTxt(cliente)) && !CATEGORIAS.cubreasiento.test(_normTxt(ctx._ultimoUsuario || "")) && nombroVehiculo(cliente);
+}
+const NOTA_ANIO_DE_MAS = "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) No le pidas el año: para alfombras con el auto alcanza. Buscá AHORA con \"enviar_foto\" (producto: alfombra + el auto tal cual lo dijo, con sedán/hatch si lo dijo) y mostrale lo que hay.";
+
 export function armarRespuesta(texto, acciones, ctx = {}) {
   const CON_FOTOS = new Set(["enviar_foto", "mostrar_capitoneado", "mostrar_ecocuero", "mostrar_cuero_sport"]);
   // ⛔ Red de seguridad del "no se ofrece lo que no tenemos": el guard de las
@@ -2869,6 +2905,18 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
       .join("\n\n")
       .trim();
     limpio = [base, ambiguo.pregunta].filter(Boolean).join("\n\n");
+  }
+  if (!invento && inventado == null && prometioAsesor(limpio) && asesorDeMas(ctx, acciones)) {
+    const sin = limpio
+      .split(/\n\s*\n/)
+      .map((par) => par.split(/(?<=[.!?…])[ \t]+/).filter((o) => !prometioAsesor(o)).join(" ").trim())
+      .filter(Boolean)
+      .join("\n\n");
+    if (sin) {
+      limpio = sin;
+      if (ctx._turno) ctx._turno.derivacionPendiente = null;
+      for (const a of acciones) if (a.herramienta === "derivar_a_humano") a.resultado = { ok: false, motivo: "asesor_de_mas" };
+    }
   }
   // Y si Max le dijo al cliente que lo consulta / lo pasa con un asesor pero se
   // olvidó de llamar la herramienta, la derivación se registra igual: nadie queda
@@ -3116,6 +3164,13 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
     }
 
     const texto = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+    // Pidió el año sin buscar la alfombra: una vuelta más, con la consigna de buscar.
+    if (!ctx._turno.frenoAnio && vuelta < 5 && pideAnioDeMas(texto, ctx)) {
+      ctx._turno.frenoAnio = true;
+      messages.push({ role: "assistant", content: resp.content });
+      messages.push({ role: "user", content: NOTA_ANIO_DE_MAS });
+      continue;
+    }
     return armarRespuesta(texto.trim() || textoParcial, acciones, ctx);
   }
   return armarRespuesta(textoParcial, acciones, ctx);
