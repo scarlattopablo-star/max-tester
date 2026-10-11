@@ -20,6 +20,23 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
+## 🖼️ SESIÓN 10 oct — "¿CUÁL DE LAS OPCIONES?" SIN HABER MOSTRADO NADA (LO MÁS NUEVO)
+
+Reportado por Pablo (captura del chat): cliente pide alfombras para su **Oroch doble cabina**
+y Max contesta *"¿Cuál de las opciones te interesa?"* y después *"¿Cuál te gustó de las
+opciones que te mostré?"* — sin ninguna foto ni precio. Las dos alfombras de la Oroch
+(caja $3.325, bandeja de piso $3.790) SÍ están en el catálogo y `enviar_foto` las devuelve
+bien: el modelo (Haiku 4.5) copiaba la pregunta de cierre del flujo de fotos y se salteaba
+la llamada a la herramienta. No se reproduce siempre (es intermitente).
+
+**Arreglo (por código, como siempre):** `opcionesSinFotos()` en `cerebro.js`. Si la respuesta
+le pide al cliente elegir entre opciones ("cuál de las opciones / cuál te gustó / las que te
+mostré / decime el número"), sin precios en el texto, y ni en este turno ni en los últimos 3
+mensajes de Max se mostró nada (fotos o la nota interna de cotizadas), se le da UNA vuelta
+más con `NOTA_OPCIONES_SIN_FOTOS` para que llame a `enviar_foto`. Si ya las había mostrado
+hace poco, no se toca (no hay reenvío de fotos).
+Tests: `src/opciones_sin_fotos.test.mjs` (8 casos, entra en `npm test`).
+
 ## 🌐 SESIÓN 7 oct (noche) — PEDIDOS WEB POR TRANSFERENCIA: AVISO RECIÉN CON EL COMPROBANTE
 
 La tienda web mandaba mail + WhatsApp ("Pedido por transferencia (esperando comprobante)")
@@ -45,7 +62,7 @@ para la búsqueda ("4 D" separado, como la del Swift, daba cero).
 - Prompt (REGLAS DE ORO): nombrar cada alfombra con la versión de su título y su precio,
   no inventar diferencias entre versiones (solo lo que dicen los títulos).
 
-## 🏦 SESIÓN 7 oct — TRANSFERENCIAS: AL EQUIPO SOLO CON EL COMPROBANTE (LO MÁS NUEVO)
+## 🏦 SESIÓN 7 oct — TRANSFERENCIAS: AL EQUIPO SOLO CON EL COMPROBANTE
 
 Max avisaba al equipo apenas el cliente decía "ya transferí" (o al tomar un pedido por
 transferencia), antes de tener el comprobante. Ahora **el equipo se entera recién cuando
