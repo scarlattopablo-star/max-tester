@@ -20,7 +20,18 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
-## 🖼️ SESIÓN 10 oct — "¿CUÁL DE LAS OPCIONES?" SIN HABER MOSTRADO NADA (LO MÁS NUEVO)
+## 🧶 SESIÓN 10 oct (2) — "ALFOMBRA DE PISO" DABA CERO (LO MÁS NUEVO)
+
+Probando el arreglo de abajo contra producción, Max le dijo a un cliente de Oroch doble
+cabina que "para doble cabina no tenemos alfombra". Causa: buscó "alfombra **piso** Oroch
+doble cabina" y la búsqueda exigía la palabra "piso" en el título, pero la de piso está
+publicada como "Alfombra Oroch Bandeja Rigida". Con el catálogo real, "alfombra piso
+<auto>" daba **cero en 23 de 24 modelos** → Max decía que no había / ofrecía avisar.
+**Arreglo:** "piso" pasó a `STOP_BUSQUEDA` (no se exige) y `soloPiso()` lo usa como filtro
+de pieza: saca la de caja y la de baúl (si de ese auto solo hay la de baúl, de piso no hay).
+Tests: `src/alfombra_piso.test.mjs`.
+
+## 🖼️ SESIÓN 10 oct — "¿CUÁL DE LAS OPCIONES?" SIN HABER MOSTRADO NADA
 
 Reportado por Pablo (captura del chat): cliente pide alfombras para su **Oroch doble cabina**
 y Max contesta *"¿Cuál de las opciones te interesa?"* y después *"¿Cuál te gustó de las
