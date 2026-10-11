@@ -2831,6 +2831,30 @@ export function pideAnioDeMas(texto, ctx = {}) {
 }
 const NOTA_ANIO_DE_MAS = "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) No le pidas el año: para alfombras con el auto alcanza. Buscá AHORA con \"enviar_foto\" (producto: alfombra + el auto tal cual lo dijo, con sedán/hatch si lo dijo) y mostrale lo que hay.";
 
+// OPCIONES QUE NUNCA SE MOSTRARON (producción, 10 oct 2026, alfombras Oroch doble
+// cabina): Max preguntó "¿Cuál de las opciones te interesa?" y después "¿Cuál te gustó
+// de las opciones que te mostré?" sin haber llamado a ninguna herramienta: el cliente no
+// recibió ni una foto ni un precio. Las dos alfombras de la Oroch estaban en el catálogo
+// y enviar_foto las devolvía bien; el modelo copiaba la pregunta de cierre del flujo de
+// fotos y se salteaba la llamada. Si le pide al cliente que elija entre opciones que no
+// salieron en este turno ni en los últimos mensajes, se le da una vuelta más para buscar.
+const _PIDE_ELEGIR = /\bcual(?:es)?\s+(?:de\s+)?(?:las|los|estas|esas)\s+(?:opciones|dos|tres|cuatro|alfombras|fotos|modelos|variantes)\b|\bcual\s+te\s+(?:gusto|gusta|interesa|convence|sirve)\b|\b(?:opciones|fotos)\s+que\s+te\s+(?:mostre|pase|mande|comparti|envie)\b|\bte\s+(?:mostre|pase|mande|comparti|envie)\s+(?:las|unas|dos|tres|cuatro)\s+(?:opciones|fotos|alfombras)\b|\bdecime\s+el\s+numero\b/;
+const _MUESTRAN_PRODUCTO = new Set(["enviar_foto", "consultar_precio", "mostrar_capitoneado", "mostrar_ecocuero", "mostrar_cuero_sport", "mostrar_tela"]);
+export function opcionesSinFotos(texto, acciones = [], ctx = {}) {
+  const t = _normTxt(texto);
+  if (!_PIDE_ELEGIR.test(t) || /\$\s?\d/.test(String(texto || ""))) return false;
+  // Este turno ya mostró algo (fotos, videos o una cotización con resultados).
+  const mostro = acciones.some((a) => _MUESTRAN_PRODUCTO.has(a.herramienta)
+    && (a.resultado?.ok || a.resultado?.encontrado || (a.resultado?.fotos || []).length || (a.resultado?.resultados || []).length));
+  if (mostro) return false;
+  // Se le mostraron hace poco (la nota interna que deja handler.js en el historial).
+  _RE_NOTA_OPCIONES.lastIndex = 0;
+  const reciente = _RE_NOTA_OPCIONES.test(String(ctx._recientesMax || ""));
+  _RE_NOTA_OPCIONES.lastIndex = 0;
+  return !reciente;
+}
+const NOTA_OPCIONES_SIN_FOTOS = "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) Le estás pidiendo que elija entre \"las opciones\", pero todavía NO le mandaste ninguna: no vio ni una foto ni un precio. Llamá AHORA a \"enviar_foto\" con el producto y el vehículo tal cual los dijo el cliente (ej: \"alfombra Oroch doble cabina\") y después escribí una intro corta antes de la pregunta. ⛔ No le preguntes cuál le gustó de algo que no vio.";
+
 export function armarRespuesta(texto, acciones, ctx = {}) {
   const CON_FOTOS = new Set(["enviar_foto", "mostrar_capitoneado", "mostrar_ecocuero", "mostrar_cuero_sport"]);
   // ⛔ Red de seguridad del "no se ofrece lo que no tenemos": el guard de las
@@ -3224,6 +3248,13 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
       messages.push({ role: "user", content: NOTA_ANIO_DE_MAS });
       continue;
     }
+    // Pide elegir entre opciones que el cliente nunca vio: una vuelta más, a buscarlas.
+    if (!ctx._turno.frenoOpciones && vuelta < 5 && opcionesSinFotos(texto, acciones, ctx)) {
+      ctx._turno.frenoOpciones = true;
+      messages.push({ role: "assistant", content: resp.content });
+      messages.push({ role: "user", content: NOTA_OPCIONES_SIN_FOTOS });
+      continue;
+    }
     return armarRespuesta(texto.trim() || textoParcial, acciones, ctx);
   }
   return armarRespuesta(textoParcial, acciones, ctx);
@@ -3245,6 +3276,9 @@ export async function responder(textoUsuario, historialPrevio = [], imagenes = [
     // en el catálogo ("Max Resistencia"), así que la charla entera daba SIEMPRE
     // "el cliente ya nombró su auto" — con su propio saludo.
     dichoPorElCliente: [...(historialPrevio || []).filter((m) => m.role === "user").map(_texto), textoUsuario].join(" "),
+    // Los últimos mensajes de Max, con sus notas internas: dicen si ya le mostró
+    // opciones al cliente hace poco (lo mira opcionesSinFotos).
+    _recientesMax: (historialPrevio || []).filter((m) => m.role === "assistant").slice(-3).map(_texto).join(" "),
   };
   // Proveedor "claude" -> SDK nativo con caché de prompt (mucho más barato que el modo compat).
   if ((process.env.IA_PROVIDER || "gemini").toLowerCase() === "claude") {
