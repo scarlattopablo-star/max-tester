@@ -58,6 +58,12 @@ const STOP_BUSQUEDA = new Set([
   // "volante" es una CATEGORÍA (la filtra categoriaDe), no un dato del auto: exigirla
   // dentro del título dejaba fuera los "Cubrevolante..." , que la traen pegada.
   "volante", "volantes",
+  // "piso" es la PIEZA de la alfombra, y la mayoría de los títulos no la escribe: la de
+  // piso de la Oroch es "Alfombra Oroch Bandeja Rigida". Exigirla dejaba en cero
+  // "alfombra piso Oroch doble cabina" y Max le dijo al cliente que para su doble cabina
+  // no había (10 oct 2026). No se exige: se usa para sacar la de caja y la de baúl
+  // (ver `soloPiso` en buscarPrecio).
+  "piso", "pisos",
 ]);
 
 // Marcas de vehículo. Identifican menos que el MODELO y en los títulos de Mercado
@@ -825,6 +831,10 @@ export function buscarPrecio(consulta, lista = null) {
       const f = res.filter((item) => { const d = versionAlfombra(item.n); return !d || d === dPedida; });
       if (f.length) res = f;
     }
+    // Pidió la de PISO (y no también la de baúl o la de caja): fuera las que son de
+    // otra pieza. Filtro duro: si de ese auto solo hay la de baúl, la respuesta es que
+    // de piso no hay, no ofrecerle la de baúl.
+    if (soloPiso(texto)) res = res.filter((item) => ["piso", "piso+baul", null].includes(piezaAlfombra(item.n)));
     return aplicarCab(res).slice(0, 6).map(_mapProd);
   }
 
@@ -1882,6 +1892,12 @@ async function alfombraVolvioAlStock(r, ctx) {
 // Bual 3d") y la mayoría no: la de piso y la de baúl son publicaciones aparte, cada
 // una con su precio. Lo único que lo dice es el título, así que se lee de ahí.
 // Devuelve "piso", "baul", "piso+baul", "caja" o null (no es una alfombra).
+// ¿La consulta pide la alfombra de PISO y ninguna otra pieza?
+function soloPiso(texto) {
+  const q = _tituloDe(texto);
+  return /\bpisos?\b/.test(q) && !/\b(baul|baules|caja|cajas)\b/.test(q);
+}
+
 export function piezaAlfombra(nombre) {
   const partes = _normTxt(nombre).split("+").map(_tituloDe);
   if (!/\balfombras?\b/.test(partes[0])) return null;
