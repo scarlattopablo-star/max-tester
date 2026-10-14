@@ -20,6 +20,33 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
+## 📝 SESIÓN 14 oct — CORRECCIONES DE RODRIGO (LO MÁS NUEVO)
+
+Pedido de Rodrigo (hoja con 5 puntos + audio). Todo lo que dice el cliente lo pone el CÓDIGO
+(`config.js`), así sale siempre igual. Teléfono para el cliente: `TELEFONO_CONSULTAS` = fijo 2 901 55 88.
+
+1. **Alfombras que no tenemos** (sin publicación en ML) → `AVISO_ALFOMBRA_NO_DISPONIBLE`
+   ("De momento no contamos con alfombras disponibles para ese modelo..." + teléfono). Sin asesor,
+   sin aviso, sin "por ahora". **Se apagó el "está entrando"** (`ALFOMBRAS_ENTRANDO = false`).
+   Las **agotadas** (existen en ML) → `AVISO_AGOTADO_ALFOMBRA` (no hay disponibilidad + ¿te aviso?),
+   sin "esperamos que reingrese" (decisión de Pablo). El chequeo de stock en vivo sigue corriendo
+   antes de decir que no hay. Por código se caen las oraciones de Max que prometan un ingreso.
+2. **Sin publicidad del Cuero Sport**: ya no va `mostrar_cuero_sport` en la presentación. Fotos y
+   video del Sport SOLO si el cliente pregunta, y en ese caso Max **también muestra las opciones de
+   su modelo** (`enviar_foto`) — pedido del audio de Rodrigo.
+3. **Material exclusivo = el Cuero Sport** (confirmado por Pablo): `TEXTO_MATERIAL_EXCLUSIVO` va una
+   vez por charla después de la info del eco cuero. Sport: fibra de cuero reciclado, 2 años de
+   garantía total, **$19.800 colocado IVA incluido** (descripción oficial actualizada; el precio
+   está permitido en `filtrarPrecios`).
+4. **Colores**: UNA sola imagen `public/colores/colores.jpg` (rojo, azul, ocre, gris, negro) en
+   vez de una foto por color. Se arma con `python3 armar_colores.py`.
+5. **Demora**: cuando la derivación queda registrada se agrega `AVISO_DEMORA` (teléfono), una vez por charla.
++ Regla general en la REGLA N°0: nunca inventar disponibilidad, próximos ingresos, productos,
+  precios ni características.
+
+Tests: `src/correcciones_rodrigo.test.mjs` (reemplaza a `alfombras_entrando.test.mjs`, 68/68 en
+verde) y `node test_correcciones_rodrigo_e2e.mjs` (conversación real, 5/5).
+
 ## 🖼️ SESIÓN 10 oct — "¿CUÁL DE LAS OPCIONES?" SIN HABER MOSTRADO NADA (LO MÁS NUEVO)
 
 Reportado por Pablo (captura del chat): cliente pide alfombras para su **Oroch doble cabina**

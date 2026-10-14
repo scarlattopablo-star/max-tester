@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_AGOTADO_ALFOMBRA, AVISO_ALFOMBRA_NO_DISPONIBLE, AVISO_DEMORA, TEXTO_MATERIAL_EXCLUSIVO, MUESTRA_COLORES, TELEFONO_CONSULTAS, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -1038,7 +1038,8 @@ export function sinStockOInexistente(consulta, dijoElCliente = "") {
       agotado: true,
       producto_id: ago.id,
       producto: ago.nombre,
-      textoAgotado: AVISO_AGOTADO,
+      // Alfombras: sin "esperamos que reingrese" (correcciones de Rodrigo, 14 oct 2026).
+      textoAgotado: CATEGORIAS.alfombra.test(_normTxt(ago.nombre)) ? AVISO_AGOTADO_ALFOMBRA : AVISO_AGOTADO,
       mensaje: `"${ago.nombre}" existe pero está AGOTADO. ⛔ NO derives a un asesor y NO des precio. El sistema YA le manda al cliente el aviso de agotado tal cual lo escribió el dueño (el campo textoAgotado, que termina preguntándole si quiere que le avisemos). ⛔ NO lo repitas ni lo reescribas: como mucho, una frase corta y cálida ANTES, nombrando el producto (ej: "Justo la alfombra bandeja 3D para tu Yuan Pro..."). ⛔ NO le agregues fechas ni plazos. Cuando el cliente acepte, llamá a "avisar_cuando_llegue" con producto_id="${ago.id}".`,
     };
   }
@@ -1053,6 +1054,19 @@ export function sinStockOInexistente(consulta, dijoElCliente = "") {
       aMedida: true,
       categoriaPedida: null,
       mensaje: "El cubreasiento para ese vehículo NO está agotado: se CONFECCIONA A MEDIDA, se puede hacer perfectamente. ⛔ NO digas que está agotado, que no hay stock, que no lo tenemos ni que no trabajamos ese modelo. ⛔ NO ofrezcas avisarle cuando llegue: no hay nada que esperar, se fabrica. ⛔ NO le des precio y NO le mandes fotos, y ⛔ NO le enumeres las líneas: para ese vehículo el precio exacto lo confirma un asesor (regla del dueño del 18 ago 2026). ⛔ Y NO LE EXPLIQUES POR QUÉ: nada de \"no lo tengo cargado\", \"no está cargado\", \"no está publicado\" ni \"no lo tengo en el sistema\" — son palabras de adentro y al cliente le suenan a excusa. Le decís que se hace a medida y que lo pasás con un asesor, punto. ➡️ LO PASÁS CON UN ASESOR, NO SE LO PREGUNTÁS (pedido del dueño del 28 ago 2026): en UNA frase corta le decís que ese cubreasiento se confecciona a medida para su vehículo y que se lo pasás a un asesor para el precio exacto (ej: \"Para tu Palio lo confeccionamos a medida. Te paso con un asesor que te confirma el precio exacto\"). ⛔ PROHIBIDO preguntarle \"¿querés que te pase con un asesor?\": ya está decidido, el equipo lo recibe igual. Llamá a \"derivar_a_humano\" (motivo \"otro\") con el vehículo y la línea que pidió. Si sabés el año, ponelo en el resumen; si no lo sabés, NO frenes la derivación por eso: podés pedírselo en la misma frase, pero pasalo igual.",
+    };
+  }
+  // ALFOMBRA que no tenemos para ese modelo (sin publicación en ML, ni activa ni
+  // agotada). Correcciones de Rodrigo (14 oct 2026): nada de "está ingresando" ni
+  // "por ahora": el texto lo pone el CÓDIGO (AVISO_ALFOMBRA_NO_DISPONIBLE), cierra
+  // amable y deja el teléfono para otra consulta. Sin asesor y sin aviso.
+  if (nombreCategoria(consulta) === "alfombra") {
+    return {
+      encontrado: false,
+      agotado: false,
+      categoriaPedida: "alfombra",
+      textoSinAlfombra: AVISO_ALFOMBRA_NO_DISPONIBLE,
+      mensaje: `No tenemos alfombras para ese vehículo. El sistema YA le manda al cliente el texto oficial ("De momento no contamos con alfombras disponibles para ese modelo..." + el teléfono ${TELEFONO_CONSULTAS} para otra consulta). ⛔ NO lo repitas ni lo reformules: como mucho, una frase corta y amable ANTES. ⛔ NO digas ni insinúes que están ingresando, que llegan, que las vamos a tener o "por ahora". ⛔ NO ofrezcas avisarle, ⛔ NO ofrezcas un asesor y ⛔ NO derives. ⛔ NO le ofrezcas otro producto que no pidió. Si el cliente insiste o quiere hacer otra consulta sobre esto, sugerile comunicarse por teléfono al ${TELEFONO_CONSULTAS}.`,
     };
   }
   return {
@@ -1185,6 +1199,8 @@ Es la regla más importante de todas. El dueño te la puso porque le prometiste 
 - ⛔ NUNCA afirmes que hacemos, fabricamos, conseguimos, encargamos, adaptamos, arreglamos o traemos algo "de memoria", por lógica o porque suena razonable. Aunque parezca obvio que un negocio así lo haría: si no está escrito, NO lo digas.
 - ⛔ NUNCA supongas ni deduzcas: que exista una línea "a medida" de cubreasientos NO significa que exista "a medida" de otra cosa. Cada producto es lo que es y nada más.
 - ⛔ NUNCA inventes precios, plazos de entrega, tiempos de fabricación, disponibilidad ni promociones.
+- ⏱️ DEMORA: cuando pasás la charla a un asesor, el SISTEMA agrega solo la frase del teléfono ("Si estamos demorando en responder y necesitás resolver tu consulta con mayor rapidez, te recomendamos comunicarte por teléfono al ${TELEFONO_CONSULTAS}."). ⛔ No la escribas vos.
+- ⛔ NUNCA inventes disponibilidad, PRÓXIMOS INGRESOS, productos, precios ni características (correcciones de Rodrigo, 14 oct 2026). Limitate a la información y a los productos que están publicados o confirmados AHORA. Si algo no está disponible o no lo tenemos, DECILO CLARAMENTE en vez de mantener la conversación con una promesa de futuro ("está ingresando", "está entrando", "llega pronto", "en unos días lo tenemos", "por ahora no"): eso está PROHIBIDO.
 - ✅ LO QUE SÍ HACÉS cuando NO LO SABÉS: decilo con sinceridad y sin vueltas, y PASÁLO A UN COMPAÑERO. Es decir: (1) respondé algo corto y honesto tipo "${FRASE_CONSULTO}" (o "Eso no lo manejamos, pero dejame que lo vea un asesor y te confirma"), y (2) en ESE MISMO turno llamá a la herramienta "derivar_a_humano" (motivo "otro") con el resumen de lo que pide. Nunca dejes al cliente sin respuesta ni le prometas algo para salir del paso.
   · ⚠️ OJO, ESTO ES DISTINTO DE "NO LO TENEMOS": cuando buscaste una ALFOMBRA, un CUBREAUTO o un ACCESORIO y la herramienta te dijo que no hay publicación ni activa ni agotada, ahí NO es que "no sabés": es un DATO verificado de que no lo trabajamos. En ese caso NO derivás — se lo decís y listo (ver la sección "PRODUCTO AGOTADO / QUE NO TRABAJAMOS"). Derivar por algo que ya sabemos que no existe le hace perder tiempo al cliente y al equipo.
 - ✅ Decir "no tengo ese dato, lo consulto" NUNCA es un problema. Inventar SÍ lo es. Ante la MÍNIMA duda: no lo afirmes.
@@ -1269,15 +1285,15 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 
 # PRODUCTO AGOTADO / QUE NO TRABAJAMOS (leelo antes de derivar por un producto)
 ⛔ ANTES QUE NADA — HABLÁ COMO UN VENDEDOR, NO COMO UN SISTEMA. Cuando no tenemos algo, decilo con UNA de estas frases y nada más (copiá el molde, cambiando el producto y el vehículo):
-  · "De alfombras para ese modelo estamos sin stock por ahora."
-  · "Esa alfombra la tenemos agotada por ahora."
-  · "Para ese vehículo no tenemos alfombras en este momento."
+  · "De momento no contamos con alfombras disponibles para ese modelo."
+  · "De momento no tenemos disponibilidad de esa alfombra."
+  ⚠️ Para las ALFOMBRAS esos textos los manda EL SISTEMA (con el teléfono para otra consulta): vos no los repitas.
 ⛔ Están TERMINANTEMENTE PROHIBIDAS las palabras **publicado / publicada / publicadas**, **catálogo**, **sistema**, **lista** y **base de datos** en cualquier mensaje al cliente. Son palabras nuestras, de adentro: al cliente le suenan a excusa de robot y no le dicen nada. Él solo quiere saber si hay o no hay.
 ⛔ SI YA LE DIJISTE ANTES QUE NO HABÍA, **NO LO REPITAS DE MEMORIA**: volvé a llamar a la herramienta y contestá con lo que te devuelva AHORA. El stock se sincroniza cada media hora y lo que dijiste hace un rato puede estar viejo; además tu respuesta anterior pudo ser un error. Si el cliente vuelve a preguntar por lo mismo, es porque le importa: buscá de nuevo, en serio. Lo que manda es la herramienta, nunca lo que vos dijiste antes en la charla.
 Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramienta te dice cuál de los CUATRO casos es. No son lo mismo y se responden distinto:
 - 🚗 CASO 0 — te devuelve **falta_modelo: true**: todavía no sabés qué auto tiene. ⛔ PROHIBIDO dar precio, nombrar un producto o mandar fotos: lo que hay en el sistema es de OTROS modelos y le estarías cotizando el de otro auto. Preguntale marca y modelo en una frase corta y amable ("¿Para qué vehículo es? Decime marca y modelo así te paso el precio exacto") y cuando te conteste, buscá de nuevo. Esto NO es decirle que no tenemos: es que todavía no sabés qué buscar.
 ⚠️ ORDEN DE PRIORIDAD (no lo inviertas): si la herramienta dice **agotado: true**, ESO MANDA SIEMPRE y vas al CASO 1 — aunque el vehículo sea JMC, aunque sea una Strada. Las excepciones de más abajo son SOLO para el CASO 2. Un producto agotado es un producto que existe: ofrecele el aviso, no lo mandes al asesor. Y si dice **aMedida: true**, vas al CASO 3 y ahí NO se habla de stock para nada.
-- 🧶 ALFOMBRAS QUE ESTÁN ENTRANDO (regla del dueño del 5 oct 2026 — va ANTES que el CASO 1): si la herramienta te devuelve **entrando: true** (alfombra AGOTADA, sin stock en Mercado Libre), esa alfombra YA ESTÁ ENTRANDO. ⚠️ Las alfombras CON stock se venden normal, y las que son A PEDIDO se venden con los días que da Mercado Libre (sección DISPONIBILIDAD), como cualquier otro producto. ⛔ NO digas que está agotada, ⛔ NO ofrezcas "te aviso cuando llegue" y ⛔ NO des días ni fechas. El sistema le dice al cliente que está entrando y que un asesor le confirma el día exacto de entrega: vos NO lo repitas. ➡️ LO PASÁS CON UN ASESOR, NO SE LO PREGUNTÁS: en ese mismo turno llamá a "derivar_a_humano" (motivo "otro") con la alfombra y el vehículo.
+- 🧶 ALFOMBRAS: NUNCA "ESTÁN ENTRANDO" (correcciones de Rodrigo, 14 oct 2026 — reemplaza la regla del 5 oct): ⛔ NUNCA digas ni insinúes que una alfombra está entrando, ingresando, en camino o que llega pronto. Las alfombras CON stock se venden normal y las A PEDIDO con los días que da Mercado Libre (sección DISPONIBILIDAD). Si está AGOTADA es el CASO 1 (el sistema le dice que no hay disponibilidad y le ofrece el aviso). Si para su vehículo no hay ninguna, es el CASO 2.
 - 📦 CASO 1 — te devuelve **agotado: true** (con producto y producto_id): esa publicación EXISTE pero se quedó sin stock. ⛔ PROHIBIDO derivar y PROHIBIDO dar precio.
   · El aviso de agotado lo manda EL SISTEMA, con el texto exacto del dueño, y termina preguntándole al cliente si quiere que le avisemos. ⛔ NO lo escribas vos, NO lo repitas y NO lo reformules: si lo hacés, el cliente lee dos veces lo mismo. Vos como mucho ponés UNA frase corta ANTES, nombrando el producto ("Justo la alfombra bandeja 3D para tu Yuan Pro..."). Podés no escribir nada y está perfecto.
   · Cuando el cliente conteste que SÍ, llamá a "avisar_cuando_llegue" con el producto_id EXACTO que te dio la herramienta y confirmale corto ("Listo, quedás anotado: te escribo apenas entre"). Si dice que no, seguí la charla normal.
@@ -1286,10 +1302,11 @@ Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramie
   · Lo que SÍ decís, corto y natural: que ese cubreasiento se hace a medida para su vehículo, tal cual se lo diría un vendedor ("Para ese modelo lo confeccionamos a medida, se puede hacer perfectamente").
   · ⛔ SIN PRECIO y SIN FOTOS, y ⛔ sin enumerarle las líneas: para ese vehículo el precio exacto lo confirma un asesor (regla del dueño del 18 ago 2026). ⛔ Y NO LE EXPLIQUES POR QUÉ ("no lo tengo cargado", "no está cargado", "no está publicado"): son palabras de adentro, al cliente le suenan a excusa.
   · ➡️ **LO PASÁS CON UN ASESOR, NO SE LO PREGUNTÁS** (pedido del dueño del 28 ago 2026: "cuando no encuentres el material que piden, mandalo a un asesor"). Se lo decís en afirmativo y llamás a "derivar_a_humano" (motivo "otro") con el vehículo y la línea que pidió. Ej: "Para tu Palio lo confeccionamos a medida. Te paso con un asesor que te confirma el precio exacto". ⛔⛔ PROHIBIDO la pregunta "¿querés que te pase con un asesor?": esto ya está decidido, y el cliente que no la contesta se pierde solo. Si te falta el año, pedíselo en la MISMA frase pero derivá igual, no lo dejes para después. ⚠️ Esta es la ÚNICA excepción a la regla de ofrecer el asesor antes de derivar; en el CASO 2 (alfombras y demás) se sigue ofreciendo y esperando el sí.
-- 🚫 CASO 2 — te devuelve **agotado: false** (y SIN aMedida): no tenemos eso para ese vehículo. Para ALFOMBRAS, CUBREAUTOS y ACCESORIOS decíselo como se lo diría un vendedor en el mostrador: **que ese producto está agotado / no lo tenemos por ahora**. Ej: "De alfombras para ese modelo estamos sin stock por ahora".
+- 🚫 CASO 2 — te devuelve **agotado: false** (y SIN aMedida): no tenemos eso para ese vehículo. Para CUBREAUTOS y ACCESORIOS decíselo como se lo diría un vendedor en el mostrador: **que ese producto no lo tenemos**. Ej: "De momento no tenemos cubreautos para ese modelo".
+  · 🧶 ALFOMBRAS (correcciones de Rodrigo, 14 oct 2026): el SISTEMA le manda al cliente el texto oficial: "De momento no contamos con alfombras disponibles para ese modelo. Si querés realizar otra consulta o necesitás confirmar alguna información, podés comunicarte directamente por teléfono con nosotros al ${TELEFONO_CONSULTAS}." ⛔ NO lo repitas ni lo reformules (como mucho una frase corta y amable antes), ⛔ NO digas que está agotada "por ahora" ni que va a entrar, ⛔ NO ofrezcas avisarle y ⛔ NO le ofrezcas un asesor: cerrá la charla de forma amable. Si el cliente INSISTE o quiere hacer otra consulta sobre eso, sugerile comunicarse por TELÉFONO al ${TELEFONO_CONSULTAS} (no lo derives).
   · ⛔ SEGUÍ HABLANDO DEL PRODUCTO QUE TE PIDIÓ (regla dura, te está fallando): si te preguntó por ALFOMBRAS, tu respuesta es sobre alfombras y nada más. ⛔ PROHIBIDO saltar a ofrecerle otra cosa que no pidió ("pero cubreasientos sí tenemos, ¿te muestro?"): el cliente vino por una alfombra y cambiarle el tema le suena a que le querés vender cualquier cosa. Si él después pregunta por otro producto, ahí sí se lo mostrás.
   · ⛔ En este caso NO le ofrezcas avisarle cuando llegue: no hay publicación a la cual seguirle el rastro, así que sería una promesa que el sistema no puede cumplir.
-  · ⛔ NO DERIVES SOLO PORQUE NO LO TENEMOS, y NO derives sin avisar. Primero ASESORALO BIEN sobre lo que preguntó (respondele con claridad, contale lo que sepas del producto, sacale las dudas). Recién si hace falta que lo siga una persona —porque el cliente muestra interés igual, insiste, quiere encargarlo o pide que le avisen— OFRECÉSELO y esperá su respuesta: "¿Querés que le pase tu consulta a un asesor para que lo vea?". ⛔ Llamás a "derivar_a_humano" SOLO cuando el cliente te dice que sí. (La única excepción sigue siendo cuando el cliente PIDE hablar con alguien: eso se deriva en el acto, sin preguntar.)
+  · ⛔ NO DERIVES SOLO PORQUE NO LO TENEMOS, y NO derives sin avisar (y en ALFOMBRAS no se deriva nunca por esto: se sugiere el teléfono, ver arriba). Primero ASESORALO BIEN sobre lo que preguntó (respondele con claridad, contale lo que sepas del producto, sacale las dudas). Recién si hace falta que lo siga una persona —porque el cliente muestra interés igual, insiste, quiere encargarlo o pide que le avisen— OFRECÉSELO y esperá su respuesta: "¿Querés que le pase tu consulta a un asesor para que lo vea?". ⛔ Llamás a "derivar_a_humano" SOLO cuando el cliente te dice que sí. (La única excepción sigue siendo cuando el cliente PIDE hablar con alguien: eso se deriva en el acto, sin preguntar.)
   · ⛔ NO LE PREGUNTES QUÉ TIPO O VARIANTE BUSCA PARA "CONFIRMARLE" (de goma, bandeja rígida, con logo…): la herramienta YA buscó todo lo de ese vehículo. Repreguntar lo deja esperando una respuesta que no va a cambiar. Decíselo derecho y seguí.
   · ⚠️ LA EXCEPCIÓN ES SOLO DE CUBREASIENTOS, y SOLO si el cliente preguntó por cubreasientos: los CUBREASIENTOS para JMC y camiones JMC los tenemos para TODOS los modelos. Ahí ofrecés y derivás, nunca decís que no. ⛔ La otra excepción que había acá —"los cubreasientos se hacen a medida para cualquier vehículo, así que aunque no haya publicación sí tenemos"— la SACÓ el dueño el 18 ago 2026: para cualquier OTRA marca, si el catálogo no trae nada de ese auto, NO ofrecés ninguna línea; juntás marca/modelo/año y derivás a un asesor sin prometer ni negar.
   · ⛔⛔ ESA EXCEPCIÓN NO ES UNA EXCUSA PARA CAMBIARLE EL TEMA (te está fallando): si el cliente preguntó por una ALFOMBRA de un JMC, le contestás por la alfombra y PUNTO. Que tengamos cubreasientos para todos los JMC NO te habilita a ofrecerle cubreasientos a alguien que vino por una alfombra. Una alfombra de un JMC que no tenemos es CASO 2 normal: se lo decís, no derivás y no le ofrecés otra cosa.
@@ -1326,8 +1343,10 @@ Hay publicaciones ACTIVAS que NO son de entrega inmediata: se venden con normali
 
 # CUBREASIENTOS — CUATRO LÍNEAS (MUY IMPORTANTE, conocelo bien)
 Hay CUATRO tipos de cubreasiento a medida: ECO CUERO (económico), CAPITONEADO (premium), TELA DE TAPICERÍA CAPITONEADA y CUERO AUTOMOTRIZ SPORT.
-⚠️ PRESENTACIÓN COMPLETA OBLIGATORIA (regla del dueño, pisa al "enviá solo lo que pide") — ⛔ SIEMPRE Y CUANDO TENGAMOS ALGO DE ESE AUTO (si el catálogo no trae nada suyo, ver la regla de más abajo: no se muestra nada y se deriva): la PRIMERA vez que el cliente consulta por CUBREASIENTOS para su auto/modelo, en ESA MISMA respuesta mostrale TODAS las opciones con su material visual, llamando TODAS estas herramientas juntas: (1) "enviar_foto" con las opciones del catálogo para su modelo; (2) "mostrar_ecocuero" (las costuras del eco cuero); (3) "mostrar_capitoneado" (negro y rojo); (4) "mostrar_tela" (el video de la tela); (5) "mostrar_cuero_sport" (fotos + video del cuero Sport).
-  · EL TEXTO VA BIEN HUMANO (clave, que NO parezca un robot ni un catálogo): nada de listados con los 4 nombres y precios en fila. Escribí como un vendedor que abre el muestrario: 2 o 3 burbujas cortas y cálidas (separadas por línea en blanco), tipo: "Sí, para tu [modelo] tenemos varias opciones, te muestro todo así lo ves con tus ojos." (línea en blanco) "Te mandé fotos del eco cuero con sus costuras y del capitoneado premium, y ahí va también un video de la línea en tela y otro del cuero Sport, que es lo más top que trabajamos." (línea en blanco) "¿Cuál te gustó más?". Los precios NO los enumeres todos de una: mencioná al pasar el más accesible y que el resto depende de la línea y el modelo ("van desde $X según la línea"), aclarando corto que son sin colocación. Variá SIEMPRE las frases, que suene a charla.
+⚠️ PRESENTACIÓN COMPLETA OBLIGATORIA (regla del dueño, pisa al "enviá solo lo que pide") — ⛔ SIEMPRE Y CUANDO TENGAMOS ALGO DE ESE AUTO (si el catálogo no trae nada suyo, ver la regla de más abajo: no se muestra nada y se deriva): la PRIMERA vez que el cliente consulta por CUBREASIENTOS para su auto/modelo, en ESA MISMA respuesta mostrale TODAS las opciones con su material visual, llamando TODAS estas herramientas juntas: (1) "enviar_foto" con las opciones del catálogo para su modelo; (2) "mostrar_ecocuero" (las costuras del eco cuero); (3) "mostrar_capitoneado" (la imagen única con los 5 colores); (4) "mostrar_tela" (el video de la tela).
+  · ⛔ SIN PUBLICIDAD DEL CUERO SPORT (correcciones de Rodrigo, 14 oct 2026): en la presentación NO llames a "mostrar_cuero_sport" ni le mandes fotos o video del Sport por tu cuenta. El cuero Sport es el "material más exclusivo" y se presenta SOLO como una opción adicional, en una línea de texto que el SISTEMA agrega después de la información del eco cuero ("También contamos con un material más exclusivo, fabricado con base de fibra de cuero reciclado, con 2 años de garantía total. Costo colocado: $19.800 IVA incluido."). ⛔ Vos NO la escribas ni la repitas, y no bombardees al cliente con más información de esa línea si no la pide.
+  · 🎨 COLORES: se manda UNA sola imagen con los 5 colores disponibles (rojo, azul, ocre, gris y negro) — la mandan "mostrar_capitoneado" y "mostrar_ecocuero" (es la misma imagen, sale una sola vez). ⛔ No mandes una foto por color.
+  · EL TEXTO VA BIEN HUMANO (clave, que NO parezca un robot ni un catálogo): nada de listados con los 4 nombres y precios en fila. Escribí como un vendedor que abre el muestrario: 2 o 3 burbujas cortas y cálidas (separadas por línea en blanco), tipo: "Sí, para tu [modelo] tenemos varias opciones, te muestro todo así lo ves con tus ojos." (línea en blanco) "Te mandé los colores del eco cuero y del capitoneado premium, y ahí va también un video de la línea en tela." (línea en blanco) "¿Cuál te gustó más?". Los precios NO los enumeres todos de una: mencioná al pasar el más accesible y que el resto depende de la línea y el modelo ("van desde $X según la línea"), aclarando corto que son sin colocación. Variá SIEMPRE las frases, que suene a charla.
   ⛔ La presentación completa se hace UNA vez POR MODELO: mientras se sigue hablando del MISMO auto, no reenvíes fotos ni videos ya mandados — seguí solo con la línea que eligió y dale el precio puntual. PERO si el cliente pregunta después por OTRO modelo/auto (o es la primera vez que pregunta por cubreasientos en la charla, aunque el historial venga de antes), repetí la presentación COMPLETA para ese modelo, con todas las herramientas de nuevo. En caso de duda, mostrá todo: el dueño prefiere que sobre y no que falte.
   · ⛔⛔ SI DE SU AUTO NO TENEMOS NADA, NO SE OFRECE NADA (REGLA NUEVA del dueño, 18 ago 2026 — pisa lo que decía antes): si el cliente nombra su vehículo y "enviar_foto" NO trae nada del catálogo para ese modelo, ⛔ NO le presentes ninguna línea (ni capitoneado, ni tela, ni cuero Sport, ni eco cuero), ⛔ NO le mandes fotos ni videos de los materiales y ⛔ NO le des precio. Estábamos ofreciendo cubreasientos para autos que no tenemos. Lo que hacés es UNA sola cosa: pedirle los datos que falten (marca, modelo y año) y decirle que un asesor le confirma enseguida la disponibilidad y el precio para su auto, llamando en ese mismo turno a "derivar_a_humano" (motivo "otro").
   · ⛔ Pero OJO con el otro extremo: tampoco le digas "no tenemos" ni "no se puede para tu auto". Vos no sabés si se puede: eso lo define el asesor. Es "dejame que un asesor te confirme", no un portazo.
@@ -1337,14 +1356,15 @@ Hay CUATRO tipos de cubreasiento a medida: ECO CUERO (económico), CAPITONEADO (
   · PASO 2 — DESCRIPCIÓN: recién cuando el cliente ELIGE o confirma interés en UNA línea ("me gustó la de tela", "el sport", "contame más de ese"), le mandás la DESCRIPCIÓN OFICIAL completa de ESA línea (herramienta "descripcion_oficial") y seguís el flujo de esa línea (color/año o marca/modelo/año y derivación según corresponda).
   · Si DESPUÉS pregunta o se interesa por OTRA línea, lo mismo: la descripción oficial de esa otra línea recién en ese momento. ⛔ NUNCA mandes dos descripciones oficiales en el mismo mensaje, y NUNCA una descripción junto con la presentación de opciones. Una cosa por vez: queda natural, como charla de mostrador.
 🧠 RAZONÁ CON ESTE CONOCIMIENTO (no seas literal): cualquier pregunta sobre cubreasientos — por telas, colores, materiales, precios, calidad, impermeabilidad, "el más barato", "lo mejor que tengas", etc. — resolvela VOS pensando qué línea(s) aplican, y acompañá SIEMPRE con el material visual correspondiente (herramientas mostrar_*), aunque el cliente NO haya dicho el modelo. Ejemplos de razonamiento (no exhaustivos):
-  · "¿Qué colores tenés?" → costuras del eco cuero (mostrar_ecocuero) + colores del capitoneado (mostrar_capitoneado), y mencioná que la tela y el Sport también existen.
+  · "¿Qué colores tenés?" → la imagen única de colores (mostrar_capitoneado), aclarando que en el eco cuero el material es negro y la costura ocre, azul o gris.
   · "¿Tenés de tela?" / "algo que no sea cuero" → línea TELA con su video (mostrar_tela).
-  · "¿Cuál es el mejor / más top / deportivo?" → CUERO SPORT (mostrar_cuero_sport) y capitoneado como alternativa.
+  · "¿Cuál es el mejor / más top / deportivo?" → el capitoneado premium y, como opción más exclusiva, el cuero Sport (contalo con texto: base de fibra de cuero reciclado, 2 años de garantía total, $19.800 colocado IVA incluido). Fotos/video del Sport SOLO si el cliente pregunta por esa línea.
   · "¿El más económico?" → eco cuero con sus costuras (mostrar_ecocuero).
   · "¿Son impermeables/lavables?" → capitoneado y cuero Sport sí; contalo por línea.
+  · 🏎️ PREGUNTA POR EL CUERO SPORT (o manda la foto de un Sport) — pedido de Rodrigo, 14 oct 2026: NO te limites al Sport. Explicale el Sport (descripción oficial con "descripcion_oficial" linea:"cuero_sport", y sus fotos/video con "mostrar_cuero_sport" si todavía no los vio) Y ADEMÁS, en esa misma respuesta, mostrale las OPCIONES que hay para SU modelo con "enviar_foto" (si ya sabés el vehículo; si no, pedíselo en una frase y mostrale las opciones cuando te lo diga). Ej.: pregunta por un Polo mandando la foto del Sport → le explicás el Sport y le mostrás también lo que tenemos para el Polo. Esta es la ÚNICA excepción a "nunca una descripción junto con la presentación de opciones".
   El MODELO del auto pedilo después (o aprovechalo si ya lo dijo) para precisar precio y disponibilidad — nunca es requisito para mostrar las líneas.
 Tené clara esta diferencia:
-- ⚠️ PRECIO SIN COLOCACIÓN (REGLA OBLIGATORIA, no la saltees NUNCA): CADA VEZ que le pases al cliente un precio de CUBREASIENTOS — sea escribiéndolo vos, con "consultar_precio" o mandando fotos con precios vía "enviar_foto" — aclarale en ese MISMO mensaje que el precio es SIN colocación y que la colocación se cotiza aparte. Decilo corto y natural, UNA vez por mensaje (no en cada renglón), ej.: "Los precios son sin colocación; la colocación se cotiza aparte." Aplica a los cubreasientos (para alfombras/cubre volante/accesorios no corresponde, no se colocan).
+- ⚠️ PRECIO SIN COLOCACIÓN (REGLA OBLIGATORIA, no la saltees NUNCA): CADA VEZ que le pases al cliente un precio de CUBREASIENTOS — sea escribiéndolo vos, con "consultar_precio" o mandando fotos con precios vía "enviar_foto" — aclarale en ese MISMO mensaje que el precio es SIN colocación y que la colocación se cotiza aparte. Decilo corto y natural, UNA vez por mensaje (no en cada renglón), ej.: "Los precios son sin colocación; la colocación se cotiza aparte." ⚠️ ÚNICA EXCEPCIÓN: el CUERO SPORT (material exclusivo), que sale $19.800 YA COLOCADO, IVA incluido. Aplica a los cubreasientos (para alfombras/cubre volante/accesorios no corresponde, no se colocan).
 - ⚠️ MATERIAL — DATO REAL DE TODOS LOS CUBREASIENTOS (vale para el eco cuero Y para el capitoneado, NO lo confundas): la parte de ADELANTE del asiento (la que se ve y donde se apoya el cuerpo) es de CUERO ECOLÓGICO; la parte de ATRÁS / el respaldo trasero (lo que NO queda a la vista) es de LICRA, NO de cuero. Cuando el cliente pregunte de qué material es el cubreasiento, aclaráselo SIEMPRE así, sin inventar: "El frente es de cuero ecológico y la parte de atrás es de licra". Esto es así en TODOS los cubreasientos a medida.
 - ECO CUERO (económico): ronda los $${CUBREASIENTOS.economico.precioDesde}–$${CUBREASIENTOS.economico.precioHasta}. Es SOLO VENTA: NO se coloca (no se ofrece colocación para esta línea). No necesita descripción extra del material.
   · ⚠️ COLOR (REGLA, no la rompas): el eco cuero económico NO tiene variación de color de material — es SIEMPRE ${CUBREASIENTOS.economico.colorUnico}. NUNCA ofrezcas otros colores de material (ej. NO ofrezcas "negro o rojo" como en el capitoneado). Lo ÚNICO que varía es el color del PESPUNTE (la costura): ${CUBREASIENTOS.economico.pespuntes.join(", ")}. Para cerrar la compra del eco cuero, preguntá qué color de pespunte prefiere (no preguntes color de material, que es uno solo).
@@ -1352,7 +1372,7 @@ Tené clara esta diferencia:
   · ⛔ ESAS FOTOS SON DEL CAPITONEADO (REGLA DEL DUEÑO, 17 ago 2026 — no la rompas): las muestras de costura que manda "mostrar_ecocuero" son del material CAPITONEADO PREMIUM y van rotuladas "Capitoneado premium - Costura ocre/azul/gris". NUNCA las presentes como "así es el eco cuero" ni las llames "eco cuero": el eco cuero es OTRO artículo y otro precio, y si las mezclás el cliente compra una cosa creyendo que es la otra. Mandalas como muestra del COLOR de la costura, aclarando en una frase corta que la foto es del capitoneado. Si el cliente elige un color mirando esas fotos, confirmá primero qué línea quiere antes de dar precio.
   · ⚠️ NO HAY ECO CUERO PARA TODOS LOS MODELOS (REGLA, no la rompas): la línea económica de eco cuero existe solo para ALGUNOS vehículos. NUNCA des por hecho que hay eco cuero para el auto del cliente ni lo ofrezcas "de memoria". Guiate SIEMPRE por lo que devuelve el catálogo con "enviar_foto": ofrecé y nombrá únicamente las opciones que REALMENTE aparecen para ese modelo. Si para ese auto solo hay capitoneado, ofrecé solo capitoneado (sin mencionar un eco cuero que no existe); si solo hay eco cuero, ofrecé eso. ⛔ Si no hay eco cuero para el modelo, NO lo ofrezcas ni prometas, NO inventes precio: informá con sinceridad lo que sí tenemos para ese vehículo. Mejor informar correctamente que ofrecer algo que no hay.
 - CAPITONEADO (premium): es el de mayor gama. SÍ se puede COLOCAR (el costo de colocación se cotiza con un vendedor).
-- ⚙️ QUÉ LÍNEAS SE COLOCAN (actualizado 28 jul 2026): se colocan el CAPITONEADO, la TELA de tapicería y el CUERO SPORT. El ECO CUERO económico NO se coloca (es solo venta). En las tres que sí se colocan, el costo de la colocación va SIEMPRE aparte y lo cotiza un vendedor; el día y la hora los confirma el EQUIPO y el cliente NO debe acercarse al local hasta tener esa confirmación.
+- ⚙️ QUÉ LÍNEAS SE COLOCAN (actualizado 28 jul 2026): se colocan el CAPITONEADO, la TELA de tapicería y el CUERO SPORT. El ECO CUERO económico NO se coloca (es solo venta). En el capitoneado y la tela el costo de la colocación va SIEMPRE aparte y lo cotiza un vendedor; en el CUERO SPORT ya está incluida ($19.800 colocado, IVA incluido, desde el 14 oct 2026). En las tres, el día y la hora los confirma el EQUIPO y el cliente NO debe acercarse al local hasta tener esa confirmación.
   · COLORES de capitoneado disponibles: ${CUBREASIENTOS.capitoneado.coloresCapitoneado.join(" o ")}.
   · ⚠️ OBLIGATORIO (no lo saltees NUNCA): apenas el cliente ELIGE el capitoneado o pregunta por él, en esa MISMA respuesta: (1) usá "mostrar_capitoneado" para mandarle las FOTOS REALES del material en TODOS los colores (negro, rojo, y negro con costura ocre/azul/gris — la costura anaranjada se llama OCRE, nunca digas "naranja"; a la costura clara decile GRIS, no "blanca"); (2) arrancá la explicación del material (2-3 puntos fuertes, como dice DESCRIPCIÓN abajo); (3) si el cliente TODAVÍA no dijo el color, preguntale cuál prefiere — pero si YA dijo el color en un mensaje anterior (ej. pidió "capitoneado negro"), NO se lo vuelvas a preguntar: confirmáselo ("Perfecto, en negro") y seguí. NO avances a año/logo/pago sin haber mostrado las fotos y explicado el material. Si pide ver el material/espuma de cerca, usá "mostrar_capitoneado" con que:"espuma".
   · LOGO bordado OPCIONAL: se puede agregar el logo (o no). Si lo quiere, los colores de logo son: ${CUBREASIENTOS.capitoneado.coloresLogo.join(", ")}.
@@ -1366,12 +1386,12 @@ Tené clara esta diferencia:
   · MOSTRÁ EL VIDEO: al presentar esta línea, acompañá con el VIDEO real vía "mostrar_tela" (UNA sola vez por conversación; no lo repitas).
   · PARA COTIZAR pedile los datos que falten (sin abrumar): MARCA, MODELO y AÑO del vehículo.
   · CUANDO EL CLIENTE LA ELIGE: mandale la descripción oficial (regla de arriba) y, cuando tengas marca/modelo/año, llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por TELA CAPITONEADA + marca/modelo/año) y cerrá diciéndole: "Uno de nuestros asesores se pondrá en contacto contigo a la brevedad para brindarte toda la información y la cotización correspondiente." ⛔ NO cobres vos esta línea (ni link de pago ni transferencia): la cotiza y cierra un asesor.
-- CUERO AUTOMOTRIZ SPORT (línea premium a medida):
-  · 📋 DESCRIPCIÓN OFICIAL (REGLA DEL DUEÑO, no la rompas): SOLO cuando el cliente ELIGE el cuero Sport o confirma interés en él DESPUÉS de ver las opciones ("el sport me gustó", "quiero ese", "contame más del sport"), llamá a "descripcion_oficial" con linea:"cuero_sport" — el sistema le envía el texto oficial EXACTO del negocio (incluye el rango $${CUBREASIENTOS.sport.precioDesde}–$${CUBREASIENTOS.sport.precioHasta} y el pedido de marca/modelo/año con derivación a asesor). ⛔ NUNCA la mandes en el mismo mensaje en que recién le mostrás las opciones (primero elige, después la descripción — ver FLUJO EN DOS PASOS). ⛔ Vos NO escribas ni resumas esa descripción por tu cuenta: como mucho una frase corta de intro. UNA vez por conversación.
-  · ⛔ NO des un precio exacto de esta línea (solo el rango de la descripción oficial): el precio exacto lo da SIEMPRE un asesor.
-  · OFRECELA como otra opción cuando el cliente consulta por cubreasientos, en especial si busca lo mejor / deportivo / mayor calidad.
-  · MOSTRÁ LAS FOTOS Y EL VIDEO reales vía "mostrar_cuero_sport" al presentarla (UNA sola vez por conversación; no los repitas). Las fotos son de TRABAJOS REALES recién instalados: acompañalas SIEMPRE con un comentario entusiasta corto, del estilo "¡Mirá lo lindo que quedan! ¡Están re buenas!" (con tus palabras, natural y genuino).
-  · CUANDO EL CLIENTE LO ELIGE: mandale la descripción oficial (regla de arriba); DESPUÉS pedile MARCA, MODELO y AÑO del vehículo (lo que falte), llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por CUERO SPORT + marca/modelo/año) y cerrá diciéndole: "Un asesor de ventas se comunicará con usted a la brevedad para brindarle el precio exacto y toda la información que necesite." ⛔ NO cobres vos esta línea: la cotiza y cierra un asesor.
+- CUERO AUTOMOTRIZ SPORT = EL "MATERIAL MÁS EXCLUSIVO" (línea premium a medida). Datos confirmados por Rodrigo (14 oct 2026): base de FIBRA DE CUERO RECICLADO, 2 AÑOS DE GARANTÍA TOTAL, COSTO COLOCADO $19.800 IVA INCLUIDO (la colocación YA está incluida en ese precio).
+  · 📋 DESCRIPCIÓN OFICIAL (REGLA DEL DUEÑO, no la rompas): SOLO cuando el cliente ELIGE el cuero Sport o confirma interés en él DESPUÉS de ver las opciones ("el sport me gustó", "quiero ese", "contame más del sport"), llamá a "descripcion_oficial" con linea:"cuero_sport" — el sistema le envía el texto oficial EXACTO del negocio (incluye el material, la garantía de 2 años, el costo colocado de $19.800 IVA incluido y el pedido de marca/modelo/año con derivación a asesor). ⛔ NUNCA la mandes en el mismo mensaje en que recién le mostrás las opciones (primero elige, después la descripción — ver FLUJO EN DOS PASOS). ⛔ Vos NO escribas ni resumas esa descripción por tu cuenta: como mucho una frase corta de intro. UNA vez por conversación.
+  · 💰 El precio es ÚNICO: $19.800 colocado, IVA incluido. ⛔ No le digas que la colocación va aparte (en esta línea está incluida) y no inventes otro precio.
+  · ⛔ NO LA PUBLICITES SOLA: en la presentación de cubreasientos va SOLO la línea de texto que agrega el SISTEMA después del eco cuero (ver PRESENTACIÓN COMPLETA). Sin fotos ni video, salvo que el cliente pregunte por ella.
+  · SOLO SI EL CLIENTE PREGUNTA POR EL SPORT (o se interesa en el material exclusivo): mostrale las FOTOS Y EL VIDEO reales vía "mostrar_cuero_sport", Y TAMBIÉN las opciones que hay para su modelo con "enviar_foto" (pedido de Rodrigo: que no se limite al Sport) (UNA sola vez por conversación; no los repitas). Las fotos son de TRABAJOS REALES recién instalados: acompañalas SIEMPRE con un comentario entusiasta corto, del estilo "¡Mirá lo lindo que quedan! ¡Están re buenas!" (con tus palabras, natural y genuino).
+  · CUANDO EL CLIENTE LO ELIGE: mandale la descripción oficial (regla de arriba); DESPUÉS pedile MARCA, MODELO y AÑO del vehículo (lo que falte), llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por CUERO SPORT + marca/modelo/año) y cerrá diciéndole: "Un asesor de ventas se comunicará con usted a la brevedad para coordinar la confección y brindarle toda la información que necesite." ⛔ NO cobres vos esta línea: la cotiza y cierra un asesor.
 - PAGO del cubreasiento (hasta que esté el carrito en la web): cuando el cliente confirma la compra, ofrecé pagar por:
   · LINK DE MERCADO PAGO: generalo VOS con la herramienta "crear_link_pago" por el MONTO EXACTO de la compra (precio normal, sin el descuento de transferencia) y mandáselo para que pague directo con tarjeta o dinero en cuenta. Si la herramienta falla, decile que enseguida un compañero le envía el link y derivá.
   · o TRANSFERENCIA a La Casa del Cubreasiento con 10% DE DESCUENTO: ${NEGOCIO.datosCobro.transferencia}.
@@ -1414,7 +1434,7 @@ ${datosPagoTexto()}
 - Si NO encuentra el producto, no inventes ningún número: pedí más datos (modelo/año) u ofrecé cotizarlo con un asesor. ⛔ Y nunca ofrezcas fabricarlo/adaptarlo/conseguirlo: si no está, no está (ver REGLA N°0).
 - Una pregunta de precio NUNCA es motivo para pasar a un humano; la resolvés vos.
 - NO inventes stock ni plazos que no sabés.
-- ⛔ ALFOMBRAS: vienen moldeadas por modelo. NO se hacen a medida, NO se cortan, NO se adaptan, NO se encargan y NO se colocan. Si el cliente pide una alfombra que no tenemos para su vehículo, decíselo derecho —que está agotada / que no tenemos por ahora— y JAMÁS le digas que se la hacemos a medida.
+- ⛔ ALFOMBRAS: vienen moldeadas por modelo. NO se hacen a medida, NO se cortan, NO se adaptan, NO se encargan y NO se colocan. Si el cliente pide una alfombra que no tenemos para su vehículo, decíselo derecho —que de momento no contamos con alfombras disponibles para ese modelo (el texto lo manda el sistema)— y JAMÁS le digas que se la hacemos a medida ni que va a entrar.
   · CASO REAL QUE NO SE PUEDE REPETIR (pasó el 31 jul 2026): un cliente preguntó por alfombras para una MG ZS, no teníamos ninguna, y le contestaste "no la tengo publicada todavía, pero tranquilo, la hacemos igual a medida" y le pediste el año para cotizarla. TODO ESO ESTUVO MAL: esa alfombra no existe, el cliente esperó una cotización que nunca podía llegar y el negocio quedó mal. Lo correcto es: "Para la MG ZS estamos sin stock de alfombras por ahora." Sin "igual", sin "a medida", sin pedir el año para cotizar algo que no tenemos, y sin nombrarle papeles internos.
   · ⛔ Y OJO CON EL OTRO EXTREMO: tampoco lo mandes al asesor de arranque. Primero respondele bien vos. Si el cliente igual insiste o quiere que se lo consigan, ahí le OFRECÉS pasarlo con un asesor y derivás solo si acepta.
 - Vos no cobrás directamente: cuando el cliente quiere comprar, tomá el pedido con la herramienta y explicá los medios de pago para que se cierre el cobro.
@@ -1587,7 +1607,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "mostrar_capitoneado",
-      description: "Manda al cliente las FOTOS REALES del material capitoneado premium: muestras de TODOS los colores disponibles (negro, rojo, y negro con costura ocre, azul o gris) y detalle de la espuma de 8mm. Usar SIEMPRE que el cliente pregunte por colores del capitoneado o se interese por el cubreasiento capitoneado: mostrale las opciones.",
+      description: "Manda al cliente UNA sola imagen con los 5 colores disponibles (rojo, azul, ocre, gris y negro, muestras reales del capitoneado premium) o, con que:'espuma', el detalle de la espuma de 8mm. Usar SIEMPRE que el cliente pregunte por colores del capitoneado o se interese por el cubreasiento capitoneado: mostrale las opciones.",
       parameters: {
         type: "object",
         properties: {
@@ -1637,7 +1657,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "mostrar_cuero_sport",
-      description: "Manda al cliente las FOTOS y el VIDEO reales de la línea Premium en CUERO AUTOMOTRIZ SPORT (a medida). Usar UNA sola vez por conversación, cuando ofrecés la línea Sport o el cliente pregunta por ella.",
+      description: "Manda al cliente las FOTOS y el VIDEO reales de la línea Premium en CUERO AUTOMOTRIZ SPORT (el material más exclusivo, a medida). Usar SOLO cuando el CLIENTE pregunta por el Sport o se interesa por el material exclusivo (⛔ nunca como publicidad en la presentación), UNA sola vez por conversación, y junto con las opciones de su modelo (enviar_foto).",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -1864,10 +1884,13 @@ const faltaUnDato = (r) => !!(r?.falta_modelo || r?.falta_cabina);
 // El catálogo de Max se refresca cada 30 min; si la alfombra aparece agotada pero
 // en ML ya tiene stock, se resincroniza en el momento y se vuelve a buscar: así se
 // vende normal (precio, foto, link) en vez de decirle "está entrando".
+// Desde el 14 oct 2026 ya no existe el "está entrando": vale para cualquier ALFOMBRA
+// agotada, antes de decirle al cliente que no hay disponibilidad.
 // El resync se limita a uno cada 2 min para no castigar la API de ML.
 let _ultimoResync = 0;
 async function alfombraVolvioAlStock(r, ctx) {
-  if (!r?.entrando || !r.producto_id) return false;
+  const esAlfombraAgotada = r?.entrando || (r?.agotado && CATEGORIAS.alfombra.test(_normTxt(String(r.producto || ""))));
+  if (!esAlfombraAgotada || !r.producto_id) return false;
   const vivo = await (ctx._stockEnVivo || stockEnVivo)(r.producto_id);
   if (!(vivo > 0)) return false;
   if (Date.now() - _ultimoResync < 2 * 60 * 1000) return false;
@@ -2054,6 +2077,10 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       let fotos = [];
       if (que.includes("espuma") || que.includes("detalle") || que.includes("material")) {
         fotos = [{ nombre: "Detalle del material capitoneado", img: m.detalle }, { nombre: "Espuma de alta densidad de 8 mm", img: m.espuma }];
+      } else if (MUESTRA_COLORES?.img) {
+        // UNA sola imagen con los 5 colores (correcciones de Rodrigo, 14 oct 2026): una
+        // foto por color le llenaba el chat al cliente. Vale también si nombró un color.
+        fotos = [{ nombre: MUESTRA_COLORES.nombre, img: MUESTRA_COLORES.img }];
       } else {
         // Colores puntuales que haya nombrado; si no nombró ninguno, TODOS los colores.
         const pedidas = catalogo.filter((c) => c.pide.some((p) => que.includes(p)));
@@ -2078,7 +2105,12 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
         { img: m.costuraAzul, nombre: "Capitoneado premium - Costura azul", pide: ["azul"] },
         { img: m.costuraBlanca, nombre: "Capitoneado premium - Costura gris", pide: ["blanc", "gris", "plat"] },
       ];
-      const pedidas = catalogo.filter((c) => c.pide.some((p) => que.includes(p)));
+      const pedidas = MUESTRA_COLORES?.img
+        // UNA sola imagen con los 5 colores (correcciones de Rodrigo, 14 oct 2026). Es
+        // la MISMA URL que manda mostrar_capitoneado, así que si salen las dos líneas
+        // juntas armarRespuesta la manda una sola vez (y anota las dos líneas).
+        ? [{ img: MUESTRA_COLORES.img, nombre: MUESTRA_COLORES.nombre }]
+        : catalogo.filter((c) => c.pide.some((p) => que.includes(p)));
       // linea: "eco cuero" NO se le muestra al cliente (el rótulo visible dice
       // "Capitoneado premium"): es la marca interna que necesita eleccionAmbigua para
       // no cobrar la línea equivocada cuando el cliente elige nombrando solo el color.
@@ -2088,7 +2120,7 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
         ok: true,
         enviadas: fotos.length,
         fotos,
-        instruccion: "Ojo: estas fotos son del material CAPITONEADO. Al mandarlas NO las llames 'eco cuero' ni digas que así es el eco cuero: el eco cuero económico es otro artículo, con otro precio. Si el cliente elige un color mirando estas fotos, confirmá primero QUÉ línea quiere (eco cuero económico o capitoneado premium) antes de pasarle precio o anotar el pedido.",
+        instruccion: "Va UNA sola imagen con los 5 colores (rojo, azul, ocre, gris y negro). Ojo: en el ECO CUERO el material es siempre negro y la costura puede ser solo ocre, azul o gris; el rojo y el negro de la imagen son del capitoneado. Ojo: estas fotos son del material CAPITONEADO. Al mandarlas NO las llames 'eco cuero' ni digas que así es el eco cuero: el eco cuero económico es otro artículo, con otro precio. Si el cliente elige un color mirando estas fotos, confirmá primero QUÉ línea quiere (eco cuero económico o capitoneado premium) antes de pasarle precio o anotar el pedido.",
       };
     }
     if (nombre === "descripcion_oficial") {
@@ -2591,6 +2623,10 @@ export function filtrarPrecios(texto, acciones = [], textoCharla = "") {
   // asesor por nada (producción, 8 oct 2026, Tucson). Un número inventado sigue sin
   // poder autorizarse solo: la base tiene que estar en el catálogo.
   for (const v of _preciosPermitidos(reales.slice(-6))) permitidos.add(v);
+  // Precio OFICIAL fijo que no sale de Mercado Libre: el cuero Sport / material
+  // exclusivo, $19.800 colocado IVA incluido (Rodrigo, 14 oct 2026). Sin esto se le
+  // borraba la oración a Max y se derivaba "por precio inventado".
+  if (CUBREASIENTOS.sport?.precioColocado) permitidos.add(CUBREASIENTOS.sport.precioColocado);
   const malos = [];
   for (const m of original.matchAll(_PRECIO_EN_TEXTO)) {
     const v = _aNumero(m[1] ?? m[2]);
@@ -2942,7 +2978,18 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // días que declara la publicación en Mercado Libre) y se manda UNA sola vez, aunque
   // el producto haya aparecido en varias herramientas del mismo turno.
   const avisoDisponibilidad = acciones.find((a) => a.resultado?.avisoDisponibilidad)?.resultado?.avisoDisponibilidad || null;
-  let limpio = limpiarJerga(corregirSaludo((texto || "").trim()));
+  // MATERIAL EXCLUSIVO (correcciones de Rodrigo, 14 oct 2026): después de la
+  // información del ECO CUERO va, UNA vez por charla, la línea del material más
+  // exclusivo (la Sport) como opción adicional: solo texto, sin fotos ni video.
+  // Lo pone el CÓDIGO para que salga siempre igual y nunca dos veces.
+  const _esEco = (s) => /eco\s*cuero|ecocuero|cuero ecol/i.test(_normTxt(String(s || "")));
+  const mostroEco = acciones.some((a) => a.resultado?.ok && (
+    a.herramienta === "mostrar_ecocuero"
+    || (a.herramienta === "enviar_foto" && (a.resultado.fotos || []).some((f) => _esEco(f.nombre)))
+  ));
+  const yaDijoExclusivo = /fibra de cuero reciclado/i.test(`${ctx.textoCharla || ""} ${oficiales.join(" ")}`);
+  const avisoMaterialExclusivo = mostroEco && !ocultarLineas && !preventaAbierta && !yaDijoExclusivo ? TEXTO_MATERIAL_EXCLUSIVO : null;
+  let limpio =limpiarJerga(corregirSaludo((texto || "").trim()));
   // ANTI-INVENTO: si Max prometió algo que el negocio NO hace (típico: "te hacemos
   // la alfombra a medida"), se le borra esa frase, se le dice al cliente que lo
   // consulta con un asesor y se DERIVA para que una persona lo resuelva.
@@ -3065,6 +3112,19 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
       .join("\n\n")
       .trim();
   }
+  // ALFOMBRA QUE NO TENEMOS (correcciones de Rodrigo, 14 oct 2026): el texto lo pone
+  // el CÓDIGO. Se le caen a Max las oraciones que digan lo mismo con otras palabras,
+  // las que prometan un ingreso y las que ofrezcan asesor o aviso: el cliente lee UNA
+  // sola respuesta, clara y sin promesas.
+  // Y cuando no hay (agotado o sin publicación), ninguna oración puede prometer un
+  // ingreso: "ya está entrando", "llega en unos días", "pronto la tenemos".
+  if ((avisoAgotado || acciones.some((a) => a.resultado?.textoSinAlfombra)) && limpio) {
+    limpio = _sacarOraciones(limpio, /entrand|ingres|en camino|reingres|repon|pronto|unos d[ií]as|la semana|el mes que|lleg(a|an|ue|uen|ar[aá]n?)\b/i);
+  }
+  const avisoSinAlfombra = avisoAgotado ? null : (acciones.find((a) => a.resultado?.textoSinAlfombra)?.resultado?.textoSinAlfombra || null);
+  if (avisoSinAlfombra && limpio) {
+    limpio = _sacarOraciones(limpio, /agotad|sin stock|\bstock\b|no (tenemos|contamos|hay|trabajamos|estamos)|disponib|por ahora|por el momento|de momento|ingres|entrand|lleg[aeu]|pronto|avis|asesor|compa[ñn]er|vendedor|tel[eé]fono|llam[aá]|consulta/i);
+  }
   // NO CAMBIARLE EL PRODUCTO AL CLIENTE: si preguntó por una alfombra y no la
   // tenemos, Max se le iba a ofrecer cubreasientos ("...pero cubreasientos sí
   // tenemos, ¿te muestro?"). El dueño lo pidió dos veces y el prompt no alcanzaba,
@@ -3124,7 +3184,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
       .filter(Boolean).join("\n\n");
   }
   // Orden: primero CUÁNDO lo tiene (disponibilidad), después cómo se despacha y se coloca.
-  const textoFinal = [limpio, ...oficiales, avisoDisponibilidad, avisoColocacion, avisoEnvio, avisoAgotado].filter(Boolean).join("\n\n")
+  let textoFinal = [limpio, ...oficiales, avisoMaterialExclusivo, avisoDisponibilidad, avisoColocacion, avisoEnvio, avisoAgotado, avisoSinAlfombra].filter(Boolean).join("\n\n")
     || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
   // Acá se resuelve la derivación que quedó pendiente, con el mensaje final a la
   // vista: si Max terminó PREGUNTÁNDOLE al cliente si quiere el asesor, no se deriva
@@ -3144,6 +3204,13 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
       if (accion) accion.resultado = r;
     }
     ctx._turno.derivacionPendiente = null;
+  }
+  // DEMORA (correcciones de Rodrigo, 14 oct 2026): cuando la charla pasa a una
+  // persona puede tardar, así que se le deja el teléfono. Solo si la derivación quedó
+  // REGISTRADA en este turno (no si Max solo la ofreció) y una vez por charla.
+  const derivo = acciones.some((a) => a.herramienta === "derivar_a_humano" && a.resultado?.ok && !a.resultado.pendiente);
+  if (derivo && !String(ctx.textoCharla || "").includes(AVISO_DEMORA)) {
+    textoFinal = [textoFinal, AVISO_DEMORA].filter(Boolean).join("\n\n");
   }
   return { texto: textoFinal, acciones, imagenesEnviar, videosEnviar };
 }
