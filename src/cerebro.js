@@ -333,6 +333,15 @@ const CATEGORIAS = {
   cubreauto: /(cubre ?auto|cubreauto|antigranizo|cobertor)/,
   cubreasiento: /(cubre ?asiento|cubreasiento|funda|butaca|tapizado)/,
 };
+// Las notas que el SISTEMA le pega al mensaje del cliente ("[Contexto: el cliente llegó
+// desde un anuncio…]", "[Contexto interno — …]", "[El cliente te mandó un archivo…]")
+// NO son palabras del cliente. El anuncio de Meta dice "la mejor calidad de
+// cubreasientos" y nombra autos (Hilux, Strada): leído como si lo hubiera escrito él,
+// una consulta por ALFOMBRAS o por un cubre volante pasaba como "cubreasiento sin
+// catálogo" y salía pegado el "lo confeccionamos a medida" (auditoría del 15 oct 2026).
+export function sinNotasDelSistema(texto) {
+  return String(texto || "").replace(/\[(?:Contexto|El cliente)[^\]]*\]/g, " ");
+}
 // ¿Es una ALFOMBRA que está entrando? (pedido de Pablo, 5 oct 2026 — ver
 // AVISO_ALFOMBRA_ENTRANDO en config.js). Se mira el NOMBRE del producto.
 // Vale SOLO para las AGOTADAS (sin stock en ML). Corrección de Rodrigo del mismo
@@ -746,7 +755,20 @@ export function identificaModelo(consulta) {
 // Busca productos del catálogo priorizando el MODELO/marca (no las palabras genéricas).
 // `lista` permite buscar sobre otro conjunto que no sea el catálogo de venta: lo usa
 // buscarAgotado() para revisar las publicaciones pausadas / sin stock.
+// "MAX" COMO VERSIÓN: el Geely EX2 Max y el EX5 Max usan las alfombras del EX2 y del
+// EX5, pero ninguna publicación dice "Max" en ese sentido, así que la búsqueda daba
+// cero y Max contestaba "sin stock" de algo que estaba a la venta (auditoría del 15
+// oct 2026: dos clientes en un día; el asesor después les vendió la 3D y la 5D). Si
+// la búsqueda queda vacía, se reintenta UNA vez sin "max". Las variantes que sí son
+// otro auto (Pro, Plus…) siguen en VARIANTES y no se aflojan.
 export function buscarPrecio(consulta, lista = null) {
+  const r = _buscarPrecio(consulta, lista);
+  if (r.length) return r;
+  const sinMax = String(consulta || "").replace(/\bmax\b/gi, " ").replace(/\s+/g, " ").trim();
+  return sinMax && sinMax !== String(consulta || "").trim() ? _buscarPrecio(sinMax, lista) : r;
+}
+
+function _buscarPrecio(consulta, lista = null) {
   const { palabras, distintivas, fuertes, modelos, texto } = _terminos(consulta);
   if (!palabras.length) return [];
   // Filtro por TIPO de producto: si el cliente nombra un tipo, NO mezclamos categorías.
@@ -1468,7 +1490,12 @@ function systemPromptDinamico() {
   let base = `# Momento actual (Uruguay)
 - Ahora en Uruguay es ${m.dia} y son las ${m.horaTxt} (es ${m.parte}). Hoy es ${m.fecha} (formato para agendar: YYYY-MM-DD; usalo para entender "mañana", "el viernes", etc.).
 - ⛔ SALUDO SEGÚN LA HORA (REGLA DURA, NO LA ROMPAS): si vas a saludar, usá EXACTAMENTE "${op}" porque ahora es ${m.parte}. Está TERMINANTEMENTE PROHIBIDO usar ${prohibidos.map((s) => `"${s}"`).join(" ni ")} ahora — no corresponden a esta hora (${m.horaTxt}). Mañana = "Buenos días/Buen día" (06:00–11:59), tarde = "Buenas tardes" (12:00–19:59), noche = "Buenas noches" (20:00–05:59). Antes de saludar, mirá la hora (${m.horaTxt}) y elegí el saludo correcto.`;
-  const lecciones = (leccionesActuales() || "").trim();
+  // LECCIONES=off apaga las lecciones automáticas sin deploy. Las escribe una IA
+  // gratis sin revisión humana y en oct 2026 estaban congeladas desde el 16 ago (Groq
+  // da 404) contradiciendo reglas del dueño: "anotalo para avisarle" donde el prompt
+  // lo prohíbe, "el cliente no recuerda la charla anterior", "preguntá la línea antes
+  // del precio".
+  const lecciones = /^(off|0|no|false)$/i.test(process.env.LECCIONES || "") ? "" : (leccionesActuales() || "").trim();
   if (lecciones) {
     base += `\n\n# Lecciones aprendidas de conversaciones reales (APLICALAS, sin dejar de ser formal y correcto)\n${lecciones}`;
   }
@@ -1979,6 +2006,14 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
     const nota = notaPiezasAlfombra([...(r.resultados || []), ...(r.fotos || [])].map((x) => x?.nombre));
     if (nota) r = { ...r, instruccion: r.instruccion ? `${r.instruccion}\n\n${nota}` : nota };
   }
+  // CUERO SPORT: no tiene publicaciones por vehículo (es una línea con rango y la cotiza
+  // un asesor). Buscar "cuero sport strada" trae las OTRAS líneas de la Strada y Max
+  // concluía "para ese modelo el Sport no está cargado" (simulador con Haiku, 15 oct 2026).
+  const pidioSport = /\bsport\b/i.test(`${input?.producto || ""} ${input?.modelo || ""}`) && !/eco ?sport/i.test(`${input?.producto || ""} ${input?.modelo || ""}`);
+  if (BUSCAN_CATALOGO.has(nombre) && r && pidioSport && (r.ok === true || r.encontrado === true || (r.fotos || []).length)) {
+    const nota = "(Nota interna del sistema.) El CUERO SPORT no tiene publicaciones por vehículo: lo que trajo esta búsqueda son las OTRAS líneas de ese auto. ⛔ NO digas que el Sport no está, no está cargado o no se hace para ese vehículo. Si el cliente pidió el Sport: descripcion_oficial (linea:\"cuero_sport\") + mostrar_cuero_sport + derivar_a_humano con el vehículo. ⛔ No le ofrezcas las otras líneas si no las pidió.";
+    r = { ...r, instruccion: r.instruccion ? `${r.instruccion}\n\n${nota}` : nota };
+  }
   // Memoria del TURNO: qué contestó el catálogo sobre el auto del cliente. La leen las
   // herramientas que ofrecen una línea (ver sinCatalogoParaSuAuto).
   const turno = ctx._turno;
@@ -2004,8 +2039,13 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
       // ¿Lo que buscó era un CUBREASIENTO? Solo esos van al asesor cuando no hay nada:
       // una alfombra o un accesorio que no trabajamos se contesta y punto (CASO 2), sin
       // derivar y sin ofrecerle otra cosa.
-      const consulta = [input?.producto, input?.modelo, input?.detalle, ctx._ultimoUsuario].filter(Boolean).join(" ");
-      if (CATEGORIAS.cubreasiento.test(_normTxt(consulta))) turno.cubreasientoSinCatalogo = true;
+      // ⚠️ Si la BÚSQUEDA nombra otro producto (alfombra, volante, cubreauto), manda
+      // ella: el cliente que compró cubreasientos ayer y hoy pregunta por un cubre
+      // volante dice "cubre asientos" en su mensaje, pero no está pidiendo uno.
+      const delInput = _normTxt([input?.producto, input?.modelo, input?.detalle].filter(Boolean).join(" "));
+      const otraCategoria = Object.entries(CATEGORIAS).some(([k, re]) => k !== "cubreasiento" && re.test(delInput));
+      const consulta = `${delInput} ${_normTxt(sinNotasDelSistema(ctx._ultimoUsuario))}`;
+      if (!otraCategoria && CATEGORIAS.cubreasiento.test(consulta)) turno.cubreasientoSinCatalogo = true;
     }
   }
   return r;
@@ -2568,6 +2608,10 @@ export function filtrarPrecios(texto, acciones = [], textoCharla = "") {
   const original = String(texto || "");
   if (!original.trim()) return { texto: original, inventado: null };
   const permitidos = _preciosPermitidos(_preciosDeAcciones(acciones));
+  // Los RANGOS oficiales de las líneas (config.js) son precios del dueño, no inventos:
+  // sin esto, "el Sport va de $18.000 a $22.000" se borraba y al equipo le llegaba
+  // "Max estuvo por dar un precio que NO salió del catálogo" (simulador, 15 oct 2026).
+  for (const l of Object.values(CUBREASIENTOS)) for (const v of [l.precioDesde, l.precioHasta]) if (Number.isFinite(v)) permitidos.add(v);
   // Un precio que ya estaba en la charla se acepta SOLO si es un precio REAL del catálogo,
   // tal cual. No alcanza con que estuviera dicho: si no, un precio inventado en un mensaje
   // anterior se auto-autoriza para siempre y Max lo repite toda la conversación — que es
@@ -3118,9 +3162,17 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
     // Si no le quedó nada y encima no sabemos el auto, lo que falta es la pregunta.
     if (!limpio && !autoConocido) limpio = PEDIR_VEHICULO;
   }
-  if (derivaDirecto(ctx._turno)) {
-    const diceMedida = /a medida|confeccion|fabric/i.test(limpio);
-    const diceAsesor = /asesor|compa[ñn]er|vendedor|se comunica|te contact|lo contact/i.test(limpio);
+  // ⚠️ Auditoría del 15 oct 2026: estas frases salían pegadas (a) antes de saber el
+  // auto ("…a medida para tu vehículo. ¿Marca y modelo?"), porque el anuncio nombra
+  // una Hilux o una Strada y eso contaba como "auto conocido", y (b) en TODOS los
+  // turnos de la charla, repitiendo lo mismo dos y tres veces. Ahora: solo con un
+  // auto que nombró EL CLIENTE, y cada frase una sola vez por visita.
+  const autoDelCliente = nombroVehiculo(sinNotasDelSistema(`${ctx.dichoPorElCliente || ""} ${ctx._ultimoUsuario || ""}`));
+  if (derivaDirecto(ctx._turno) && autoDelCliente) {
+    // Lo que Max ya dijo en sus últimos mensajes cuenta igual, con sus palabras o con las fijas.
+    const conRecientes = `${limpio} ${ctx._recientesMax || ""}`;
+    const diceMedida = /a medida|confeccion|fabric/i.test(conRecientes);
+    const diceAsesor = /asesor|compa[ñn]er|vendedor|se comunica|te contact|lo contact/i.test(conRecientes);
     limpio = [diceMedida ? null : AVISO_A_MEDIDA, limpio, diceAsesor ? null : AVISO_PASO_ASESOR]
       .filter(Boolean).join("\n\n");
   }
@@ -3130,19 +3182,34 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // Acá se resuelve la derivación que quedó pendiente, con el mensaje final a la
   // vista: si Max terminó PREGUNTÁNDOLE al cliente si quiere el asesor, no se deriva
   // (se espera el sí). Si no, se registra y el equipo se entera.
+  // CUERO SPORT: la descripción oficial le dice al cliente "un asesor de ventas se
+  // comunicará con usted". Si Max la mandó y no derivó (Haiku, simulador del 15 oct
+  // 2026: la mandó y cerró con "¿te interesa que le pase tu consulta?"), esa promesa
+  // quedaba en el aire y el equipo nunca se enteraba. Se deriva igual, por código.
+  const mandoSport = acciones.some((a) => a.herramienta === "descripcion_oficial" && a.input?.linea === "cuero_sport" && a.resultado?.ok !== false);
+  if (mandoSport && ctx._turno) {
+    ctx._turno.sportDerivado = true;
+    if (!ctx._turno.derivacionPendiente) {
+      const dijo = sinNotasDelSistema(ctx.dichoPorElCliente || ctx._ultimoUsuario || "").replace(/\s+/g, " ").trim().slice(-300);
+      ctx._turno.derivacionPendiente = { motivo: "otro", resumen: `CUERO SPORT: el cliente eligió el cuero Sport y ya recibió la descripción oficial (rango de precio). Pasale el precio exacto. Lo que dijo: "${dijo}"` };
+    }
+  }
   const pend = ctx._turno?.derivacionPendiente;
   if (pend) {
     // El CUBREASIENTO A MEDIDA se deriva SIEMPRE, escriba Max lo que escriba: es la
     // decisión del dueño del 28 ago 2026 ("cuando no encuentre el material que piden,
     // que lo envíe a un asesor"). El resto sigue igual: si preguntó, se espera el sí.
-    const pregunta = !derivaDirecto(ctx._turno) && !ctx._turno?.alfombraEntrando
+    const pregunta = !derivaDirecto(ctx._turno) && !ctx._turno?.alfombraEntrando && !ctx._turno?.sportDerivado
       && /[¿?][^?]*\b(quer[eé]s|quiere|te parece|quer[ií]a)\b[^?]*\b(pas[eoa]r?|pase|paso|derive|derivar|consulta|asesor|compa[ñn]ero|vendedor)\b[^?]*\?/i.test(textoFinal);
     const accion = acciones.find((a) => a.herramienta === "derivar_a_humano");
     if (pregunta) {
       if (accion) accion.resultado = { ok: false, motivo: "solo_ofrecida" };
     } else {
       const r = registrarDerivacion(pend);
+      // La del cuero Sport la arma el código sin que Max llame la herramienta: se
+      // suma a las acciones para que el aviso al equipo (avisos_equipo.js) salga igual.
       if (accion) accion.resultado = r;
+      else acciones.push({ herramienta: "derivar_a_humano", input: pend, resultado: r });
     }
     ctx._turno.derivacionPendiente = null;
   }
