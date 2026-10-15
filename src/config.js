@@ -202,7 +202,10 @@ Si esta opción es de su interés, por favor indíquenos la marca, modelo y año
 // ✏️ Para cambiar cómo se lo dice a los clientes, se edita ACÁ y nada más.
 // ⛔ Sin precios y sin plazos: eso lo confirma el asesor.
 // ───────────────────────────────────────────────────────────────────
-export const AVISO_A_MEDIDA = `Ese cubreasiento lo confeccionamos a medida para tu vehículo, así que se puede hacer sin problema.`;
+// ⚠️ 15 oct 2026: antes decía "se puede hacer sin problema" y el equipo tuvo que
+// desmentirlo (Jack Ytterby: "de momento no tenemos para dicho vehículo"). Para un
+// auto que no está en el catálogo Max NO promete: avisa que lo confirma un asesor.
+export const AVISO_A_MEDIDA = `Los cubreasientos se confeccionan a medida, y para tu vehículo lo tiene que confirmar el equipo.`;
 
 // PRIMERO EL AUTO, DESPUÉS LOS MATERIALES. Pedido de Pablo (28 ago 2026): "si el
 // modelo no está que derive a asesor, ANTES de hablar de materiales". Enumerarle
@@ -216,7 +219,7 @@ export const PEDIR_VEHICULO = `¿Para qué marca y modelo de auto es? Así te co
 // Y la otra mitad: que lo pasamos con un asesor. Va aparte porque se agregan por
 // separado — a veces Max dice una y se come la otra, y repetirle al cliente algo
 // que Max ya dijo queda peor que no decirlo.
-export const AVISO_PASO_ASESOR = `Te paso con un asesor para que te confirme el precio exacto.`;
+export const AVISO_PASO_ASESOR = `Te paso con un asesor para que te confirme si lo podemos hacer y el precio exacto.`;
 
 // ───────────────────────────────────────────────────────────────────
 // AVISO DE ENVÍO — texto EXACTO que el CÓDIGO agrega al cerrar una venta

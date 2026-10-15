@@ -1,7 +1,7 @@
 // Handler único e independiente del canal.
 // Lo usan por igual el simulador, WhatsApp (Baileys) e Instagram.
 import { responder, notaPiezasMostradas, notaCotizadas } from "./cerebro.js";
-import { historial, agregar } from "./memoria.js";
+import { historial, agregar, contextoVigente } from "./memoria.js";
 import { respuestaInstagram } from "./instagram.js";
 import { guardarComprobanteDataUri } from "./comprobantes.js";
 import { setOptIn } from "./clientes.js";
@@ -40,7 +40,7 @@ export async function procesarMensaje({ chatId, texto, canal = "whatsapp", image
   }
 
   // WhatsApp / simulador / web: agente completo con IA.
-  const previo = historial(chatId);
+  const previo = contextoVigente(historial(chatId));
   // Contexto de la conversación para las herramientas (ej: crear_link_pago guarda
   // de qué charla/cliente vino la venta para avisar al equipo con ese dato).
   const ctx = { chatId, contacto };

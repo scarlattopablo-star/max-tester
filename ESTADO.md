@@ -20,6 +20,28 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
+## 🧠 SESIÓN 15 oct — MAX MEZCLABA CHARLAS VIEJAS + PROMETÍA "A MEDIDA" (LO MÁS NUEVO)
+
+Dos capturas de Pablo:
+1. **Strada → Golf MK7.** Cliente (anuncio de Meta): "¿Cuánto cuesta el cuero sport premium? Q sale
+   para una Strada pikup". Max: "Ese cubreasiento lo confeccionamos a medida…" + "De alfombras para el
+   **Golf MK7** estamos sin stock" + "Te paso con un asesor". La Strada SÍ tiene cubreasientos en el
+   catálogo. Causa: `memoria.js` guardaba los últimos 40 mensajes **para siempre** y la IA los veía
+   todos → buscó el auto de una charla vieja; la búsqueda vacía disparó las frases fijas de "a medida".
+   **Arreglo:** cada mensaje guarda su hora (`ts`) y `contextoVigente()` le pasa a la IA solo la
+   VISITA actual (corta en silencios de más de `HORAS_VISITA` = 48 h). El historial completo sigue
+   guardado para el panel. Test: `src/contexto_vigente.test.mjs`.
+2. **Jack Ytterby.** Max: "lo confeccionamos a medida, te paso con un asesor"; el equipo después:
+   "de momento no tenemos para dicho vehículo, perdón el error". **Arreglo:** para un auto sin
+   catálogo Max ya NO promete que se hace: "te paso con un asesor que te confirma si lo podemos
+   confeccionar y el precio" (`AVISO_A_MEDIDA` / `AVISO_PASO_ASESOR` en config.js + notas del prompt).
+3. Prompt Sport: si el cliente pide el cuero Sport por nombre, ya eligió → descripción oficial (rango)
+   + fotos + derivar, con el vehículo de ESTE mensaje.
+
+⚠️ Pendiente de revisar en producción: (a) `IA_MODEL` en Render (la nota del 10 oct dice que respondía
+Haiku 4.5, no Sonnet 5); (b) las "lecciones" de `aprendizaje.js` (Groq/Gemini gratis, sin revisión
+humana, se inyectan al prompt con "APLICALAS") → ver `/api/aprendizaje`.
+
 ## 🖼️ SESIÓN 10 oct — "¿CUÁL DE LAS OPCIONES?" SIN HABER MOSTRADO NADA (LO MÁS NUEVO)
 
 Reportado por Pablo (captura del chat): cliente pide alfombras para su **Oroch doble cabina**
