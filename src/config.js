@@ -148,15 +148,20 @@ Modelo
 Año del vehículo`,
   },
   // Línea SPORT: premium en cuero automotriz Sport, a medida de cada vehículo.
-  // Igual que la tela: el precio exacto lo da un asesor (Max muestra fotos + video,
-  // junta marca/modelo/año y deriva).
+  // Correcciones de Rodrigo (14 oct 2026): es el "material más exclusivo", con base
+  // de FIBRA DE CUERO RECICLADO, 2 años de garantía total y precio ÚNICO de $19.800
+  // COLOCADO, IVA incluido. Ya NO se publicita sola (sin fotos/video en la
+  // presentación): va como una línea de texto después del eco cuero
+  // (TEXTO_MATERIAL_EXCLUSIVO) y el material visual sale solo si el cliente pregunta.
+  // El cierre lo sigue haciendo un asesor (Max junta marca/modelo/año y deriva).
   sport: {
     nombre: "Cubreasiento premium en cuero automotriz Sport",
-    precioDesde: 18000,
-    precioHasta: 22000,
-    // SÍ se coloca (Pablo, 28 jul 2026). El costo va aparte y lo cotiza un vendedor.
+    precioDesde: 19800,
+    precioHasta: 19800,
+    precioColocado: 19800,
+    // El precio YA incluye la colocación (Rodrigo, 14 oct 2026).
     colocacion: true,
-    costoColocacion: "se cotiza con un vendedor (consultar)",
+    costoColocacion: "incluida en el precio ($19.800 colocado, IVA incluido)",
     video: `${process.env.APP_URL || "https://max-tester.onrender.com"}/sport/video.mp4`,
     // Fotos de TRABAJOS REALES instalados (camioneta JMC, jul 2026). Pablo pidió
     // (23 jul 2026) mostrar SOLO estas — las viejas cuero-1/cuero-2 no van más.
@@ -167,18 +172,45 @@ Año del vehículo`,
     ],
     // Descripción OFICIAL del negocio (Pablo, 22 jul 2026): Max la envía TAL CUAL,
     // sin cambiar una palabra, cuando el cliente se interesa por esta línea.
+    // 14 oct 2026: material, garantía y precio actualizados con las correcciones de Rodrigo.
     descripcionExacta: `Contamos con una línea Premium en cuero automotriz Sport, confeccionada a medida para cada vehículo.
 
-✅ Cuero automotriz Sport de máxima calidad.
+✅ Material exclusivo, fabricado con base de fibra de cuero reciclado.
 ✅ Espumas de 8 mm de alta densidad para mayor confort.
 ✅ Impermeables y lavables.
 ✅ Máxima resistencia y durabilidad.
 ✅ Excelente terminación y ajuste específico para cada modelo.
+✅ 2 años de garantía total.
 
-💰 Precio: entre $18.000 y $22.000, dependiendo del modelo del vehículo.
+💰 Costo colocado: $19.800 IVA incluido.
 
-Si esta opción es de su interés, por favor indíquenos la marca, modelo y año de su vehículo. Un asesor de ventas se comunicará con usted a la brevedad para brindarle el precio exacto y toda la información que necesite.`,
+Si esta opción es de su interés, por favor indíquenos la marca, modelo y año de su vehículo. Un asesor de ventas se comunicará con usted a la brevedad para coordinar la confección y brindarle toda la información que necesite.`,
   },
+};
+
+// ───────────────────────────────────────────────────────────────────
+// CORRECCIONES DE RODRIGO (14 oct 2026) — textos que pone el CÓDIGO, palabra por palabra.
+// ───────────────────────────────────────────────────────────────────
+// Teléfono al que se manda al cliente cuando insiste, quiere otra consulta o hay demora.
+export const TELEFONO_CONSULTAS = NEGOCIO.telefonoFijo;
+
+// El "material más exclusivo" (= la línea Sport): va UNA vez por charla, después de
+// la información del eco cuero, como opción adicional y sin fotos ni video.
+export const TEXTO_MATERIAL_EXCLUSIVO = `También contamos con un material más exclusivo, fabricado con base de fibra de cuero reciclado, con 2 años de garantía total.
+Costo colocado: $19.800 IVA incluido.`;
+
+// ALFOMBRA que NO tenemos para ese modelo (no hay publicación en Mercado Libre, ni
+// activa ni agotada): sin "está ingresando", sin "por ahora" y sin promesas.
+export const AVISO_ALFOMBRA_NO_DISPONIBLE = `De momento no contamos con alfombras disponibles para ese modelo. Si querés realizar otra consulta o necesitás confirmar alguna información, podés comunicarte directamente por teléfono con nosotros al ${TELEFONO_CONSULTAS}.`;
+
+// Cuando Max pasa la charla a una persona puede haber demora: se le ofrece el teléfono.
+export const AVISO_DEMORA = `Si estamos demorando en responder y necesitás resolver tu consulta con mayor rapidez, te recomendamos comunicarte por teléfono al ${TELEFONO_CONSULTAS}.`;
+
+// UNA sola imagen con los 5 colores (rojo, azul, ocre, gris y negro) en vez de una
+// foto por color. Se arma con armar_colores.py a partir de las muestras reales.
+export const MUESTRA_COLORES = {
+  img: `${process.env.APP_URL || "https://max-tester.onrender.com"}/colores/colores.jpg`,
+  nombre: "Colores disponibles: rojo, azul, ocre, gris y negro (muestras del capitoneado premium)",
 };
 
 // ───────────────────────────────────────────────────────────────────
@@ -282,6 +314,13 @@ export const AVISO_AGOTADO = `Actualmente está agotado, no tenemos en stock. Es
 
 ¿Querés que te avise apenas llegue?`;
 
+// ALFOMBRA AGOTADA (la publicación existe en ML pero está pausada o en cero).
+// Correcciones de Rodrigo (14 oct 2026): nada de "está ingresando" ni "esperamos que
+// reingrese": se dice que no hay y se ofrece el aviso, sin prometer que vuelva.
+export const AVISO_AGOTADO_ALFOMBRA = `De momento no tenemos disponibilidad de esa alfombra.
+
+¿Querés que te avise si vuelve a haber stock?`;
+
 // ───────────────────────────────────────────────────────────────────
 // ALFOMBRAS QUE ESTÁN ENTRANDO — pedido de Pablo (5 oct 2026): "todo lo que es
 // alfombra y la gente consulte ya están entrando, así que para saber el día exacto
@@ -294,8 +333,10 @@ export const AVISO_AGOTADO = `Actualmente está agotado, no tenemos en stock. Es
 // ⛔ Sin días ni fechas: la fecha exacta la confirma el asesor.
 // ✏️ Cuando dejen de estar entrando, se vuelve a lo de antes poniendo
 // ALFOMBRAS_ENTRANDO en false.
+// ⛔ APAGADO el 14 oct 2026 (correcciones de Rodrigo): "el bot no debe decir ni
+// insinuar que están ingresando". Las agotadas vuelven al aviso (AVISO_AGOTADO_ALFOMBRA).
 // ───────────────────────────────────────────────────────────────────
-export const ALFOMBRAS_ENTRANDO = true;
+export const ALFOMBRAS_ENTRANDO = false;
 export const AVISO_ALFOMBRA_ENTRANDO = `Esa alfombra ya está entrando. Para confirmarte el día exacto de entrega te paso con un asesor, que enseguida se comunica con vos.`;
 
 // ───────────────────────────────────────────────────────────────────
