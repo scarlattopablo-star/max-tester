@@ -342,6 +342,33 @@ const CATEGORIAS = {
 export function sinNotasDelSistema(texto) {
   return String(texto || "").replace(/\[(?:Contexto|El cliente)[^\]]*\]/g, " ");
 }
+
+// PREGUNTA PRECARGADA DE LOS ANUNCIOS: el botón de WhatsApp de los anuncios de Meta
+// trae escrito "¿Cuánto cuesta el cuero sport premium?" y el cliente lo manda con un
+// toque, venga del anuncio que venga. En las charlas del 15 oct 2026 llegó 32 veces y
+// solo 5 eran del anuncio del Sport (10 del de alfombras para Strada, 8 de "nuevos
+// ingresos" de alfombras). Max lo tomaba como "eligió el Sport" y no le ofrecía nada
+// más. Si el mensaje es SOLO esa frase, se le avisa que no es una elección.
+export const NOTA_PREGUNTA_PRECARGADA = "[Contexto interno — \"¿Cuánto cuesta el cuero sport premium?\" es la pregunta que viene PRECARGADA en el botón de WhatsApp de los anuncios: el cliente la mandó con un toque, NO eligió el cuero Sport. Si no sabés su vehículo, preguntale marca y modelo (y si el anuncio era de ALFOMBRAS, preguntale también si busca alfombras o cubreasientos). Cuando lo sepas, seguí el flujo normal: mostrale TODAS las opciones para su auto, con el Sport como una más. ⛔ NO le mandes la descripción oficial del Sport ni lo derives por el Sport hasta que él lo elija.]";
+const _RE_PREGUNTA_PRECARGADA = /^\s*¿?\s*cu[aá]nto cuesta el cuero sport premium\s*\?*\s*$/i;
+// ¿El cliente eligió el Sport? Cuenta lo que escribió él (sin el anuncio, sin la
+// pregunta precargada) y las fotos del Sport que citó ("respondió CITANDO esta foto").
+export function clienteEligioSport(ctx = {}) {
+  const dicho = String(ctx.dichoPorElCliente || ctx._ultimoUsuario || "")
+    .replace(/\[Contexto: el cliente llegó desde un anuncio[^\]]*\]/g, " ")
+    .split(NOTA_PREGUNTA_PRECARGADA).join(" ")
+    .replace(/¿?\s*cu[aá]nto cuesta el cuero sport premium\s*\?*/gi, " ");
+  return /\bsport\b/i.test(dicho.replace(/eco ?sport/gi, " "));
+}
+// ¿La charla arrancó con la pregunta precargada del anuncio? Solo en ese caso se frena
+// la descripción del Sport: sin esa frase, quien nombra el Sport es porque lo buscó.
+export function vinoDePreguntaPrecargada(ctx = {}) {
+  return /cu[aá]nto cuesta el cuero sport premium/i.test(String(ctx.dichoPorElCliente || ctx._ultimoUsuario || ""));
+}
+export function marcarPreguntaPrecargada(texto) {
+  const t = String(texto || "");
+  return _RE_PREGUNTA_PRECARGADA.test(sinNotasDelSistema(t)) ? `${t} ${NOTA_PREGUNTA_PRECARGADA}` : t;
+}
 // ¿Es una ALFOMBRA que está entrando? (pedido de Pablo, 5 oct 2026 — ver
 // AVISO_ALFOMBRA_ENTRANDO en config.js). Se mira el NOMBRE del producto.
 // Vale SOLO para las AGOTADAS (sin stock en ML). Corrección de Rodrigo del mismo
@@ -1411,7 +1438,7 @@ Tené clara esta diferencia:
 - CUERO AUTOMOTRIZ SPORT = EL "MATERIAL MÁS EXCLUSIVO" (línea premium a medida). Datos confirmados por Rodrigo (14 oct 2026): base de FIBRA DE CUERO RECICLADO, 2 AÑOS DE GARANTÍA TOTAL, COSTO COLOCADO $19.800 IVA INCLUIDO (la colocación YA está incluida en ese precio).
   · 📋 DESCRIPCIÓN OFICIAL (REGLA DEL DUEÑO, no la rompas): SOLO cuando el cliente ELIGE el cuero Sport o confirma interés en él DESPUÉS de ver las opciones ("el sport me gustó", "quiero ese", "contame más del sport"), llamá a "descripcion_oficial" con linea:"cuero_sport" — el sistema le envía el texto oficial EXACTO del negocio (incluye el material, la garantía de 2 años, el costo colocado de $19.800 IVA incluido y el pedido de marca/modelo/año con derivación a asesor). ⛔ NUNCA la mandes en el mismo mensaje en que recién le mostrás las opciones (primero elige, después la descripción — ver FLUJO EN DOS PASOS). ⛔ Vos NO escribas ni resumas esa descripción por tu cuenta: como mucho una frase corta de intro. UNA vez por conversación.
   · 💰 El precio es ÚNICO: $19.800 colocado, IVA incluido. ⛔ No le digas que la colocación va aparte (en esta línea está incluida) y no inventes otro precio.
-  · SI EL CLIENTE YA PIDE EL CUERO SPORT POR NOMBRE ("¿cuánto sale el cuero sport para mi Strada?"), YA ELIGIÓ: no hace falta la presentación de las 4 líneas. Mandale la descripción oficial (descripcion_oficial, linea:"cuero_sport", que trae el costo colocado) + las fotos (mostrar_cuero_sport) + las opciones de su modelo (enviar_foto), y derivá con el vehículo. Buscá SIEMPRE el vehículo que nombró EN ESTE mensaje, nunca uno de una charla anterior.
+  · SI EL CLIENTE YA PIDE EL CUERO SPORT POR NOMBRE con sus propias palabras ("¿cuánto sale el cuero sport para mi Strada?"), YA ELIGIÓ — ⚠️ OJO: "¿Cuánto cuesta el cuero sport premium?" a secas es la pregunta PRECARGADA de los anuncios y NO cuenta como elección (viene con una nota interna que lo avisa): no hace falta la presentación de las 4 líneas. Mandale la descripción oficial (descripcion_oficial, linea:"cuero_sport", que trae el costo colocado) + las fotos (mostrar_cuero_sport) + las opciones de su modelo (enviar_foto), y derivá con el vehículo. Buscá SIEMPRE el vehículo que nombró EN ESTE mensaje, nunca uno de una charla anterior.
   · ⛔ NO LA PUBLICITES SOLA: en la presentación de cubreasientos va SOLO la línea de texto que agrega el SISTEMA después del eco cuero (ver PRESENTACIÓN COMPLETA). Sin fotos ni video, salvo que el cliente pregunte por ella.
   · SOLO SI EL CLIENTE PREGUNTA POR EL SPORT (o se interesa en el material exclusivo): mostrale las FOTOS Y EL VIDEO reales vía "mostrar_cuero_sport", Y TAMBIÉN las opciones que hay para su modelo con "enviar_foto" (pedido de Rodrigo: que no se limite al Sport) (UNA sola vez por conversación; no los repitas). Las fotos son de TRABAJOS REALES recién instalados: acompañalas SIEMPRE con un comentario entusiasta corto, del estilo "¡Mirá lo lindo que quedan! ¡Están re buenas!" (con tus palabras, natural y genuino).
   · CUANDO EL CLIENTE LO ELIGE: mandale la descripción oficial (regla de arriba); DESPUÉS pedile MARCA, MODELO y AÑO del vehículo (lo que falte), llamá a "derivar_a_humano" (motivo "otro", resumen indicando que es por CUERO SPORT + marca/modelo/año) y cerrá diciéndole: "Un asesor de ventas se comunicará con usted a la brevedad para coordinar la confección y brindarle toda la información que necesite." ⛔ NO cobres vos esta línea: la cotiza y cierra un asesor.
@@ -2170,6 +2197,12 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const clave = Object.keys(mapa).find((k) => linea.includes(k.replace("_", " ")) || linea.includes(k));
       const texto = clave ? mapa[clave].descripcionExacta : null;
       if (!texto) return { ok: false, mensaje: "Línea desconocida: usá 'tela', 'cuero_sport' o 'capitoneado'." };
+      // La del SPORT solo cuando el cliente lo eligió (con sus palabras o citando una
+      // foto del Sport): la pregunta precargada del anuncio no cuenta. Sin este freno,
+      // Haiku la mandaba igual y el código derivaba al asesor por un Sport que nadie pidió.
+      if (mapa[clave] === CUBREASIENTOS.sport && vinoDePreguntaPrecargada(ctx) && !clienteEligioSport(ctx)) {
+        return { ok: false, mensaje: "(Nota interna del sistema.) El cliente todavía NO eligió el cuero Sport: lo único que mandó fue la pregunta precargada del anuncio. ⛔ No le mandes la descripción del Sport ni lo derives por eso. Mostrale las opciones para su auto (enviar_foto) con el Sport como una más y esperá a que elija." };
+      }
       return { ok: true, textoOficial: texto, instruccion: "El sistema ya le envía el texto oficial EXACTO al cliente. NO lo repitas ni lo resumas vos: como mucho agregá una frase corta aparte (intro o pregunta)." };
     }
     if (nombre === "mostrar_tela") {
@@ -3399,6 +3432,7 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
 // Devuelve { texto, acciones:[{herramienta, input, resultado}], imagenesEnviar }
 // imagenes: array de URLs o data-URIs (base64) que el cliente mandó. El modelo las "ve".
 export async function responder(textoUsuario, historialPrevio = [], imagenes = [], ctx = {}) {
+  textoUsuario = marcarPreguntaPrecargada(textoUsuario);
   // El aviso de COLOCACIÓN necesita saber QUÉ línea se está comprando, y el modelo
   // no siempre la repite al llamar la herramienta (típico: confirmar_transferencia
   // sin "detalle"). Por eso le damos a las herramientas el texto de la charla.
