@@ -1510,12 +1510,12 @@ function systemPromptDinamico() {
   let base = `# Momento actual (Uruguay)
 - Ahora en Uruguay es ${m.dia} y son las ${m.horaTxt} (es ${m.parte}). Hoy es ${m.fecha} (formato para agendar: YYYY-MM-DD; usalo para entender "mañana", "el viernes", etc.).
 - ⛔ SALUDO SEGÚN LA HORA (REGLA DURA, NO LA ROMPAS): si vas a saludar, usá EXACTAMENTE "${op}" porque ahora es ${m.parte}. Está TERMINANTEMENTE PROHIBIDO usar ${prohibidos.map((s) => `"${s}"`).join(" ni ")} ahora — no corresponden a esta hora (${m.horaTxt}). Mañana = "Buenos días/Buen día" (06:00–11:59), tarde = "Buenas tardes" (12:00–19:59), noche = "Buenas noches" (20:00–05:59). Antes de saludar, mirá la hora (${m.horaTxt}) y elegí el saludo correcto.`;
-  // LECCIONES=off apaga las lecciones automáticas sin deploy. Las escribe una IA
-  // gratis sin revisión humana y en oct 2026 estaban congeladas desde el 16 ago (Groq
-  // da 404) contradiciendo reglas del dueño: "anotalo para avisarle" donde el prompt
-  // lo prohíbe, "el cliente no recuerda la charla anterior", "preguntá la línea antes
-  // del precio".
-  const lecciones = /^(off|0|no|false)$/i.test(process.env.LECCIONES || "") ? "" : (leccionesActuales() || "").trim();
+  // Lecciones automáticas APAGADAS por defecto (pedido de Pablo, 15 oct 2026). Las
+  // escribe una IA gratis sin revisión humana y en oct 2026 estaban congeladas desde
+  // el 16 ago (Groq da 404) contradiciendo reglas del dueño: "anotalo para avisarle"
+  // donde el prompt lo prohíbe, "el cliente no recuerda la charla anterior",
+  // "preguntá la línea antes del precio". Para volver a prenderlas: LECCIONES=on en Render.
+  const lecciones = /^(on|1|si|sí|true)$/i.test(process.env.LECCIONES || "") ? (leccionesActuales() || "").trim() : "";
   if (lecciones) {
     base += `\n\n# Lecciones aprendidas de conversaciones reales (APLICALAS, sin dejar de ser formal y correcto)\n${lecciones}`;
   }

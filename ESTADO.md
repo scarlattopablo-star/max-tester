@@ -45,7 +45,7 @@ Dos capturas de Pablo:
 - **Lecciones automáticas** (`/api/aprendizaje`): congeladas desde el 16 ago (Groq da 404 con
   `llama-3.3-70b-versatile`) y contradicen reglas ("ofrecé anotarlo para avisarle", "el cliente no
   recuerda la charla anterior", "preguntá línea y color antes del precio"). No traen datos de otros
-  clientes. Nuevo interruptor: **`LECCIONES=off`** en Render las saca del prompt sin deploy.
+  clientes. **APAGADAS por defecto** (pedido de Pablo, 15 oct): no entran al prompt. Para prenderlas, **`LECCIONES=on`** en Render.
 - **Fallas del CÓDIGO encontradas y arregladas** (tests en `src/auditoria_15oct.test.mjs`):
   1. El texto del anuncio de Meta ("…la mejor calidad de cubreasientos…") contaba como palabras del
      cliente → consultas por ALFOMBRAS o CUBRE VOLANTE sin catálogo salían con "Ese cubreasiento lo
