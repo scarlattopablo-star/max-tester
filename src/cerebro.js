@@ -2011,7 +2011,7 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   // concluía "para ese modelo el Sport no está cargado" (simulador con Haiku, 15 oct 2026).
   const pidioSport = /\bsport\b/i.test(`${input?.producto || ""} ${input?.modelo || ""}`) && !/eco ?sport/i.test(`${input?.producto || ""} ${input?.modelo || ""}`);
   if (BUSCAN_CATALOGO.has(nombre) && r && pidioSport && (r.ok === true || r.encontrado === true || (r.fotos || []).length)) {
-    const nota = "(Nota interna del sistema.) El CUERO SPORT no tiene publicaciones por vehículo: lo que trajo esta búsqueda son las OTRAS líneas de ese auto. ⛔ NO digas que el Sport no está, no está cargado o no se hace para ese vehículo. Si el cliente pidió el Sport: descripcion_oficial (linea:\"cuero_sport\") + mostrar_cuero_sport + derivar_a_humano con el vehículo. ⛔ No le ofrezcas las otras líneas si no las pidió.";
+    const nota = "(Nota interna del sistema.) El CUERO SPORT no tiene publicaciones por vehículo: lo que trajo esta búsqueda son las OTRAS líneas de ese auto. ⛔ NO digas que el Sport no está, no está cargado o no se hace para ese vehículo. Si el cliente pidió el Sport: descripcion_oficial (linea:\"cuero_sport\") + mostrar_cuero_sport + derivar_a_humano con el vehículo.";
     r = { ...r, instruccion: r.instruccion ? `${r.instruccion}\n\n${nota}` : nota };
   }
   // Memoria del TURNO: qué contestó el catálogo sobre el auto del cliente. La leen las
