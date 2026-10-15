@@ -91,3 +91,26 @@ test("descripción oficial del Sport sin derivar: el código deriva igual y el e
   assert.equal(d.resultado?.ok, true);
   assert.match(d.input.resumen, /CUERO SPORT/);
 });
+
+test("la pregunta precargada del anuncio no cuenta como elegir el Sport", async () => {
+  const { marcarPreguntaPrecargada, NOTA_PREGUNTA_PRECARGADA } = await import("./cerebro.js");
+  const conAnuncio = `${ANUNCIO} ¿Cuánto cuesta el cuero sport premium?`;
+  assert.ok(marcarPreguntaPrecargada(conAnuncio).includes(NOTA_PREGUNTA_PRECARGADA));
+  assert.ok(marcarPreguntaPrecargada("cuanto cuesta el cuero sport premium").includes(NOTA_PREGUNTA_PRECARGADA));
+  // Con palabras propias (nombra su auto) SÍ es una elección: no se toca.
+  const propio = "¿Cuánto cuesta el cuero sport premium? Q sale para una Strada pikup";
+  assert.equal(marcarPreguntaPrecargada(propio), propio);
+  // La nota se va con sinNotasDelSistema: no se confunde con palabras del cliente.
+  assert.ok(!sinNotasDelSistema(NOTA_PREGUNTA_PRECARGADA).includes("ALFOMBRAS"));
+});
+
+test("la descripción del Sport solo sale si el cliente lo eligió", async () => {
+  const { clienteEligioSport, marcarPreguntaPrecargada } = await import("./cerebro.js");
+  const pre = marcarPreguntaPrecargada(`${ANUNCIO} ¿Cuánto cuesta el cuero sport premium?`);
+  assert.equal(clienteEligioSport({ dichoPorElCliente: `${pre} Onix 2024` }), false);
+  assert.equal(clienteEligioSport({ dichoPorElCliente: `${pre} Onix 2024 quiero el sport` }), true);
+  assert.equal(clienteEligioSport({ dichoPorElCliente: `${pre} [Contexto interno — el cliente respondió CITANDO esta foto que le mandaste: "Cubreasiento premium en cuero automotriz Sport (2)". Es ESA la que eligió] este` }), true);
+  assert.equal(clienteEligioSport({ dichoPorElCliente: "tengo una ford ecosport 2020" }), false);
+  const r = await ejecutarHerramienta("descripcion_oficial", { linea: "cuero_sport" }, { _turno: {}, dichoPorElCliente: `${pre} Onix 2024`, _ultimoUsuario: "Onix 2024" });
+  assert.equal(r.ok, false);
+});
