@@ -37,8 +37,11 @@ export async function cargarConversaciones() {
       mensajes jsonb not null default '[]',
       actualizado timestamptz default now()
     )`;
-    for (const f of await sql`select chat_id, mensajes from conversaciones`) {
-      cache.set(f.chat_id, Array.isArray(f.mensajes) ? f.mensajes : []);
+    for (const f of await sql`select chat_id, mensajes, extract(epoch from actualizado) * 1000 as ms from conversaciones`) {
+      const ms = Number(f.ms) || 0;
+      // Las charlas guardadas antes de que existiera la hora por mensaje toman la
+      // del último movimiento de la fila: alcanza para saber si son de otra visita.
+      cache.set(f.chat_id, (Array.isArray(f.mensajes) ? f.mensajes : []).map((m) => (m.ts ? m : { ...m, ts: ms })));
     }
     console.log(`💬 conversaciones cargadas de la base: ${cache.size}`);
   } catch (e) {
@@ -51,9 +54,27 @@ export function historial(chatId) {
   return cache.get(chatId) || [];
 }
 
+// Lo que Max tiene que recordar AHORA: solo la visita actual. Si el cliente vuelve
+// después de un silencio largo, lo de antes es OTRA consulta. Pasó el 15 oct 2026:
+// un cliente preguntó por cuero Sport para su Strada y Max le contestó por un Golf MK7
+// de una charla vieja, buscó ese auto y lo derivó con frases que no venían al caso.
+// El historial completo se sigue guardando (panel, auditoría): esto recorta lo que ve la IA.
+export const HORAS_VISITA = 48;
+export function contextoVigente(mensajes, ahora = Date.now()) {
+  const arr = mensajes || [];
+  const corte = HORAS_VISITA * 60 * 60 * 1000;
+  let desde = 0;
+  for (let i = 0; i < arr.length; i++) {
+    const ts = arr[i]?.ts;
+    const siguiente = i + 1 < arr.length ? arr[i + 1]?.ts : ahora;
+    if (ts && siguiente && siguiente - ts > corte) desde = i + 1;
+  }
+  return arr.slice(desde).map(({ role, content }) => ({ role, content }));
+}
+
 export function agregar(chatId, rol, contenido) {
   const arr = (cache.get(chatId) || []).slice();
-  arr.push({ role: rol, content: contenido });
+  arr.push({ role: rol, content: contenido, ts: Date.now() });
   const recortada = arr.length > MAX_MENSAJES ? arr.slice(-MAX_MENSAJES) : arr;
   cache.set(chatId, recortada);
   persistir(chatId, recortada);

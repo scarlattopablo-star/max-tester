@@ -20,7 +20,56 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
-## 📝 SESIÓN 14 oct — CORRECCIONES DE RODRIGO (LO MÁS NUEVO)
+## 🧠 SESIÓN 15 oct — MAX MEZCLABA CHARLAS VIEJAS + PROMETÍA "A MEDIDA" (LO MÁS NUEVO)
+
+Dos capturas de Pablo:
+1. **Strada → Golf MK7.** Cliente (anuncio de Meta): "¿Cuánto cuesta el cuero sport premium? Q sale
+   para una Strada pikup". Max: "Ese cubreasiento lo confeccionamos a medida…" + "De alfombras para el
+   **Golf MK7** estamos sin stock" + "Te paso con un asesor". La Strada SÍ tiene cubreasientos en el
+   catálogo. Causa: `memoria.js` guardaba los últimos 40 mensajes **para siempre** y la IA los veía
+   todos → buscó el auto de una charla vieja; la búsqueda vacía disparó las frases fijas de "a medida".
+   **Arreglo:** cada mensaje guarda su hora (`ts`) y `contextoVigente()` le pasa a la IA solo la
+   VISITA actual (corta en silencios de más de `HORAS_VISITA` = 48 h). El historial completo sigue
+   guardado para el panel. Test: `src/contexto_vigente.test.mjs`.
+2. **Jack Ytterby.** Max: "lo confeccionamos a medida, te paso con un asesor"; el equipo después:
+   "de momento no tenemos para dicho vehículo, perdón el error". **Arreglo:** para un auto sin
+   catálogo Max ya NO promete que se hace: "te paso con un asesor que te confirma si lo podemos
+   confeccionar y el precio" (`AVISO_A_MEDIDA` / `AVISO_PASO_ASESOR` en config.js + notas del prompt).
+3. Prompt Sport: si el cliente pide el cuero Sport por nombre, ya eligió → descripción oficial (rango)
+   + fotos + derivar, con el vehículo de ESTE mensaje.
+
+### Auditoría de 100 charlas reales (15 oct, tarde) + ajustes
+- **Producción responde con `claude-haiku-4-5-20251001`** (`/api/estado`). El default del código es
+  `claude-sonnet-5`, así que **`IA_MODEL` está cargada en Render con Haiku**. En el simulador, con los
+  mismos casos, Sonnet 5 hace el flujo del Sport bien y Haiku inventa (motivos de precio, "$20.500").
+- **Lecciones automáticas** (`/api/aprendizaje`): congeladas desde el 16 ago (Groq da 404 con
+  `llama-3.3-70b-versatile`) y contradicen reglas ("ofrecé anotarlo para avisarle", "el cliente no
+  recuerda la charla anterior", "preguntá línea y color antes del precio"). No traen datos de otros
+  clientes. Nuevo interruptor: **`LECCIONES=off`** en Render las saca del prompt sin deploy.
+- **Fallas del CÓDIGO encontradas y arregladas** (tests en `src/auditoria_15oct.test.mjs`):
+  1. El texto del anuncio de Meta ("…la mejor calidad de cubreasientos…") contaba como palabras del
+     cliente → consultas por ALFOMBRAS o CUBRE VOLANTE sin catálogo salían con "Ese cubreasiento lo
+     confeccionamos a medida" pegado (BYD Song Plus, Changan, Toyota). `sinNotasDelSistema()` y la
+     categoría de la búsqueda manda sobre el texto suelto.
+  2. Las frases fijas `AVISO_A_MEDIDA`/`AVISO_PASO_ASESOR` salían antes de saber el auto (el anuncio
+     nombraba una Hilux) y en cada turno (2-3 veces por charla). Ahora: solo con auto dicho por el
+     cliente y una vez (mira `_recientesMax`).
+  3. "Geely EX2 **Max**" / "EX5 Max" daban 0 en el catálogo → "sin stock" de alfombras que estaban a
+     la venta. `buscarPrecio` reintenta una vez sin "max".
+  4. El rango oficial del Sport ($18.000–$22.000) lo borraba el filtro de precios inventados y al
+     equipo le llegaba "Max estuvo por dar un precio que NO salió del catálogo".
+  5. Max mandaba la descripción oficial del Sport ("un asesor se comunicará con usted") y no
+     derivaba → el equipo nunca se enteraba. Ahora deriva el código.
+  6. Buscar "cuero sport strada" trae las otras líneas y Haiku concluía "el Sport no está cargado
+     para ese modelo": nota interna en la herramienta.
+- **Pendiente (no tocado):** "Strada Ultra" y "CS55 Plus" dan 0 (decidir si son el mismo auto que
+  Strada/CS55); derivaciones duplicadas en el mismo turno (2 avisos al equipo); Max inventó un
+  feriado ("viernes 16, Día de la Cultura"). El "ya está entrando" lo sacó el PR #32 (mergeado antes que este).
+- **Con el PR #32:** el Sport pasa a precio único $19.800 colocado. El filtro de precios lo toma de
+  `CUBREASIENTOS.sport` solo, y la regla "si pide el Sport por nombre, ya eligió" ahora manda también
+  las opciones de su modelo (pedido de Rodrigo).
+
+## 📝 SESIÓN 14 oct — CORRECCIONES DE RODRIGO 
 
 Pedido de Rodrigo (hoja con 5 puntos + audio). Todo lo que dice el cliente lo pone el CÓDIGO
 (`config.js`), así sale siempre igual. Teléfono para el cliente: `TELEFONO_CONSULTAS` = fijo 2 901 55 88.
