@@ -667,6 +667,10 @@ const existeEnCatalogo = (w) => vocabularioCatalogo().get(w.length)?.has(w) === 
 function corregirTipeo(w) {
   if (w.length < 3 || !/^[a-z]+$/.test(w)) return w;
   if (STOP_BUSQUEDA.has(w) || NO_ES_AUTO.has(w) || ACABADO_PRODUCTO.has(w)) return w;
+  // Una MARCA conocida nunca se "corrige": "tesla" no está en ningún título y quedaba
+  // convertida en "tela", con lo que se perdía la marca y "Tesla Model 3" traía la
+  // Wingle 5/7/3 (auditoría del 15 oct 2026).
+  if (MARCAS.has(w)) return w;
   const vocab = vocabularioCatalogo();
   if (vocab.get(w.length)?.has(w)) return w; // existe tal cual: no se toca
   const max = w.length <= 5 ? 1 : 2;
@@ -680,6 +684,45 @@ function corregirTipeo(w) {
     }
   }
   return mejor && !empate ? mejor : w;
+}
+
+// ── Modelo mal escrito que la corrección no se anima a tocar ──────────────────
+// corregirTipeo es estricta a propósito (un candidato y a 1-2 letras): "Fiat Móvil"
+// por Mobi, "Onixz", "Fredon" quedan sin corregir y la búsqueda da cero. Desde el 15 oct
+// 2026 ese cero es "de momento no tenemos" (sin asesor), así que antes de decirlo se
+// buscan modelos PARECIDOS del catálogo de esa categoría y, si hay, Max le pregunta al
+// cliente si se refiere a ese (pedido de Pablo). NUNCA se elige solo: se pregunta.
+// Solo cuenta lo que el cliente escribió y NO existe en ningún título (un modelo real,
+// aunque no tenga cubreasientos, como el Ytterby, no es un error de tipeo).
+export function modelosParecidos(consulta, categoria = null, lista = null) {
+  // Si el cliente dijo la MARCA, solo vale un parecido de esa marca (o de un título que
+  // no la escribe): "VW Suran" no puede terminar sugiriendo el "BYD Yuan".
+  const marcasDichas = _normTxt(consulta).split(/\s+/).filter((w) => MARCAS.has(w));
+  const deEsaMarca = (t) => !marcasDichas.length || marcasDichas.some((m) => t.split(" ").includes(m)) || !t.split(" ").some((w) => MARCAS.has(w));
+  const pool = (lista || productosML()).filter((p) => (!categoria || !CATEGORIAS[categoria] || CATEGORIAS[categoria].test(_tituloDe(p.n))) && deEsaMarca(_tituloDe(p.n)));
+  const frec = new Map(); // palabra -> títulos donde aparece
+  for (const p of pool) for (const w of new Set(_tituloDe(p.n).split(" "))) {
+    if (w.length < 3 || !/^[a-z]+$/.test(w) || STOP_BUSQUEDA.has(w) || NO_ES_AUTO.has(w) || ACABADO_PRODUCTO.has(w) || MARCAS.has(w)) continue;
+    if (!frec.has(w)) frec.set(w, []);
+    frec.get(w).push(p.n);
+  }
+  const salida = new Map(); // palabra del catálogo -> título de ejemplo
+  for (const w of _normTxt(consulta).split(/\s+/)) {
+    if (w.length < 3 || !/^[a-z]+$/.test(w) || STOP_BUSQUEDA.has(w) || NO_ES_AUTO.has(w) || ACABADO_PRODUCTO.has(w) || MARCAS.has(w)) continue;
+    if (Object.values(CATEGORIAS).some((re) => re.test(w))) continue;
+    if (existeEnCatalogo(w)) continue;
+    const max = w.length <= 4 ? 1 : 2;
+    for (const [cand, titulos] of frec) {
+      // Las palabras que están en muchos títulos son del PRODUCTO (cuero, negro,
+      // capitoneado), no del auto: no sirven como sugerencia.
+      if (titulos.length > 8) continue;
+      // Un error de tipeo casi nunca cambia la PRIMERA letra (movil→mobi, fronks→fronx):
+      // sin esto "suran" sugería "yuan" y "fit" sugería "kit".
+      if (cand[0] !== w[0]) continue;
+      if (_distancia(w, cand, max) <= max) salida.set(cand, titulos[0]);
+    }
+  }
+  return [...salida].slice(0, 3).map(([palabra, titulo]) => ({ palabra, titulo }));
 }
 
 // Términos de la consulta que identifican al AUTO aunque la lista de genéricas los
@@ -766,9 +809,15 @@ function _terminos(consulta) {
   // Exigirla solo puede dar cero: se ignora. Las largas SÍ se siguen exigiendo aunque no
   // existan —"ferrari" no está en ningún título— porque ahí el cero es la respuesta
   // correcta: no lo trabajamos, y aflojarla le ofrecería el producto de otro auto.
-  const ruidoCorto = (w) => w.length === 3 && /^[a-z]+$/.test(w) && !existeEnCatalogo(w) && !modelos.has(w);
-  const fuertes = distintivas.filter((w) => !ruidoCorto(w))
-    .filter((w) => modelos.has(w) || (w.length >= 3 && /[a-z]/.test(w)) || esModeloCorto(w));
+  let ruidoCorto = (w) => w.length === 3 && /^[a-z]+$/.test(w) && !existeEnCatalogo(w) && !modelos.has(w);
+  const esFuerte = (w) => modelos.has(w) || (w.length >= 3 && /[a-z]/.test(w)) || esModeloCorto(w);
+  // ⚠️ Pero si al tirarla no queda NINGÚN modelo (solo la marca), esa palabra ERA el
+  // modelo: "Honda Fit", "Chevrolet Joy". Tirarla dejaba la marca sola y se le ofrecía
+  // al cliente la WR-V o el Onix (auditoría del 15 oct 2026). Se exige: da cero, que es
+  // la respuesta correcta para un auto que no trabajamos.
+  const quedaModelo = distintivas.some((w) => !ruidoCorto(w) && esFuerte(w) && !MARCAS.has(w) && !NO_ES_AUTO.has(w));
+  if (!quedaModelo) ruidoCorto = () => false;
+  const fuertes = distintivas.filter((w) => !ruidoCorto(w)).filter(esFuerte);
   return { palabras, distintivas, fuertes, modelos, texto };
 }
 
@@ -853,7 +902,11 @@ function _buscarPrecio(consulta, lista = null) {
     // ⚠️ Solo se afloja si lo que queda son términos FUERTES (`fuertes.length`). Si el
     // modelo es corto y débil —"vw up"— la marca sigue siendo obligatoria: sin ella,
     // "up" solo ya matchea la "Fiat Strada Pik Up".
-    const sinMarca = fuertes.length ? obligatorias.filter((w) => !MARCAS.has(w)) : [];
+    let sinMarca = fuertes.length ? obligatorias.filter((w) => !MARCAS.has(w)) : [];
+    // Si del modelo solo queda un NÚMERO ("Tesla Model 3" → "3"), la marca se sigue
+    // exigiendo: el 3 solo matcheaba la "Wingle 5/7/3" (auditoría del 15 oct 2026).
+    const delAuto = sinMarca.filter((w) => !NO_ES_AUTO.has(w) && !Object.values(CATEGORIAS).some((re) => re.test(w)));
+    if (delAuto.length && delAuto.every((w) => /^\d+$/.test(w)) && obligatorias.some((w) => MARCAS.has(w))) sinMarca = [];
     // El ACABADO tampoco se exige mientras quede algo que identifique el AUTO: el título
     // de Mercado Libre no siempre lo escribe ("Alfombra Montana Bandeja" ES la bandeja
     // rígida 3D) y pedirlo dejaba en cero una venta que estaba a la venta. La PIEZA
@@ -1031,7 +1084,7 @@ export function preventaTesla(consulta, dijoElCliente = "") {
   };
 }
 
-export function sinStockOInexistente(consulta, dijoElCliente = "") {
+export function sinStockOInexistente(consulta, dijoElCliente = "", recientesMax = "") {
   const pv = preventaTesla(consulta, dijoElCliente);
   if (pv) return pv;
   // ⛔ PRIMERO EL AUTO. Si la consulta no nombra ningún vehículo, no encontrar nada no
@@ -1100,6 +1153,22 @@ export function sinStockOInexistente(consulta, dijoElCliente = "") {
   // Para cualquier otro auto sin cubreasientos en Mercado Libre el equipo terminaba
   // contestando "de momento no tenemos para dicho vehículo" (Jack Ytterby, Yaris,
   // Tundland, Tesla, Dongfeng DF 1317): ahora lo contesta Max, sin asesor.
+  // ¿Escribió mal el modelo? Antes del "no tenemos", se le pregunta por el parecido
+  // (una sola vez: si Max ya se lo propuso en sus últimos mensajes, se sigue de largo).
+  const catPedida = esCubreasiento ? "cubreasiento" : nombreCategoria(consulta);
+  if (catPedida === "cubreasiento" || catPedida === "alfombra") {
+    const parecidos = modelosParecidos(consulta, catPedida)
+      .filter((x) => !_normTxt(recientesMax).includes(x.palabra));
+    if (parecidos.length) {
+      return {
+        encontrado: false,
+        agotado: false,
+        falta_modelo: true,
+        modelosParecidos: parecidos.map((x) => x.titulo),
+        mensaje: `(Nota interna del sistema.) No encontré ese vehículo, pero puede que el cliente lo haya escrito mal: en el catálogo hay modelos PARECIDOS (${parecidos.map((x) => `"${x.titulo}"`).join(", ")}). ⛔ Todavía NO le digas que no tenemos, ⛔ no le des precio ni fotos y ⛔ no derives. Preguntale en UNA frase corta y amable si se refiere a ese vehículo, nombrándolo con marca y modelo (no el título de la publicación), ej: "¿Te referís a la Fiat Mobi?". Si dice que sí, buscá de nuevo con ese modelo. Si dice que no, pedile que te escriba el modelo exacto como figura en la libreta.`,
+      };
+    }
+  }
   if (esCubreasiento && !/\bjmc\b/i.test(`${consulta} ${dijoElCliente}`)) {
     return {
       encontrado: false,
@@ -2254,7 +2323,7 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const pvPrecio = preventaTesla(consulta, ctx._ultimoUsuario);
       if (pvPrecio) return pvPrecio;
       const encontrados = porCarroceria(buscarPrecio(consulta), ctx);
-      if (!encontrados.length) return { ...sinStockOInexistente(consulta, ctx._ultimoUsuario) };
+      if (!encontrados.length) return { ...sinStockOInexistente(consulta, ctx._ultimoUsuario, ctx._recientesMax) };
       // Si no sabemos QUÉ AUTO tiene, lo que encontramos es de un modelo cualquiera:
       // darle ese precio es mentirle. Se le pregunta el vehículo primero.
       if (!identificaModelo(consulta)) return { encontrado: false, falta_modelo: true, mensaje: "Todavía no sabés qué vehículo tiene, así que NO le des precio ni le nombres productos: lo que encontré es de otros modelos y le estarías cotizando cualquier cosa. Preguntale marca y modelo (y el año si es camioneta) en una frase corta y amable, y recién ahí volvé a buscar." };
@@ -2313,7 +2382,7 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       const hallados = porCarroceria(buscarPrecio(consulta), ctx);
       // Solo cuando NO hay nada del producto miramos si está agotado o si no lo
       // trabajamos: si hay productos pero ninguno tiene foto, es otro problema.
-      if (!hallados.length) return { ok: false, ...sinStockOInexistente(consulta, ctx._ultimoUsuario) };
+      if (!hallados.length) return { ok: false, ...sinStockOInexistente(consulta, ctx._ultimoUsuario, ctx._recientesMax) };
       // Mismo criterio que consultar_precio: sin saber el vehículo, las fotos serían de
       // otro auto. Antes de mostrar nada, se pregunta el modelo.
       if (!identificaModelo(consulta)) return { ok: false, falta_modelo: true, mensaje: "Todavía no sabés qué vehículo tiene: las fotos que encontré son de otros modelos y mostrárselas lo confunde. Preguntale marca y modelo en una frase corta y amable, y después buscá de nuevo." };
