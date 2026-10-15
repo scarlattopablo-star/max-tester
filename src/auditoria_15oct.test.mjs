@@ -73,11 +73,13 @@ test("Geely EX2 Max encuentra las alfombras del EX2", () => {
   assert.ok(r.every((p) => /ex2/i.test(p.nombre)));
 });
 
-test("el rango oficial del cuero Sport no cuenta como precio inventado", async () => {
+test("el precio oficial del cuero Sport (config.js) no cuenta como inventado", async () => {
   const { filtrarPrecios } = await import("./cerebro.js");
-  const r = filtrarPrecios("El cuero Sport va de $18.000 a $22.000 según el modelo. Un asesor te confirma el exacto.", []);
+  const { CUBREASIENTOS } = await import("./config.js");
+  const v = CUBREASIENTOS.sport.precioDesde.toLocaleString("es-UY");
+  const r = filtrarPrecios(`El cuero Sport te sale $${v} colocado. Un asesor coordina la confección.`, []);
   assert.equal(r.inventado, null);
-  assert.match(r.texto, /\$18\.000/);
+  assert.ok(r.texto.includes(`$${v}`), r.texto);
 });
 
 test("descripción oficial del Sport sin derivar: el código deriva igual y el equipo se entera", () => {
