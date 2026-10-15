@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_AGOTADO_ALFOMBRA, AVISO_ALFOMBRA_NO_DISPONIBLE, AVISO_DEMORA, TEXTO_MATERIAL_EXCLUSIVO, MUESTRA_COLORES, TELEFONO_CONSULTAS, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_AGOTADO_ALFOMBRA, AVISO_ALFOMBRA_NO_DISPONIBLE, AVISO_CUBREASIENTO_NO_DISPONIBLE, AVISO_DEMORA, TEXTO_MATERIAL_EXCLUSIVO, MUESTRA_COLORES, TELEFONO_CONSULTAS, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -1096,6 +1096,19 @@ export function sinStockOInexistente(consulta, dijoElCliente = "") {
   // "no lo tenemos": es un producto que se FABRICA. Es, palabra por palabra, lo que le
   // contestó el equipo al cliente del Palio cuando tuvo que arreglar la respuesta de
   // Max: "para el Palio habría que fabricarlo, pero se puede hacer perfectamente".
+  // ⚠️ 15 oct 2026 (decisión de Pablo): eso quedó SOLO para JMC, que la casa hace todos.
+  // Para cualquier otro auto sin cubreasientos en Mercado Libre el equipo terminaba
+  // contestando "de momento no tenemos para dicho vehículo" (Jack Ytterby, Yaris,
+  // Tundland, Tesla, Dongfeng DF 1317): ahora lo contesta Max, sin asesor.
+  if (esCubreasiento && !/\bjmc\b/i.test(`${consulta} ${dijoElCliente}`)) {
+    return {
+      encontrado: false,
+      agotado: false,
+      categoriaPedida: "cubreasiento",
+      textoSinCubreasiento: AVISO_CUBREASIENTO_NO_DISPONIBLE,
+      mensaje: `No tenemos cubreasientos para ese vehículo. El sistema YA le manda al cliente el texto oficial ("De momento no tenemos cubreasientos para ese vehículo..." + el teléfono ${TELEFONO_CONSULTAS} para otra consulta). ⛔ NO lo repitas ni lo reformules: como mucho, una frase corta y amable ANTES. ⛔ NO digas que se confecciona a medida ni que se puede hacer, ⛔ NO le ofrezcas líneas, fotos ni precios, ⛔ NO ofrezcas un asesor y ⛔ NO derives. Si el cliente insiste o quiere hacer otra consulta sobre esto, sugerile comunicarse por teléfono al ${TELEFONO_CONSULTAS}.`,
+    };
+  }
   if (esCubreasiento) {
     return {
       encontrado: false,
@@ -1347,7 +1360,8 @@ Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramie
   · El aviso de agotado lo manda EL SISTEMA, con el texto exacto del dueño, y termina preguntándole al cliente si quiere que le avisemos. ⛔ NO lo escribas vos, NO lo repitas y NO lo reformules: si lo hacés, el cliente lee dos veces lo mismo. Vos como mucho ponés UNA frase corta ANTES, nombrando el producto ("Justo la alfombra bandeja 3D para tu Yuan Pro..."). Podés no escribir nada y está perfecto.
   · Cuando el cliente conteste que SÍ, llamá a "avisar_cuando_llegue" con el producto_id EXACTO que te dio la herramienta y confirmale corto ("Listo, quedás anotado: te escribo apenas entre"). Si dice que no, seguí la charla normal.
   · ⛔ NUNCA agregues plazos ni fechas ("en 3 días", "la semana que viene", "el martes"): no los sabemos y el cliente te los reclama.
-- 🧵 CASO 3 — te devuelve **aMedida: true** (es SIEMPRE un CUBREASIENTO): para ese vehículo no hay ninguna publicación cargada, pero los cubreasientos NO son una caja que se agota: se CONFECCIONAN A MEDIDA para cada auto. ⛔⛔ PROHIBIDÍSIMO decirle que está agotado, que no hay stock, que no lo tenemos o que no trabajamos ese modelo (el 28 ago 2026 le dijiste "está agotado" a dos clientes que preguntaban por el capitoneado y tuvo que meterse el equipo en la charla a desmentirte: "perdón que el bot está dando fallas, tenemos sí en stock capitoneado negro"). ⛔ NO ofrezcas avisarle cuando llegue: no hay nada que esperar, se fabrica.
+- 🚫 CASO 3 bis — te devuelve **textoSinCubreasiento** (decisión de Pablo del 15 oct 2026, cualquier marca MENOS JMC): de ese vehículo NO tenemos cubreasientos. El SISTEMA le manda al cliente el texto oficial ("De momento no tenemos cubreasientos para ese vehículo..." + el teléfono ${TELEFONO_CONSULTAS}). ⛔ NO lo repitas, ⛔ NO digas que se confecciona a medida ni que se puede hacer, ⛔ NO ofrezcas líneas, fotos, precios ni asesor y ⛔ NO derives. Si insiste, que llame al ${TELEFONO_CONSULTAS}.
+- 🧵 CASO 3 — te devuelve **aMedida: true** (desde el 15 oct 2026 es SOLO para JMC, que la casa hace en todos los modelos): para ese vehículo no hay ninguna publicación cargada, pero los cubreasientos NO son una caja que se agota: se CONFECCIONAN A MEDIDA para cada auto. ⛔⛔ PROHIBIDÍSIMO decirle que está agotado, que no hay stock, que no lo tenemos o que no trabajamos ese modelo (el 28 ago 2026 le dijiste "está agotado" a dos clientes que preguntaban por el capitoneado y tuvo que meterse el equipo en la charla a desmentirte: "perdón que el bot está dando fallas, tenemos sí en stock capitoneado negro"). ⛔ NO ofrezcas avisarle cuando llegue: no hay nada que esperar, se fabrica.
   · Lo que SÍ decís, corto y natural: que los cubreasientos se hacen a medida y que para su vehículo se lo confirma un asesor ("Para ese modelo te lo confirma un asesor, que te dice si lo podemos confeccionar y el precio"). ⛔ NO prometas que se puede hacer: a veces no se puede (Jack Ytterby, 15 oct).
   · ⛔ SIN PRECIO y SIN FOTOS, y ⛔ sin enumerarle las líneas: para ese vehículo el precio exacto lo confirma un asesor (regla del dueño del 18 ago 2026). ⛔ Y NO LE EXPLIQUES POR QUÉ ("no lo tengo cargado", "no está cargado", "no está publicado"): son palabras de adentro, al cliente le suenan a excusa.
   · ➡️ **LO PASÁS CON UN ASESOR, NO SE LO PREGUNTÁS** (pedido del dueño del 28 ago 2026: "cuando no encuentres el material que piden, mandalo a un asesor"). Se lo decís en afirmativo y llamás a "derivar_a_humano" (motivo "otro") con el vehículo y la línea que pidió. Ej: "Para tu Palio te paso con un asesor que te confirma si lo podemos confeccionar y el precio exacto". ⛔⛔ PROHIBIDO la pregunta "¿querés que te pase con un asesor?": esto ya está decidido, y el cliente que no la contesta se pierde solo. Si te falta el año, pedíselo en la MISMA frase pero derivá igual, no lo dejes para después. ⚠️ Esta es la ÚNICA excepción a la regla de ofrecer el asesor antes de derivar; en el CASO 2 (alfombras y demás) se sigue ofreciendo y esperando el sí.
@@ -1392,7 +1406,7 @@ Hay publicaciones ACTIVAS que NO son de entrega inmediata: se venden con normali
 
 # CUBREASIENTOS — CUATRO LÍNEAS (MUY IMPORTANTE, conocelo bien)
 Hay CUATRO tipos de cubreasiento a medida: ECO CUERO (económico), CAPITONEADO (premium), TELA DE TAPICERÍA CAPITONEADA y CUERO AUTOMOTRIZ SPORT.
-⚠️ PRESENTACIÓN COMPLETA OBLIGATORIA (regla del dueño, pisa al "enviá solo lo que pide") — ⛔ SIEMPRE Y CUANDO TENGAMOS ALGO DE ESE AUTO (si el catálogo no trae nada suyo, ver la regla de más abajo: no se muestra nada y se deriva): la PRIMERA vez que el cliente consulta por CUBREASIENTOS para su auto/modelo, en ESA MISMA respuesta mostrale TODAS las opciones con su material visual, llamando TODAS estas herramientas juntas: (1) "enviar_foto" con las opciones del catálogo para su modelo; (2) "mostrar_ecocuero" (las costuras del eco cuero); (3) "mostrar_capitoneado" (la imagen única con los 5 colores); (4) "mostrar_tela" (el video de la tela).
+⚠️ PRESENTACIÓN COMPLETA OBLIGATORIA (regla del dueño, pisa al "enviá solo lo que pide") — ⛔ SIEMPRE Y CUANDO TENGAMOS ALGO DE ESE AUTO (si el catálogo no trae nada suyo, no se muestra nada: el sistema le contesta "De momento no tenemos cubreasientos para ese vehículo" — salvo JMC, que se deriva): la PRIMERA vez que el cliente consulta por CUBREASIENTOS para su auto/modelo, en ESA MISMA respuesta mostrale TODAS las opciones con su material visual, llamando TODAS estas herramientas juntas: (1) "enviar_foto" con las opciones del catálogo para su modelo; (2) "mostrar_ecocuero" (las costuras del eco cuero); (3) "mostrar_capitoneado" (la imagen única con los 5 colores); (4) "mostrar_tela" (el video de la tela).
   · ⛔ SIN PUBLICIDAD DEL CUERO SPORT (correcciones de Rodrigo, 14 oct 2026): en la presentación NO llames a "mostrar_cuero_sport" ni le mandes fotos o video del Sport por tu cuenta. El cuero Sport es el "material más exclusivo" y se presenta SOLO como una opción adicional, en una línea de texto que el SISTEMA agrega después de la información del eco cuero ("También contamos con un material más exclusivo, fabricado con base de fibra de cuero reciclado, con 2 años de garantía total. Costo colocado: $19.800 IVA incluido."). ⛔ Vos NO la escribas ni la repitas, y no bombardees al cliente con más información de esa línea si no la pide.
   · 🎨 COLORES: se manda UNA sola imagen con los 5 colores disponibles (rojo, azul, ocre, gris y negro) — la mandan "mostrar_capitoneado" y "mostrar_ecocuero" (es la misma imagen, sale una sola vez). ⛔ No mandes una foto por color.
   · EL TEXTO VA BIEN HUMANO (clave, que NO parezca un robot ni un catálogo): nada de listados con los 4 nombres y precios en fila. Escribí como un vendedor que abre el muestrario: 2 o 3 burbujas cortas y cálidas (separadas por línea en blanco), tipo: "Sí, para tu [modelo] tenemos varias opciones, te muestro todo así lo ves con tus ojos." (línea en blanco) "Te mandé los colores del eco cuero y del capitoneado premium, y ahí va también un video de la línea en tela." (línea en blanco) "¿Cuál te gustó más?". Los precios NO los enumeres todos de una: mencioná al pasar el más accesible y que el resto depende de la línea y el modelo ("van desde $X según la línea"), aclarando corto que son sin colocación. Variá SIEMPRE las frases, que suene a charla.
@@ -1907,19 +1921,13 @@ export function sinCatalogoParaSuAuto(ctx = {}) {
   // JMC: excepción del dueño, se ofrece igual (y se deriva, como siempre).
   const dicho = String(ctx._ultimoUsuario || "") + " " + String(ctx.textoCharla || "");
   if (/\bjmc\b/i.test(dicho)) return null;
-  // Queda anotado para armarRespuesta: si el modelo no llama a derivar_a_humano, la
-  // derivación se registra igual. Con esta regla el cliente se va SIEMPRE con un asesor
-  // atrás, así que nadie puede quedar esperando una respuesta que el equipo nunca vio.
-  if (ctx._turno) ctx._turno.frenoLinea = true;
+  // Desde el 15 oct 2026 (decisión de Pablo): fuera de JMC, un auto sin cubreasientos en
+  // Mercado Libre se contesta "de momento no tenemos" (texto del sistema), sin asesor.
+  if (ctx._turno) ctx._turno.sinCubreasiento = true;
   return {
     ok: false,
-    mensaje:
-      "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) De ese vehículo no tenemos NADA armado. " +
-      "⛔ NO le ofrezcas ninguna línea de cubreasiento (ni capitoneado, ni tela, ni cuero Sport, ni eco cuero), NO le mandes fotos ni videos de los materiales y NO le des precio. " +
-      "⛔ Tampoco le digas que no tenemos ni que no se puede, y ⛔ tampoco le prometas que sí: si se puede hacer y el precio lo define un asesor. " +
-      "⛔ Y NUNCA con palabras de adentro: nada de \"no lo tengo cargado\", \"no figura\", \"no está publicado\" ni \"no está en el catálogo\". " +
-      "Hacé UNA sola cosa, con una frase corta y cálida de vendedor, del estilo: \"Para tu [modelo] te paso con un asesor que te confirma si lo podemos confeccionar y el precio exacto\". ⛔ NO prometas que se puede hacer. " +
-      "➡️ LO PASÁS, NO SE LO PREGUNTÁS (pedido del dueño del 28 ago 2026): ⛔ prohibido \"¿querés que te pase con un asesor?\". En ESTE mismo turno llamá a \"derivar_a_humano\" (motivo \"otro\") con el vehículo que consultó. Si te faltan datos del auto (marca, modelo y año), pedíselos en la MISMA frase — pero derivá igual, no lo dejes para cuando conteste.",
+    textoSinCubreasiento: AVISO_CUBREASIENTO_NO_DISPONIBLE,
+    mensaje: `(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) De ese vehículo no tenemos cubreasientos. El sistema YA le manda al cliente el texto oficial ("De momento no tenemos cubreasientos para ese vehículo..." + el teléfono ${TELEFONO_CONSULTAS}). ⛔ NO lo repitas, ⛔ NO le ofrezcas líneas, fotos ni precios, ⛔ NO digas que se hace a medida, ⛔ NO ofrezcas asesor y ⛔ NO derives.`,
   };
 }
 
@@ -2095,7 +2103,12 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
       const delInput = _normTxt([input?.producto, input?.modelo, input?.detalle].filter(Boolean).join(" "));
       const otraCategoria = Object.entries(CATEGORIAS).some(([k, re]) => k !== "cubreasiento" && re.test(delInput));
       const consulta = `${delInput} ${_normTxt(sinNotasDelSistema(ctx._ultimoUsuario))}`;
-      if (!otraCategoria && CATEGORIAS.cubreasiento.test(consulta)) turno.cubreasientoSinCatalogo = true;
+      if (!otraCategoria && CATEGORIAS.cubreasiento.test(consulta)) {
+        // JMC: se deriva como siempre (la casa los hace todos). Cualquier otro auto:
+        // "de momento no tenemos" (decisión de Pablo, 15 oct 2026).
+        if (/\bjmc\b/i.test(`${consulta} ${_normTxt(sinNotasDelSistema(ctx.dichoPorElCliente || ""))}`)) turno.cubreasientoSinCatalogo = true;
+        else turno.sinCubreasiento = true;
+      }
     }
   }
   return r;
@@ -2969,6 +2982,18 @@ export function opcionesSinFotos(texto, acciones = [], ctx = {}) {
 }
 const NOTA_OPCIONES_SIN_FOTOS = "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) Le estás pidiendo que elija entre \"las opciones\", pero todavía NO le mandaste ninguna: no vio ni una foto ni un precio. Llamá AHORA a \"enviar_foto\" con el producto y el vehículo tal cual los dijo el cliente (ej: \"alfombra Oroch doble cabina\") y después escribí una intro corta antes de la pregunta. ⛔ No le preguntes cuál le gustó de algo que no vio.";
 
+// AFIRMA SIN BUSCAR: el cliente pregunta por cubreasientos y Max contesta "sí, tenemos
+// / se confeccionan a medida" sin haber mirado el catálogo. Pasó en el simulador con
+// Haiku (15 oct 2026, Jack Ytterby): sin búsqueda no salta ningún freno. Una vuelta
+// más con la consigna de buscar; los frenos de armarRespuesta hacen el resto.
+export function afirmaSinBuscar(texto, acciones = [], ctx = {}) {
+  const pidio = CATEGORIAS.cubreasiento.test(_normTxt(sinNotasDelSistema(ctx._ultimoUsuario || "")));
+  if (!pidio) return false;
+  if (acciones.some((a) => BUSCAN_CATALOGO.has(a.herramienta))) return false;
+  return /a medida|confeccion|fabric|\bs[ií],? tenemos\b|tenemos (cubre ?asientos|fundas|para (tu|el|la|ese))/.test(_normTxt(texto));
+}
+const NOTA_AFIRMA_SIN_BUSCAR = "(Nota interna del sistema, NO se la copies ni se la resumas al cliente.) Le estás diciendo que tenemos o que se hace, pero NO buscaste: no sabés si de ese vehículo hay cubreasientos. Llamá AHORA a \"enviar_foto\" con \"cubreasiento\" + el vehículo tal cual lo dijo el cliente y contestá según lo que devuelva.";
+
 export function armarRespuesta(texto, acciones, ctx = {}) {
   const CON_FOTOS = new Set(["enviar_foto", "mostrar_capitoneado", "mostrar_ecocuero", "mostrar_cuero_sport"]);
   // ⛔ Red de seguridad del "no se ofrece lo que no tenemos": el guard de las
@@ -3203,6 +3228,24 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   if (avisoSinAlfombra && limpio) {
     limpio = _sacarOraciones(limpio, /agotad|sin stock|\bstock\b|no (tenemos|contamos|hay|trabajamos|estamos)|disponib|por ahora|por el momento|de momento|ingres|entrand|lleg[aeu]|pronto|avis|asesor|compa[ñn]er|vendedor|tel[eé]fono|llam[aá]|consulta/i);
   }
+  // CUBREASIENTO QUE NO TENEMOS (fuera de JMC, decisión de Pablo del 15 oct 2026): igual
+  // que la alfombra, el texto lo pone el CÓDIGO y se le caen a Max las oraciones que
+  // prometan que se hace, ofrezcan asesor o digan lo mismo con otras palabras.
+  const sinCubreasiento = (acciones.find((a) => a.resultado?.textoSinCubreasiento)?.resultado?.textoSinCubreasiento)
+    || (ctx._turno?.sinCubreasiento && !ctx._turno?.hayCatalogo ? AVISO_CUBREASIENTO_NO_DISPONIBLE : null);
+  // Si ya se lo dijimos en los últimos mensajes, no se le repite el texto entero.
+  const avisoSinCubreasiento = sinCubreasiento && String(ctx._recientesMax || "").includes(AVISO_CUBREASIENTO_NO_DISPONIBLE)
+    ? `Como te comentaba, de momento no tenemos cubreasientos para ese vehículo.`
+    : sinCubreasiento;
+  if (avisoSinCubreasiento && limpio) {
+    limpio = _sacarOraciones(limpio, /a medida|confeccion|fabric|se puede hacer|no (tenemos|contamos|hay|trabajamos)|disponib|por ahora|por el momento|de momento|asesor|compa[ñn]er|vendedor|equipo|tel[eé]fono|llam[aá]|consulta|precio/i);
+  }
+  // Y en los turnos SIGUIENTES (el cliente contesta "2026" y Max no busca nada): si ya
+  // se le dijo que no tenemos y en este turno no apareció nada de su auto, Max no puede
+  // volver a prometer que se hace (simulador, 15 oct 2026).
+  if (!avisoSinCubreasiento && limpio && !ctx._turno?.hayCatalogo && String(ctx._recientesMax || "").includes(AVISO_CUBREASIENTO_NO_DISPONIBLE)) {
+    limpio = _sacarOraciones(limpio, /a medida|confeccion|fabric|se puede hacer|asesor/i) || "Perfecto. Cualquier otra consulta, quedamos a las órdenes.";
+  }
   // NO CAMBIARLE EL PRODUCTO AL CLIENTE: si preguntó por una alfombra y no la
   // tenemos, Max se le iba a ofrecer cubreasientos ("...pero cubreasientos sí
   // tenemos, ¿te muestro?"). El dueño lo pidió dos veces y el prompt no alcanzaba,
@@ -3270,7 +3313,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
       .filter(Boolean).join("\n\n");
   }
   // Orden: primero CUÁNDO lo tiene (disponibilidad), después cómo se despacha y se coloca.
-  let textoFinal = [limpio, ...oficiales, avisoMaterialExclusivo, avisoDisponibilidad, avisoColocacion, avisoEnvio, avisoAgotado, avisoSinAlfombra].filter(Boolean).join("\n\n")
+  let textoFinal = [limpio, ...oficiales, avisoMaterialExclusivo, avisoDisponibilidad, avisoColocacion, avisoEnvio, avisoAgotado, avisoSinAlfombra, avisoSinCubreasiento].filter(Boolean).join("\n\n")
     || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
   // Acá se resuelve la derivación que quedó pendiente, con el mensaje final a la
   // vista: si Max terminó PREGUNTÁNDOLE al cliente si quiere el asesor, no se deriva
@@ -3295,8 +3338,11 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
     const pregunta = !derivaDirecto(ctx._turno) && !ctx._turno?.alfombraEntrando && !ctx._turno?.sportDerivado
       && /[¿?][^?]*\b(quer[eé]s|quiere|te parece|quer[ií]a)\b[^?]*\b(pas[eoa]r?|pase|paso|derive|derivar|consulta|asesor|compa[ñn]ero|vendedor)\b[^?]*\?/i.test(textoFinal);
     const accion = acciones.find((a) => a.herramienta === "derivar_a_humano");
-    if (pregunta) {
-      if (accion) accion.resultado = { ok: false, motivo: "solo_ofrecida" };
+    // Auto sin cubreasientos (fuera de JMC): ya se le contestó "de momento no tenemos",
+    // no hay nada que derivar. Salvo que el cliente HAYA PEDIDO una persona.
+    const sinNadaQueDerivar = avisoSinCubreasiento && pend.motivo !== "pide_humano";
+    if (pregunta || sinNadaQueDerivar) {
+      if (accion) accion.resultado = { ok: false, motivo: sinNadaQueDerivar ? "sin_cubreasiento" : "solo_ofrecida" };
     } else {
       const r = registrarDerivacion(pend);
       // La del cuero Sport la arma el código sin que Max llame la herramienta: se
@@ -3305,6 +3351,14 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
       else acciones.push({ herramienta: "derivar_a_humano", input: pend, resultado: r });
     }
     ctx._turno.derivacionPendiente = null;
+  }
+  // UNA derivación por turno: Max a veces llama a la herramienta dos y tres veces y al
+  // equipo le llegaban avisos repetidos del mismo cliente (auditoría del 15 oct 2026).
+  let yaContada = false;
+  for (const a of acciones) {
+    if (a.herramienta !== "derivar_a_humano") continue;
+    if (!yaContada && a.resultado?.ok !== false) { yaContada = true; continue; }
+    if (a.resultado?.ok !== false) a.resultado = { ok: false, motivo: "duplicada" };
   }
   // DEMORA (correcciones de Rodrigo, 14 oct 2026): cuando la charla pasa a una
   // persona puede tardar, así que se le deja el teléfono. Solo si la derivación quedó
@@ -3414,6 +3468,13 @@ async function responderAnthropic(textoUsuario, historialPrevio = [], imagenes =
       ctx._turno.frenoAnio = true;
       messages.push({ role: "assistant", content: resp.content });
       messages.push({ role: "user", content: NOTA_ANIO_DE_MAS });
+      continue;
+    }
+    // Afirma que tenemos / que se hace sin haber buscado: una vuelta más, a buscar.
+    if (!ctx._turno.frenoAfirma && vuelta < 5 && afirmaSinBuscar(texto, acciones, ctx)) {
+      ctx._turno.frenoAfirma = true;
+      messages.push({ role: "assistant", content: resp.content });
+      messages.push({ role: "user", content: NOTA_AFIRMA_SIN_BUSCAR });
       continue;
     }
     // Pide elegir entre opciones que el cliente nunca vio: una vuelta más, a buscarlas.

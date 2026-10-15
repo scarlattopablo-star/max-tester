@@ -20,7 +20,25 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
-## 🧠 SESIÓN 15 oct — MAX MEZCLABA CHARLAS VIEJAS + PROMETÍA "A MEDIDA" (LO MÁS NUEVO)
+## 🚫 SESIÓN 15 oct (tarde) — AUTO SIN ML = "DE MOMENTO NO TENEMOS" + PREGUNTA PRECARGADA DEL SPORT (LO MÁS NUEVO)
+
+- **Decisión de Pablo:** cubreasientos para un auto que NO está en Mercado Libre → Max contesta
+  `AVISO_CUBREASIENTO_NO_DISPONIBLE` ("De momento no tenemos cubreasientos para ese vehículo" +
+  teléfono), **sin asesor y sin "a medida"**, igual que las alfombras de Rodrigo. **JMC sigue
+  derivando** (la casa los hace todos). Reemplaza la regla del 28 ago ("derivar al asesor").
+  ⚠️ Riesgo conocido: si el cliente escribe mal el modelo (ej. "Fiat Móvil" = Mobi) la búsqueda
+  da 0 y ahora le dice que no tenemos, antes lo rescataba el asesor.
+- **Sport (PR #35, en producción):** "¿Cuánto cuesta el cuero sport premium?" es la pregunta
+  PRECARGADA del botón de WhatsApp de TODOS los anuncios (32 veces el 15 oct, solo 5 del anuncio
+  del Sport). Ya no cuenta como elección. Conviene cambiarla en el Administrador de anuncios.
+- **Avisos al equipo:** una derivación rechazada, solo ofrecida o repetida en el mismo turno ya
+  no manda aviso (antes llegaban dobles).
+- **Afirmar sin buscar:** si Max dice "tenemos / a medida" sin mirar el catálogo, vuelta extra
+  para que busque (`afirmaSinBuscar`).
+- **Lecciones automáticas apagadas por defecto** (PR #34). Prender: `LECCIONES=on`.
+- **Render despliega solo al mergear a main** (no hace falta "Deploy latest commit").
+
+## 🧠 SESIÓN 15 oct — MAX MEZCLABA CHARLAS VIEJAS + PROMETÍA "A MEDIDA"
 
 Dos capturas de Pablo:
 1. **Strada → Golf MK7.** Cliente (anuncio de Meta): "¿Cuánto cuesta el cuero sport premium? Q sale

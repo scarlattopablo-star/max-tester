@@ -43,11 +43,11 @@ test("sin auto dicho por el cliente (solo el del anuncio) no se pegan las frases
   assert.ok(!texto.includes(AVISO_PASO_ASESOR), texto);
 });
 
-test("con el auto del cliente se pega UNA vez; en el turno siguiente ya no", () => {
+test("JMC sin publicación: la frase se pega UNA vez; en el turno siguiente ya no", () => {
   const base = {
     _turno: { cubreasientoSinCatalogo: true, catalogoVacio: true },
-    _ultimoUsuario: "y cubreasientos para el jac ytterby?",
-    dichoPorElCliente: "y cubreasientos para el jac ytterby?",
+    _ultimoUsuario: "y cubreasientos para el jmc n900?",
+    dichoPorElCliente: "y cubreasientos para el jmc n900?",
   };
   const r1 = armarRespuesta("Perfecto.", [], base);
   assert.ok(r1.texto.includes(AVISO_A_MEDIDA), r1.texto);
@@ -113,4 +113,62 @@ test("la descripción del Sport solo sale si el cliente lo eligió", async () =>
   assert.equal(clienteEligioSport({ dichoPorElCliente: "tengo una ford ecosport 2020" }), false);
   const r = await ejecutarHerramienta("descripcion_oficial", { linea: "cuero_sport" }, { _turno: {}, dichoPorElCliente: `${pre} Onix 2024`, _ultimoUsuario: "Onix 2024" });
   assert.equal(r.ok, false);
+});
+
+
+// Decisión de Pablo (15 oct 2026): fuera de JMC, auto sin cubreasientos en ML →
+// "de momento no tenemos", sin asesor.
+test("cubreasiento sin publicación (no JMC): texto oficial, sin 'a medida' y sin derivar", async () => {
+  const { sinStockOInexistente } = await import("./cerebro.js");
+  const { AVISO_CUBREASIENTO_NO_DISPONIBLE } = await import("./config.js");
+  const r = sinStockOInexistente("cubreasiento jack ytterby", "cubre asientos para el ytterby");
+  assert.equal(r.textoSinCubreasiento, AVISO_CUBREASIENTO_NO_DISPONIBLE);
+  assert.ok(!r.aMedida);
+  const jmc = sinStockOInexistente("cubreasiento jmc zz900", "cubreasientos para mi jmc");
+  assert.equal(jmc.aMedida, true);
+
+  const acciones = [
+    { herramienta: "enviar_foto", input: { producto: "cubreasiento Jack Ytterby" }, resultado: { ok: false, ...r } },
+    { herramienta: "derivar_a_humano", input: { motivo: "otro", resumen: "ytterby" }, resultado: { ok: true, pendiente: true } },
+  ];
+  const ctx = { _turno: { busco: true, catalogoVacio: true, sinCubreasiento: true, derivacionPendiente: { motivo: "otro", resumen: "ytterby" } }, _ultimoUsuario: "cubre asientos para el ytterby?", dichoPorElCliente: "cubre asientos para el ytterby?" };
+  const out = armarRespuesta("Para tu Jack Ytterby lo confeccionamos a medida. Te paso con un asesor.", acciones, ctx);
+  assert.ok(out.texto.includes(AVISO_CUBREASIENTO_NO_DISPONIBLE), out.texto);
+  assert.ok(!/a medida|asesor/i.test(out.texto.replace(AVISO_CUBREASIENTO_NO_DISPONIBLE, "")), out.texto);
+  assert.equal(out.acciones.find((a) => a.herramienta === "derivar_a_humano").resultado.ok, false);
+});
+
+test("varias derivaciones en el mismo turno: el equipo recibe UN aviso", async () => {
+  const { armarAvisos } = await import("./avisos_equipo.js");
+  const acciones = [
+    { herramienta: "enviar_foto", input: {}, resultado: { ok: true } },
+    { herramienta: "derivar_a_humano", input: { motivo: "otro", resumen: "a" }, resultado: { ok: true, pendiente: true } },
+    { herramienta: "derivar_a_humano", input: { motivo: "otro", resumen: "a" }, resultado: { ok: true, pendiente: true } },
+  ];
+  const ctx = { _turno: { busco: true, hayCatalogo: true, derivacionPendiente: { motivo: "otro", resumen: "a" } }, _ultimoUsuario: "quiero el capitoneado para la strada", dichoPorElCliente: "quiero el capitoneado para la strada" };
+  const out = armarRespuesta("Listo, ya le paso al equipo.", acciones, ctx);
+  const { avisos } = armarAvisos({ acciones: out.acciones, chatId: "59899000000" });
+  assert.equal(avisos.filter((x) => /asesor/i.test(x)).length, 1, avisos.join("\n---\n"));
+});
+
+test("derivación solo ofrecida o rechazada: no le avisa al equipo", async () => {
+  const { armarAvisos } = await import("./avisos_equipo.js");
+  const { avisos } = armarAvisos({ acciones: [{ herramienta: "derivar_a_humano", input: { motivo: "otro" }, resultado: { ok: false, motivo: "solo_ofrecida" } }], chatId: "59899000000" });
+  assert.equal(avisos.length, 0);
+});
+
+test("después del 'no tenemos', el turno siguiente no vuelve a prometer 'a medida'", async () => {
+  const { AVISO_CUBREASIENTO_NO_DISPONIBLE } = await import("./config.js");
+  const ctx = { _turno: { busco: false }, _ultimoUsuario: "2026", dichoPorElCliente: "cubre asientos para el ytterby? 2026", _recientesMax: AVISO_CUBREASIENTO_NO_DISPONIBLE };
+  const out = armarRespuesta("Perfecto, tengo el dato. De todas formas, para ese modelo los cubreasientos se confeccionan a medida.", [], ctx);
+  assert.ok(!/a medida|confeccion/i.test(out.texto), out.texto);
+});
+
+test("afirmar 'tenemos / a medida' sin buscar dispara una vuelta más", async () => {
+  const { afirmaSinBuscar } = await import("./cerebro.js");
+  const ctx = { _ultimoUsuario: "Y cubre asientos delanteros y traseros para el ytterby tienen y que costo?" };
+  assert.equal(afirmaSinBuscar("Sí, tenemos cubreasientos a medida para el Jac Ytterby. ¿Qué año es?", [], ctx), true);
+  assert.equal(afirmaSinBuscar("Sí, tenemos cubreasientos a medida.", [{ herramienta: "enviar_foto" }], ctx), false);
+  assert.equal(afirmaSinBuscar("¿Para qué año es?", [], ctx), false);
+  assert.equal(afirmaSinBuscar("Sí, tenemos.", [], { _ultimoUsuario: "y alfombras?" }), false);
 });
