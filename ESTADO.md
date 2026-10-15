@@ -26,8 +26,11 @@ QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
   `AVISO_CUBREASIENTO_NO_DISPONIBLE` ("De momento no tenemos cubreasientos para ese vehículo" +
   teléfono), **sin asesor y sin "a medida"**, igual que las alfombras de Rodrigo. **JMC sigue
   derivando** (la casa los hace todos). Reemplaza la regla del 28 ago ("derivar al asesor").
-  ⚠️ Riesgo conocido: si el cliente escribe mal el modelo (ej. "Fiat Móvil" = Mobi) la búsqueda
-  da 0 y ahora le dice que no tenemos, antes lo rescataba el asesor.
+  Modelo mal escrito: antes del "no tenemos" se buscan modelos PARECIDOS de la misma marca y con
+  la misma primera letra (`modelosParecidos`) y Max pregunta "¿Te referís a la Fiat Mobi?".
+  Además: la búsqueda ya no tira el modelo de 3 letras (Honda Fit, Chevrolet Joy) ni deja solo
+  un número (Tesla Model 3) — antes ofrecía la WR-V, el Onix o la Wingle — y el corrector de
+  tipeo ya no toca marcas ("tesla" se volvía "tela").
 - **Sport (PR #35, en producción):** "¿Cuánto cuesta el cuero sport premium?" es la pregunta
   PRECARGADA del botón de WhatsApp de TODOS los anuncios (32 veces el 15 oct, solo 5 del anuncio
   del Sport). Ya no cuenta como elección. Conviene cambiarla en el Administrador de anuncios.

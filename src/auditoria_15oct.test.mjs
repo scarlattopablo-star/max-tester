@@ -172,3 +172,28 @@ test("afirmar 'tenemos / a medida' sin buscar dispara una vuelta más", async ()
   assert.equal(afirmaSinBuscar("¿Para qué año es?", [], ctx), false);
   assert.equal(afirmaSinBuscar("Sí, tenemos.", [], { _ultimoUsuario: "y alfombras?" }), false);
 });
+
+// Pedido de Pablo (15 oct 2026): modelo mal escrito → preguntar por el parecido, no
+// decir "no tenemos" de una.
+const CAT_PRUEBA = [
+  { id: "a", n: "Cubreasiento Fiat Mobi Cuero Ecoligogico Capitoneado Alta Ga Negro", p: 10900 },
+  { id: "b", n: "Cubreasiento Suzuki Fronx Negro", p: 13500 },
+  { id: "c", n: "Cubreasiento Byd Yuan Pro Cuero Ecolgico+ Kit Bar Negro", p: 12900 },
+  { id: "d", n: "Cubreasiento Honda Wr-v  Cuero Ecologico Negro", p: 13900 },
+  { id: "e", n: "Cubreasiento Wingle 5/7/3  Cuero Ecolgico Alta Gama Negro", p: 13900 },
+  { id: "f", n: "Cubreasiento Chevrolet Onix Cuero Ecologico Capitoneado Negro", p: 8900 },
+];
+test("modelo mal escrito: sugiere el parecido de la misma marca, nunca otro auto", async () => {
+  const { modelosParecidos } = await import("./cerebro.js");
+  const pal = (q) => modelosParecidos(q, "cubreasiento", CAT_PRUEBA).map((x) => x.palabra);
+  assert.deepEqual(pal("cubreasiento fiat movil"), ["mobi"]);
+  assert.deepEqual(pal("cubreasiento suzuki fronks"), ["fronx"]);
+  assert.deepEqual(pal("cubreasiento vw suran"), []); // no "yuan"
+  assert.deepEqual(pal("cubreasiento honda fit"), []); // no "kit"
+});
+test("modelo de 3 letras o número solo: no se le ofrece otro auto de la marca", () => {
+  assert.equal(buscarPrecio("cubreasiento honda fit", CAT_PRUEBA).length, 0); // no la WR-V
+  assert.equal(buscarPrecio("cubreasiento chevrolet joy", CAT_PRUEBA).length, 0); // no el Onix
+  assert.equal(buscarPrecio("cubreasiento tesla model 3", CAT_PRUEBA).length, 0); // no la Wingle
+  assert.equal(buscarPrecio("cubreasiento chevrolet onix", CAT_PRUEBA).length, 1);
+});
