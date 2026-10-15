@@ -201,6 +201,11 @@ Costo colocado: $19.800 IVA incluido.`;
 
 // ALFOMBRA que NO tenemos para ese modelo (no hay publicación en Mercado Libre, ni
 // activa ni agotada): sin "está ingresando", sin "por ahora" y sin promesas.
+// CUBREASIENTO para un auto que NO está en Mercado Libre (decisión de Pablo, 15 oct
+// 2026, después de que el equipo tuviera que desmentir "lo confeccionamos a medida"
+// para Jack Ytterby, Yaris, Tundland, Tesla y Dongfeng DF 1317): Max contesta lo mismo
+// que contestaba el equipo, sin asesor. JMC queda afuera: la casa los hace todos.
+export const AVISO_CUBREASIENTO_NO_DISPONIBLE = `De momento no tenemos cubreasientos para ese vehículo. Si querés realizar otra consulta o necesitás confirmar alguna información, podés comunicarte directamente por teléfono con nosotros al ${TELEFONO_CONSULTAS}.`;
 export const AVISO_ALFOMBRA_NO_DISPONIBLE = `De momento no contamos con alfombras disponibles para ese modelo. Si querés realizar otra consulta o necesitás confirmar alguna información, podés comunicarte directamente por teléfono con nosotros al ${TELEFONO_CONSULTAS}.`;
 
 // Cuando Max pasa la charla a una persona puede haber demora: se le ofrece el teléfono.

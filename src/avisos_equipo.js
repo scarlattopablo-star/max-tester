@@ -46,6 +46,10 @@ function accionAvisa(a) {
     return !!(a.resultado?.transferencia?.comprobante ?? a.input?.comprobante);
   }
   if (a.herramienta === "tomar_pedido") return !esPagoPorTransferencia(a.resultado?.pedido?.medioPago);
+  // Una derivación que el cerebro RECHAZÓ (guards) o que Max solo OFRECIÓ ("¿querés
+  // que te pase con un asesor?") o que salió repetida en el mismo turno vuelve con
+  // ok:false: no hay nada que atender. Antes avisaba igual (avisos dobles, 15 oct 2026).
+  if (a.herramienta === "derivar_a_humano") return a.resultado?.ok !== false;
   return true;
 }
 
@@ -108,6 +112,7 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
 
   for (const a of acciones || []) {
     if (a.herramienta === "derivar_a_humano") {
+      if (!accionAvisa(a)) continue;
       const d = a.resultado?.derivacion || a.input || {};
       const link = linkA(d.telefono);
       avisos.push((d.motivo === "pide_humano"
