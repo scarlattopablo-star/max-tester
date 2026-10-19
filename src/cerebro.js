@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_AGOTADO_ALFOMBRA, AVISO_ALFOMBRA_NO_DISPONIBLE, AVISO_CUBREASIENTO_NO_DISPONIBLE, AVISO_DEMORA, TEXTO_MATERIAL_EXCLUSIVO, MUESTRA_COLORES, TELEFONO_CONSULTAS, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_AGOTADO_ALFOMBRA, AVISO_ALFOMBRA_NO_DISPONIBLE, AVISO_CUBREASIENTO_NO_DISPONIBLE, AVISO_DEMORA, TEXTO_MATERIAL_EXCLUSIVO, MUESTRA_COLORES, TELEFONO_CONSULTAS, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, DIAS_CERRADO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
@@ -1267,6 +1267,23 @@ function momentoUruguay() {
   return { fecha, dia, hora: h, min, horaTxt, parte, saludos };
 }
 
+// Los próximos días con su fecha y si el local abre. Se lo damos ARMADO a Max para
+// que no calcule fechas ni saque feriados de memoria (Haiku inventó un "Día de la
+// Cultura" el viernes 16 oct 2026 y le dijo a un cliente que no se trabajaba).
+export function calendarioLocal(dias = 8, desde = Date.now()) {
+  const nombres = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+  const out = [];
+  for (let k = 0; k < dias; k++) {
+    const d = new Date(desde - 3 * 3600 * 1000 + k * 86400000);
+    const fecha = d.toISOString().slice(0, 10);
+    const dow = d.getUTCDay();
+    const motivo = DIAS_CERRADO[fecha];
+    const abre = dow >= 1 && dow <= 5 && !motivo;
+    out.push({ fecha, dia: nombres[dow], num: d.getUTCDate(), abre, motivo: motivo || null });
+  }
+  return out;
+}
+
 const _al = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const _cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -1617,8 +1634,13 @@ function systemPromptDinamico() {
   // Saludos que NO corresponden a esta hora (para prohibirlos explícitamente: el
   // modelo es chico y, si no, mete "buenas tardes" de mañana por costumbre).
   const prohibidos = ["Buenos días", "Buenas tardes", "Buenas noches"].filter((s) => !m.saludos.includes(s));
+  const cal = calendarioLocal();
+  const calTxt = cal.map((c, k) => `  · ${k === 0 ? "HOY " : k === 1 ? "MAÑANA " : ""}${c.dia} ${c.num} (${c.fecha}): ${c.abre ? "ABIERTO, horario normal" : c.motivo ? `CERRADO (${c.motivo})` : "CERRADO (fin de semana)"}`).join("\n");
   let base = `# Momento actual (Uruguay)
 - Ahora en Uruguay es ${m.dia} y son las ${m.horaTxt} (es ${m.parte}). Hoy es ${m.fecha} (formato para agendar: YYYY-MM-DD; usalo para entender "mañana", "el viernes", etc.).
+- 📅 CALENDARIO DEL LOCAL (la ÚNICA verdad sobre qué días abre; ya está calculado, no lo recalcules):
+${calTxt}
+- ⛔ FERIADOS (REGLA DURA): NO sabés qué feriados hay ni si el local cierra en alguno. NUNCA digas que un día "es feriado", "no se trabaja", "no abrimos" o "estamos cerrados" si en el calendario de arriba dice ABIERTO. De lunes a viernes se abre en el horario normal salvo que el calendario diga CERRADO. Si el cliente pregunta por un feriado que no figura, decile que de lunes a viernes atendemos en el horario normal y que para confirmar un feriado puntual llame al ${TELEFONO_CONSULTAS}. Usá los números de día del calendario: no escribas "viernes 18" si el viernes es otro número.
 - ⛔ SALUDO SEGÚN LA HORA (REGLA DURA, NO LA ROMPAS): si vas a saludar, usá EXACTAMENTE "${op}" porque ahora es ${m.parte}. Está TERMINANTEMENTE PROHIBIDO usar ${prohibidos.map((s) => `"${s}"`).join(" ni ")} ahora — no corresponden a esta hora (${m.horaTxt}). Mañana = "Buenos días/Buen día" (06:00–11:59), tarde = "Buenas tardes" (12:00–19:59), noche = "Buenas noches" (20:00–05:59). Antes de saludar, mirá la hora (${m.horaTxt}) y elegí el saludo correcto.`;
   // Lecciones automáticas APAGADAS por defecto (pedido de Pablo, 15 oct 2026). Las
   // escribe una IA gratis sin revisión humana y en oct 2026 estaban congeladas desde
@@ -2631,6 +2653,30 @@ function _frases(texto) {
   return ordenados.map((ini, k) => ({ ini, fin: ordenados[k + 1] ?? texto.length }));
 }
 
+// ── Feriado inventado: "el viernes es feriado / no se trabaja" ────────────────
+// El modelo no sabe qué feriados cierra el local (DIAS_CERRADO en config.js). Si una
+// oración habla de un feriado o de un día sin trabajo y no hay ningún cierre cargado
+// en los próximos días, esa oración se va y queda el horario oficial.
+const _FERIADO = /feriad|asueto|no laborable|d[ií]a (de la|del) (cultura|diversidad|raza|patrimonio)|semana de turismo|carnaval/i;
+const _CIERRE = /cerrad|cierra|no (se )?(abr|trabaj|atend|labur)|no vamos a (abrir|estar|atender)|no hay atenci/i;
+export function filtrarFeriados(texto, cal = calendarioLocal(15)) {
+  const original = String(texto || "");
+  if (!_FERIADO.test(original) && !/no se trabaja|no trabajamos/i.test(original)) return { texto: original, feriado: null };
+  if (cal.some((c) => c.motivo)) return { texto: original, feriado: null }; // hay un cierre real cargado: Max puede nombrarlo
+  const frases = _frases(original);
+  let feriado = null;
+  const quedan = frases.filter((f) => {
+    const fr = original.slice(f.ini, f.fin);
+    const inventa = (_FERIADO.test(fr) && _CIERRE.test(fr)) || /no se trabaja|no trabajamos/i.test(fr);
+    if (inventa) feriado = feriado || fr.trim();
+    return !inventa;
+  });
+  if (!feriado) return { texto: original, feriado: null };
+  let limpio = quedan.map((f) => original.slice(f.ini, f.fin)).join("").replace(/\n{3,}/g, "\n\n").trim();
+  if (!/lunes a viernes/i.test(limpio)) limpio = [limpio, `Atendemos de ${NEGOCIO.horario.charAt(0).toLowerCase()}${NEGOCIO.horario.slice(1)}`].filter(Boolean).join("\n\n");
+  return { texto: limpio, feriado };
+}
+
 // Devuelve { texto, invento } — invento = qué estuvo por prometer (o null si está todo bien).
 // contexto: la charla previa. Sirve cuando la promesa NO nombra el producto ("no la
 // tengo publicada, pero la hacemos igual a medida"): ahí el producto es el último
@@ -3169,6 +3215,11 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // "conseguirla", esa oración se va acá y no termina en el filtro de inventos, que la
   // mandaría al asesor (producción, 8 oct 2026).
   limpio = filtrarJuegoAlfombras(limpio, acciones, ctx.textoCharla);
+  // ANTI-FERIADO-INVENTADO (15 oct 2026, "viernes 16, Día de la Cultura"): un día hábil
+  // que no está en DIAS_CERRADO se trabaja. La oración que diga lo contrario se va.
+  const { texto: sinFeriado, feriado } = filtrarFeriados(limpio);
+  if (feriado) console.log(`📅 Feriado inventado borrado: "${feriado.slice(0, 120)}"`);
+  limpio = sinFeriado;
   const hayAPedido = acciones.some((a) => [...(a.resultado?.resultados || []), ...(a.resultado?.fotos || [])].some((x) => Number(x?.demora_dias) > 0))
     || /a pedido: disponible en/i.test(String(ctx.textoCharla || ""));
   const { texto: sinInventos, invento } = filtrarInventos(limpio, ctx.textoCharla, hayAPedido);
