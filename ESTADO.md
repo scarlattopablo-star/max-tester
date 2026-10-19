@@ -85,7 +85,8 @@ Dos capturas de Pablo:
      para ese modelo": nota interna en la herramienta.
 - **Pendiente (no tocado):** "Strada Ultra" y "CS55 Plus" dan 0 (decidir si son el mismo auto que
   Strada/CS55); derivaciones duplicadas en el mismo turno (2 avisos al equipo); Max inventó un
-  feriado ("viernes 16, Día de la Cultura"). El "ya está entrando" lo sacó el PR #32 (mergeado antes que este).
+  feriado ("viernes 16, Día de la Cultura") → ✅ resuelto el 19 oct (PR #38: calendario en el prompt,
+  `DIAS_CERRADO` en config.js, `filtrarFeriados()`; en producción `01c3d64`). El "ya está entrando" lo sacó el PR #32 (mergeado antes que este).
 - **Con el PR #32:** el Sport pasa a precio único $19.800 colocado. El filtro de precios lo toma de
   `CUBREASIENTOS.sport` solo, y la regla "si pide el Sport por nombre, ya eligió" ahora manda también
   las opciones de su modelo (pedido de Rodrigo).
