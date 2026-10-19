@@ -27,6 +27,13 @@ export const NEGOCIO = {
   },
 };
 
+// DÍAS DE SEMANA EN QUE EL LOCAL CIERRA (feriados que el negocio decide no abrir).
+// Formato "YYYY-MM-DD": "motivo". Fuera de esta lista, de lunes a viernes SE ABRE.
+// Max no puede decir que un día hábil "es feriado" o que "no se trabaja" si no está
+// acá: el 15 oct 2026 le dijo a un cliente que el viernes 16 no abríamos por el
+// "Día de la Cultura" (no era feriado: el 12 de octubre cayó lunes).
+export const DIAS_CERRADO = {};
+
 // ───────────────────────────────────────────────────────────────────
 // ENVÍOS — se hacen ÚNICAMENTE por DAC (agencia de encomiendas).
 // Para coordinar un envío Max pide: nombre completo, teléfono y dirección.
