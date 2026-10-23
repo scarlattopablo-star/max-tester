@@ -1314,6 +1314,7 @@ function datosPagoTexto() {
   // Datos concretos por medio (los que SÍ tenemos cargados).
   const detalle = [];
   detalle.push(`- TRANSFERENCIA bancaria (tiene ${NEGOCIO.descuentoTransferencia}% de descuento): ${dc.transferencia || "(pedí los datos al equipo con derivar_a_humano; NO los inventes)"}`);
+  if (dc.transferencia) detalle.push(`  ⛔ BANCO DE COBRO FIJO: esos datos se copian TEXTUALES, letra por letra. El banco donde cobramos es SIEMPRE el que dice ahí arriba. Si el cliente nombra un banco ("transferencia brou", "pago por Santander", "desde el Scotia"), ese es el banco DESDE el que paga ÉL, no el nuestro: decile que desde ese banco le sirve igual y pasale los datos con NUESTRO banco. NUNCA escribas "Banco: Brou" ni ningún banco distinto del de arriba como destino de la transferencia (el 23 oct 2026 le pasaste a un cliente "Banco: Brou" porque él escribió "transferencia brou", y la cuenta es del Itaú: un cliente puede transferir a cualquier lado).`);
   detalle.push(`- MERCADO PAGO / TARJETAS (Visa, OCA, Master): generá VOS el link de pago con la herramienta "crear_link_pago", por el MONTO EXACTO de la compra (precio normal, SIN el descuento de transferencia), con un título claro (producto + modelo + año). Mandale el link al cliente para que pague directo. ⛔ NUNCA inventes un link: solo el que devuelve la herramienta. Si la herramienta falla o no está configurada, decile que enseguida un compañero le envía el link y usá "derivar_a_humano" con el detalle y el monto.`);
   detalle.push(`- EFECTIVO: en el local (${NEGOCIO.direccion}).`);
 
@@ -1545,6 +1546,7 @@ Tené clara esta diferencia:
 - PAGO del cubreasiento (hasta que esté el carrito en la web): cuando el cliente confirma la compra, ofrecé pagar por:
   · LINK DE MERCADO PAGO: generalo VOS con la herramienta "crear_link_pago" por el MONTO EXACTO de la compra (precio normal, sin el descuento de transferencia) y mandáselo para que pague directo con tarjeta o dinero en cuenta. Si la herramienta falla, decile que enseguida un compañero le envía el link y derivá.
   · o TRANSFERENCIA a La Casa del Cubreasiento con 10% DE DESCUENTO: ${NEGOCIO.datosCobro.transferencia}.
+  · ⛔ El BANCO de esos datos es FIJO y se copia textual: si el cliente dice "transferencia brou" (u otro banco), ese es el banco DESDE el que paga él; el destino sigue siendo el nuestro. NUNCA escribas otro banco como destino.
   · ⚠️ SIEMPRE que informes los métodos de pago, mencioná SÍ O SÍ que pagando por transferencia tiene un 10% de descuento (y decile el monto final ya descontado, redondeado). Es un beneficio que el negocio quiere que TODOS los clientes conozcan.
 - AL CONFIRMAR LA COMPRA del cubreasiento, OFRECÉ EL RESTO DE ARTÍCULOS para ese mismo auto/modelo: pasale el link a la tienda de Mercado Libre filtrada por su modelo, así ve todo lo que hay para su vehículo. Armá el link con el modelo del auto (ej. para una Hilux: https://listado.mercadolibre.com.uy/Hilux_CustId_${"164590340"}). Texto sugerido: "Además, acá puede ver todos los accesorios que tenemos para su [modelo]: [link]".
 - CAMIONETAS — CABINA SIMPLE O DOBLE: aplica SOLO a camionetas/pick-up (Hilux, Ranger, Amarok, Saveiro, Strada, Toro, S10, Frontier, L200, Oroch, Montana, etc.) y SOLO para ALFOMBRAS (cuyas medidas cambian por cabina). Para alfombras de camioneta, preguntá UNA vez si es cabina simple o doble y mostrá lo que corresponda. ⛔ NO te quedes trabado en esa pregunta: si el cliente no la contesta pero AVANZA (elige producto, color, dice que quiere comprar), NO la repitas; seguí el flujo y, si hace falta, confirmá la cabina al final junto con los demás datos. ⛔ Los AUTOS comunes (HB20, Onix, Polo, Nivus, Corolla, Creta, Tucson, Gol, T-Cross, 208, Kwid, Yaris, etc.) NO tienen tipo de cabina: con un auto NUNCA preguntes por cabina. Para CUBREASIENTOS NO es necesario preguntar la cabina (son a medida); enfocate en el AÑO, el color y el logo.
@@ -2677,6 +2679,42 @@ export function filtrarFeriados(texto, cal = calendarioLocal(15)) {
   return { texto: limpio, feriado };
 }
 
+// ── Banco de cobro cambiado: "Banco: Brou" con nuestra cuenta ─────────────────
+// El 23 oct 2026 un cliente escribió "Transferencia brou" (SU banco) y Max le pasó
+// los datos de cobro como "*Banco: Brou*, Cuenta: 5022900, Everbox SA": copió la
+// palabra del cliente como banco destino. La cuenta es del Itaú (config.js,
+// datosCobro.transferencia). Si en una respuesta aparece otro banco pegado a la
+// palabra "banco"/"cuenta" y en el mismo mensaje están nuestros datos de cobro (el
+// número de cuenta o el titular), se reemplaza por el banco de verdad.
+const _OTROS_BANCOS = "brou|banco rep[uú]blica|santander|scotiabank|scotia|bbva|hsbc|heritage|bandes|ita[uú]|citibank|citi";
+function _bancoCobro() {
+  const m = String(NEGOCIO.datosCobro?.transferencia || "").match(/banco\s+([a-záéíóúñ]+)/i);
+  return m ? m[1] : null;
+}
+function _esNuestroBanco(nombre, nuestro) {
+  const n = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return n(nombre) === n(nuestro);
+}
+export function filtrarBancoCobro(texto) {
+  const original = String(texto || "");
+  const nuestro = _bancoCobro();
+  if (!nuestro || !original.trim()) return { texto: original, banco: null };
+  const datos = String(NEGOCIO.datosCobro.transferencia);
+  const cuenta = (datos.match(/\d{5,}/) || [])[0];
+  const titular = (datos.match(/a nombre de\s+([^,.\n]+)/i) || [])[1];
+  const tieneDatos = (cuenta && original.includes(cuenta)) || (titular && new RegExp(titular.trim().split(/\s+/)[0], "i").test(original));
+  if (!tieneDatos) return { texto: original, banco: null };
+  let banco = null;
+  // "Banco: Brou" / "*Banco Brou*" / "cuenta del Brou" / "cuenta Nº 5022900 del Brou"
+  const re = new RegExp(`(\\bbanco\\b\\s*:?\\s*\\**\\s*|\\bcuenta\\b(?:\\s+n[º°o.]*\\s*\\d+)?\\s+(?:de|del|en el|en)\\s+)(${_OTROS_BANCOS})\\b`, "gi");
+  const limpio = original.replace(re, (m, antes, nombre) => {
+    if (_esNuestroBanco(nombre, nuestro)) return m;
+    banco = banco || nombre;
+    return `${antes}${nuestro}`;
+  });
+  return { texto: limpio, banco };
+}
+
 // Devuelve { texto, invento } — invento = qué estuvo por prometer (o null si está todo bien).
 // contexto: la charla previa. Sirve cuando la promesa NO nombra el producto ("no la
 // tengo publicada, pero la hacemos igual a medida"): ahí el producto es el último
@@ -3220,6 +3258,11 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   const { texto: sinFeriado, feriado } = filtrarFeriados(limpio);
   if (feriado) console.log(`📅 Feriado inventado borrado: "${feriado.slice(0, 120)}"`);
   limpio = sinFeriado;
+  // ANTI-BANCO-CAMBIADO (23 oct 2026, "Banco: Brou" con la cuenta del Itaú): el banco
+  // de cobro es el de config.js; si Max escribió otro al pasar los datos, se corrige.
+  const { texto: sinBanco, banco } = filtrarBancoCobro(limpio);
+  if (banco) console.log(`🏦 Banco de cobro corregido: decía "${banco}"`);
+  limpio = sinBanco;
   const hayAPedido = acciones.some((a) => [...(a.resultado?.resultados || []), ...(a.resultado?.fotos || [])].some((x) => Number(x?.demora_dias) > 0))
     || /a pedido: disponible en/i.test(String(ctx.textoCharla || ""));
   const { texto: sinInventos, invento } = filtrarInventos(limpio, ctx.textoCharla, hayAPedido);
