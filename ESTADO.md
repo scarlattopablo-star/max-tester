@@ -20,7 +20,26 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
-## 🚫 SESIÓN 15 oct (tarde) — AUTO SIN ML = "DE MOMENTO NO TENEMOS" + PREGUNTA PRECARGADA DEL SPORT (LO MÁS NUEVO)
+## 📦 SESIÓN 27 oct — EL ENVÍO DAC NUNCA ESTÁ INCLUIDO (LO MÁS NUEVO)
+
+- **Caso:** un cliente preguntó "¿y DAC lo pagás tú?" y Max contestó "DAC lo pagamos nosotros
+  igual, ya está incluido en el precio … pagás $4.410 (ya con el envío incluido)". FALSO.
+- **Regla de Pablo:** el envío por DAC lo paga el CLIENTE al recibirlo (cobro en destino). Nunca
+  incluido, tampoco con el 10% de transferencia (ese descuento es sobre el producto).
+- **Arreglo (PR #40, en producción, commit `4f93350`):** `ENVIOS.costo` + una línea en
+  `AVISO_ENVIO` (config.js), regla en el prompt (ENTREGA y Datos del negocio) y
+  `filtrarEnvioIncluido()` en cerebro.js, que borra "(con el envío incluido)" y reemplaza
+  cualquier oración de "envío incluido / gratis / lo pagamos nosotros" por la regla real.
+  Test: `src/envio_incluido.test.mjs`.
+- **Web (repo lacasadelcubreasiento, PR #3):** en `/admin/transacciones` la columna Acción
+  quedaba aplastada (botón Nota del 12 oct + Detalle con un link largo). Página a 1680 px y el
+  Detalle corta palabras largas.
+- **Pendiente (visto en el panel, NO arreglado):** (1) el Detalle de transferencias guarda el
+  texto interno de Max ("[El cliente te mandó un archivo adjunto … LO TENÉS ADJUNTO: leelo…]")
+  en vez de algo legible; (2) una fila de transferencia de $0 ("ivi") que parece duplicar un pago
+  por MP de $4.900 (Geely EX2) del mismo cliente.
+
+## 🚫 SESIÓN 15 oct (tarde) — AUTO SIN ML = "DE MOMENTO NO TENEMOS" + PREGUNTA PRECARGADA DEL SPORT
 
 - **Decisión de Pablo:** cubreasientos para un auto que NO está en Mercado Libre → Max contesta
   `AVISO_CUBREASIENTO_NO_DISPONIBLE` ("De momento no tenemos cubreasientos para ese vehículo" +
