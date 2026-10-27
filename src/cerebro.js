@@ -1551,7 +1551,7 @@ Tené clara esta diferencia:
 - AL CONFIRMAR LA COMPRA del cubreasiento, OFRECÉ EL RESTO DE ARTÍCULOS para ese mismo auto/modelo: pasale el link a la tienda de Mercado Libre filtrada por su modelo, así ve todo lo que hay para su vehículo. Armá el link con el modelo del auto (ej. para una Hilux: https://listado.mercadolibre.com.uy/Hilux_CustId_${"164590340"}). Texto sugerido: "Además, acá puede ver todos los accesorios que tenemos para su [modelo]: [link]".
 - CAMIONETAS — CABINA SIMPLE O DOBLE: aplica SOLO a camionetas/pick-up (Hilux, Ranger, Amarok, Saveiro, Strada, Toro, S10, Frontier, L200, Oroch, Montana, etc.) y SOLO para ALFOMBRAS (cuyas medidas cambian por cabina). Para alfombras de camioneta, preguntá UNA vez si es cabina simple o doble y mostrá lo que corresponda. ⛔ NO te quedes trabado en esa pregunta: si el cliente no la contesta pero AVANZA (elige producto, color, dice que quiere comprar), NO la repitas; seguí el flujo y, si hace falta, confirmá la cabina al final junto con los demás datos. ⛔ Los AUTOS comunes (HB20, Onix, Polo, Nivus, Corolla, Creta, Tucson, Gol, T-Cross, 208, Kwid, Yaris, etc.) NO tienen tipo de cabina: con un auto NUNCA preguntes por cabina. Para CUBREASIENTOS NO es necesario preguntar la cabina (son a medida); enfocate en el AÑO, el color y el logo.
 - ENTREGA (después de definir el producto y los medios de pago): preguntá cómo desea recibirlo. Caminos:
-  1. ENVÍO — SOLO POR DAC: los envíos se hacen ÚNICAMENTE por DAC (agencia de encomiendas), a todo el país. NO menciones otras formas de envío. Si el cliente elige envío, pedile estos DATOS para coordinarlo: NOMBRE completo, TELÉFONO y DIRECCIÓN. Registralo con "tomar_pedido".
+  1. ENVÍO — SOLO POR DAC: los envíos se hacen ÚNICAMENTE por DAC (agencia de encomiendas), a todo el país. NO menciones otras formas de envío. ⛔ QUIÉN PAGA EL ENVÍO (regla del dueño, 27 oct 2026): el envío por DAC NUNCA está incluido en el precio — lo paga el CLIENTE cuando lo recibe (cobro en destino). Si pregunta "¿el envío lo pagás vos?", "¿está incluido?", "¿es gratis?": NO, se abona al recibirlo. Tampoco cambia con el 10% de transferencia: ese descuento es sobre el producto, el envío va aparte igual. NUNCA digas "envío incluido", "envío gratis" ni "lo pagamos nosotros" (el 27 oct 2026 le dijiste a un cliente "DAC lo pagamos nosotros, ya está incluido en el precio" y es FALSO). Si el cliente elige envío, pedile estos DATOS para coordinarlo: NOMBRE completo, TELÉFONO y DIRECCIÓN. Registralo con "tomar_pedido".
   2. RETIRO en el local (${NEGOCIO.direccion}).
      · ✅ ALFOMBRAS, CUBRE VOLANTES, CUBREAUTOS y ACCESORIOS: esos productos NO llevan colocación, así que NO necesitan turno ni agenda. INVITALO a pasar a retirarlo CUANDO QUIERA dentro del horario del local (${NEGOCIO.horario}), sin coordinar nada previo. Decilo con calidez, ej.: "Lo podés pasar a retirar cuando quieras por ${NEGOCIO.direccion}, estamos de ${NEGOCIO.horario}. No hace falta que agendes nada." ⛔ Para estos productos NO llames a "solicitar_turno" ni le digas que el equipo le confirma día y hora: eso lo hace esperar al pedo.
      · El mismo criterio vale para el cubreasiento ECO CUERO económico (es solo venta, no se coloca): pasa a retirarlo cuando quiera, sin turno.
@@ -1566,6 +1566,7 @@ Tené clara esta diferencia:
 - Dirección: ${NEGOCIO.direccion}
 - Horario: ${NEGOCIO.horario} ⚠️ Al mediodía el local CIERRA de 12:30 a 13:00: si el cliente quiere pasar en ese rato, avisale y ofrecele venir antes de las 12:30 o después de las 13:00. Decí el horario TAL CUAL, sin inventar otro.
 - Envíos a todo el país: ${NEGOCIO.enviosTodoElPais ? "sí" : "no"} (por DAC)
+- 💸 COSTO DEL ENVÍO: ${ENVIOS.costo} NUNCA digas que está incluido, que es gratis o que lo pagamos nosotros.
 - ⏱️ DEMORA DE ENTREGA DE LOS ENVÍOS: ${PLAZO_ENVIO}. Vale para CUALQUIER compra con envío (por WhatsApp o por la web). SIEMPRE que el cliente pregunte por envíos, cuánto demora, cuándo le llega, o diga que lo quiere con envío, avisale en ese mismo mensaje: "Tenemos una demora de entrega de ${PLAZO_ENVIO}." Decilo exactamente así: no lo acortes, no prometas menos ni des fechas puntuales. (Si es retiro en el local, NO aplica.)
 - Medios de pago: ${NEGOCIO.mediosPago.join(", ")}
 - Web: ${NEGOCIO.web}
@@ -2715,6 +2716,41 @@ export function filtrarBancoCobro(texto) {
   return { texto: limpio, banco };
 }
 
+// ── Envío "incluido" inventado ───────────────────────────────────────────────
+// El 27 oct 2026 un cliente preguntó "¿y DAC lo pagás tú?" y Max contestó "DAC lo
+// pagamos nosotros igual — ya está incluido en el precio … pagás $4.410 (ya con el
+// envío incluido)". Es falso: el envío lo paga el cliente al recibirlo (ENVIOS.costo).
+// Se borran los "(con el envío incluido)" sueltos y cada oración que dice que el envío
+// es gratis / está incluido / lo pagamos nosotros se reemplaza por la regla real.
+const _AVISO_COSTO_ENVIO = "El envío por DAC no está incluido en el precio: se abona al recibirlo (cobro en destino).";
+const _HABLA_DE_ENVIO = /env[ií]o|\bdac\b|encomienda/i;
+const _PROMESA_ENVIO = /inclu[iy]|gratis|sin (?:costo|cargo)|bonificad|(?:lo |la )?(?:pagamos|cubrimos|abonamos) (?:nosotros|nosotras|el negocio)|(?:lo |la )?pagamos igual|corre por (?:nuestra|cuenta nuestra)|por nuestra cuenta|va por (?:nuestra|cuenta)/i;
+const _NIEGA_PROMESA = /\bno (?:est[aá] |va |viene )?inclu|\bno es gratis|\bno lo pagamos|al recibir|en destino|aparte/i;
+export function filtrarEnvioIncluido(texto) {
+  const original = String(texto || "");
+  if (!original.trim() || !_HABLA_DE_ENVIO.test(original)) return { texto: original, frase: null };
+  let frase = null;
+  // "(ya con el envío incluido)" / ", con envío gratis" pegados a un precio.
+  let limpio = original.replace(/\s*[(,]?\s*(?:ya\s+)?(?:con|incluyendo|incluye)\s+(?:el\s+)?env[ií]o(?:\s+por\s+DAC)?\s*(?:incluido|gratis|bonificado)?\s*\)?(?=[\s.,;:!?]|$)/gi, (m) => {
+    if (!/env[ií]o/i.test(m) || /\bsin\b/i.test(m)) return m;
+    frase = frase || m.trim();
+    return "";
+  });
+  // Oraciones enteras que prometen el envío.
+  let avisoPuesto = false;
+  limpio = limpio.split(/(?<=[.!?])\s+|(?=\n)/).map((o) => {
+    if (_HABLA_DE_ENVIO.test(o) && _PROMESA_ENVIO.test(o) && !_NIEGA_PROMESA.test(o)) {
+      frase = frase || o.trim();
+      if (avisoPuesto) return "";
+      avisoPuesto = true;
+      return (o.match(/^\n*/) || [""])[0] + _AVISO_COSTO_ENVIO;
+    }
+    return o;
+  }).filter((o, i, arr) => o !== "" || i === arr.length - 1).join(" ").replace(/ \n/g, "\n").replace(/\s+([.,;:!?])/g, "$1").replace(/[ \t]{2,}/g, " ").trim();
+  if (frase && !avisoPuesto && !/al recibir|en destino/i.test(limpio)) limpio = `${limpio}\n\n${_AVISO_COSTO_ENVIO}`;
+  return { texto: frase ? limpio : original, frase };
+}
+
 // Devuelve { texto, invento } — invento = qué estuvo por prometer (o null si está todo bien).
 // contexto: la charla previa. Sirve cuando la promesa NO nombra el producto ("no la
 // tengo publicada, pero la hacemos igual a medida"): ahí el producto es el último
@@ -3263,6 +3299,11 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   const { texto: sinBanco, banco } = filtrarBancoCobro(limpio);
   if (banco) console.log(`🏦 Banco de cobro corregido: decía "${banco}"`);
   limpio = sinBanco;
+  // ANTI-ENVÍO-INCLUIDO (27 oct 2026, "DAC lo pagamos nosotros, ya está incluido"): el
+  // envío lo paga el cliente al recibirlo; si Max prometió otra cosa, se corrige.
+  const { texto: sinEnvioGratis, frase: envioGratis } = filtrarEnvioIncluido(limpio);
+  if (envioGratis) console.log(`📦 Envío "incluido" corregido: "${envioGratis.slice(0, 120)}"`);
+  limpio = sinEnvioGratis;
   const hayAPedido = acciones.some((a) => [...(a.resultado?.resultados || []), ...(a.resultado?.fotos || [])].some((x) => Number(x?.demora_dias) > 0))
     || /a pedido: disponible en/i.test(String(ctx.textoCharla || ""));
   const { texto: sinInventos, invento } = filtrarInventos(limpio, ctx.textoCharla, hayAPedido);

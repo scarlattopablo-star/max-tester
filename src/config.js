@@ -41,6 +41,8 @@ export const DIAS_CERRADO = {};
 export const ENVIOS = {
   empresa: "DAC",
   detalle: "Los envíos se realizan únicamente por DAC (agencia de encomiendas), a todo el país.",
+  // Decisión de Pablo (27 oct 2026): el envío NUNCA está incluido en el precio.
+  costo: "El envío NO está incluido en el precio: lo paga el cliente al recibirlo (cobro en destino, DAC).",
   // El texto lo arma AVISO_ENVIO / PLAZO_ENVIO más abajo.
   datosNecesarios: ["nombre completo", "teléfono", "dirección"],
 };
@@ -279,6 +281,7 @@ export const PLAZO_ENVIO = "4 a 5 días hábiles";
 export const AVISO_ENVIO = `Sobre el ENVÍO:
 
 • Lo mandamos por DAC (agencia de encomiendas), a todo el país.
+• El costo del envío NO está incluido en el precio: se abona al recibirlo (cobro en destino).
 • Tenemos una demora de entrega de ${PLAZO_ENVIO}.`;
 
 // ───────────────────────────────────────────────────────────────────
