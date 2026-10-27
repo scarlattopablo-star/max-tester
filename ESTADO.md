@@ -34,10 +34,11 @@ QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 - **Web (repo lacasadelcubreasiento, PR #3):** en `/admin/transacciones` la columna Acción
   quedaba aplastada (botón Nota del 12 oct + Detalle con un link largo). Página a 1680 px y el
   Detalle corta palabras largas.
-- **Pendiente (visto en el panel, NO arreglado):** (1) el Detalle de transferencias guarda el
-  texto interno de Max ("[El cliente te mandó un archivo adjunto … LO TENÉS ADJUNTO: leelo…]")
-  en vez de algo legible; (2) una fila de transferencia de $0 ("ivi") que parece duplicar un pago
-  por MP de $4.900 (Geely EX2) del mismo cliente.
+- **Panel (PR #41):** el Detalle ya no muestra la nota interna de Max sobre adjuntos
+  (`textoParaPanel()` → "Comprobante en PDF: archivo.pdf", sin el link ni el token), y una foto
+  de un pago por MERCADO PAGO ya no registra una transferencia de $0 duplicada
+  (`esPagoMercadoPago()` en avisos_equipo.js). Test: `src/panel_detalle.test.mjs`. Las filas
+  viejas (Néstor y la de $0 del 27 oct) quedan como estaban en la base.
 
 ## 🚫 SESIÓN 15 oct (tarde) — AUTO SIN ML = "DE MOMENTO NO TENEMOS" + PREGUNTA PRECARGADA DEL SPORT
 

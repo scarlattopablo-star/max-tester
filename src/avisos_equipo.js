@@ -66,6 +66,28 @@ const fmt = (n) => `$ ${new Intl.NumberFormat("es-UY").format(n)}`;
  *  WhatsApp ni base de datos.
  *  Devuelve { avisos: [texto...], transferenciaSinRegistrar } — esto último es la
  *  transferencia que detectó la red de seguridad y que el llamador debe registrar. */
+// El texto que ve el equipo (panel + aviso). Cuando llega un archivo, `texto` trae la
+// NOTA INTERNA que se le mete a Max ("[El cliente te mandó un archivo adjunto (…) y LO
+// TENÉS ADJUNTO: leelo…]", ver notaDocumento en ws_mensaje.js) y eso terminaba en el
+// Detalle del panel (27 oct 2026). Se cambia por "Comprobante en PDF: archivo.pdf".
+export function textoParaPanel(texto) {
+  return String(texto || "")
+    .replace(/\[El cliente te mand[oó] un archivo adjunto(?: \("([^"]*)"\))?(?: de tipo ([^\s\]]+))?[^\]]*\]/gi, (m, nombre = "", mime = "") => {
+      const archivo = String(nombre).split("?")[0].trim();
+      const que = /pdf/i.test(mime) || /\.pdf$/i.test(archivo) ? "Comprobante en PDF" : "Archivo adjunto";
+      return archivo ? `${que}: ${archivo}` : que;
+    })
+    .replace(/\[El cliente[^\]]*\]/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ¿Max dice que lo que vio es un pago por MERCADO PAGO (y no una transferencia)?
+export function esPagoMercadoPago(respuesta) {
+  const plano = String(respuesta || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return /mercado ?pago/.test(plano) && !/trans?ferencia|deposito|giro|abitab|red ?pagos/.test(plano);
+}
+
 export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId = "", pdfRecibido = false, fotoRecibida = false, respuestaMax = "", comprobanteExterno = "", fallbackConversacion = "", pedidosWeb = [] } = {}) {
   const avisos = [];
   const lineaCliente = contacto.nombre ? `👤 ${contacto.nombre}` : "";
@@ -181,7 +203,11 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
   //   4. comprobanteExterno: el llamador YA decidió que hay un comprobante y dice
   //      por qué. Lo usa el chat que tomó un asesor, donde Max no razona y por
   //      lo tanto los disparadores 1 a 3 no tienen de dónde agarrarse.
-  const comprobanteEnFoto = fotoRecibida && maxVioUnComprobante(respuestaMax);
+  // Un pago por Mercado Pago que Max ve en una foto NO es una transferencia: ya entra
+  // solo al panel como "MP · Max". Pasó el 27 oct 2026: "Veo que ya pagaste por
+  // Mercado Pago la alfombra … el pago ya está acreditado" registró una transferencia
+  // de $0 duplicada al lado del pago MP de $4.900.
+  const comprobanteEnFoto = fotoRecibida && maxVioUnComprobante(respuestaMax) && !esPagoMercadoPago(respuestaMax);
   const detalleFoto = comprobanteEnFoto && !texto
     ? `Comprobante en FOTO. Max vio: ${String(respuestaMax).replace(/\s+/g, " ").slice(0, 110)}`
     : "";
@@ -191,7 +217,7 @@ export function armarAvisos({ acciones = [], contacto = {}, texto = "", chatId =
       chatId,
       nombre: contacto.nombre || "",
       telefono: contacto.tel || "",
-      detalle: [comprobanteExterno, detalleFoto, String(texto).trim()].filter(Boolean).join(" · ").slice(0, 200),
+      detalle: [comprobanteExterno, detalleFoto, textoParaPanel(texto)].filter(Boolean).join(" · ").slice(0, 200),
       // Comprobante = un ARCHIVO que llegó. "Te pasé el comprobante" escrito sin
       // adjunto no lo es: se registra, pero el aviso espera al comprobante real.
       comprobante: pdfRecibido || comprobanteEnFoto || !!comprobanteExterno || (fotoRecibida && /comprobante/i.test(texto)),
