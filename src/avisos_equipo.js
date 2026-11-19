@@ -53,6 +53,22 @@ function accionAvisa(a) {
   return true;
 }
 
+/** PAUSA AL DERIVAR (pedido de Pablo, 19 nov 2026). Cuando Max deriva, el asesor
+ *  entra con el link del aviso y le escribe al cliente desde SU número, no desde la
+ *  app del 091 — así que el eco que pausa a Max nunca llega, y si el cliente vuelve a
+ *  escribirle al 091 Max le habla encima al asesor. Por eso Max se pausa solo en ese
+ *  chat apenas deriva (3 h, como el handoff de siempre).
+ *  ⛔ Solo si el aviso PUEDE LLEGAR: si el canal de avisos está mudo (como el 096 entre
+ *  sep y nov 2026), nadie se entera de la derivación y pausar a Max dejaría al
+ *  cliente hablándole a la nada. `saludCanal` es la salida de avisos_salud.salud().
+ *  PURA: devuelve true/false, quien llama hace la pausa. */
+export function pausarAlDerivar(acciones = [], saludCanal = null) {
+  const derivo = (acciones || []).some((a) => a?.herramienta === "derivar_a_humano" && accionAvisa(a));
+  if (!derivo) return false;
+  // Al menos un número de avisos que YA entregó y no está rebotando.
+  return !!(saludCanal?.destinos || []).some((d) => d.ok && d.ultimoOk);
+}
+
 /** ¿Esta respuesta necesita atención del equipo? Los transportes lo usan para
  *  dejar el chat SIN LEER: así el asesor lo encuentra resaltado en la bandeja.
  *  Un "ya transferí" sin comprobante NO: todavía no hay nada que cerrar. */
