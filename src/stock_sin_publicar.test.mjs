@@ -41,7 +41,7 @@ test("Corsa / Virtus: ni 'qué auto es' ni la alfombra — SÍ HAY", async () =>
   }
 });
 
-test("la respuesta: texto fijo, sin precio ni 'no tenemos', y deriva sola con el precio para el equipo", async () => {
+test("la respuesta: texto fijo, sin precio ni 'no tenemos', y deriva sola (sin los números de la hoja)", async () => {
   const ctx = { _turno: {}, _ultimoUsuario: "hola tenés cubreasientos para kia picanto?", dichoPorElCliente: "hola tenés cubreasientos para kia picanto?" };
   const r = await ejecutarHerramienta("consultar_precio", { producto: "cubreasiento", modelo: "Kia Picanto" }, ctx);
   const acciones = [{ herramienta: "consultar_precio", input: { modelo: "Kia Picanto" }, resultado: r }];
@@ -56,5 +56,6 @@ test("la respuesta: texto fijo, sin precio ni 'no tenemos', y deriva sola con el
   assert.ok(out2.texto.includes(AVISO_STOCK_SIN_PUBLICAR("Kia Picanto")), out2.texto);
   const der = out2.acciones.find((a) => a.herramienta === "derivar_a_humano");
   assert.ok(der, "tiene que derivar");
-  assert.match(der.input.resumen, /Kia Picanto.*10900 \+ 1000/);
+  assert.match(der.input.resumen, /Kia Picanto/);
+  assert.ok(!/\d{4}/.test(der.input.resumen), der.input.resumen);
 });

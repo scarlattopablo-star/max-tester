@@ -3402,7 +3402,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
     : inventado != null
       ? `⚠️ Max estuvo por dar un precio que NO salió del catálogo ($${inventado.toLocaleString("es-UY")}). Se le borró esa frase antes de que saliera. Pasale vos el precio correcto.`
       : (ctx._turno?.stockSinPublicar && !ctx._turno?.hayCatalogo)
-        ? resumenParaEquipo(stockSinPublicar(ctx._turno.stockSinPublicar) || { auto: ctx._turno.stockSinPublicar, precio: "ver hoja" })
+        ? resumenParaEquipo(stockSinPublicar(ctx._turno.stockSinPublicar) || { auto: ctx._turno.stockSinPublicar })
       : (ctx._turno?.frenoLinea || (ctx._turno?.cubreasientoSinCatalogo && !ctx._turno?.hayCatalogo))
         ? "Cliente que preguntó por CUBREASIENTOS para un vehículo del que NO tenemos nada en el catálogo. Max no le ofreció ninguna línea (regla del dueño del 18 ago 2026): confirmale vos la disponibilidad y el precio para su auto."
         : ctx._turno?.alfombraEntrando
