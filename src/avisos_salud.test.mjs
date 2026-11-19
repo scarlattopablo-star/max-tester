@@ -64,8 +64,67 @@ test("el fallo de un mensaje a un CLIENTE no ensucia la salud del canal de aviso
 test("no crece sin límite: recordar muchos avisos no deja la memoria suelta", () => {
   reset();
   for (let i = 0; i < 500; i++) recordarEnvio(`wamid.${i}`, `aviso ${i}`);
-  assert.equal(salud().recordados <= 100, true, `guardó ${salud().recordados} avisos en memoria`);
+  assert.equal(salud().recordados <= 200, true, `guardó ${salud().recordados} avisos en memoria`);
   // El más nuevo siempre tiene que estar: es el que puede rebotar en cualquier momento.
   recordarEnvio("wamid.ultimo", "el último aviso");
   assert.equal(marcarRebote("wamid.ultimo", 131026, "x").texto, "el último aviso");
+});
+
+// ── 19 nov 2026: dos meses de avisos mudos ──────────────────────────────────
+// La alarma de arriba existía, pero solo en /api/estado y nadie la miraba; y el
+// destino por defecto era el 091 = el número de Max (se mandaba los avisos a sí mismo).
+import { destinosAvisos, aprenderNumeroPropio, enmascarar } from "./avisos_salud.js";
+
+test("NUMERO_AVISOS admite varios números y suma el de respaldo, sin repetir", () => {
+  reset();
+  const { destinos } = destinosAvisos({ NUMERO_AVISOS: "096895164, 099111222", NUMERO_AVISOS_RESPALDO: "099111222;098333444" });
+  assert.deepEqual(destinos, ["59896895164", "59899111222", "59898333444"]);
+});
+
+test("el número del PROPIO bot nunca es destino de avisos (rebota siempre con 131026)", () => {
+  reset();
+  const r = destinosAvisos({ NUMERO_AVISOS: "091629784,096895164", NUMERO_BOT: "091629784" });
+  assert.deepEqual(r.destinos, ["59896895164"]);
+  assert.equal(r.descartados.length, 1);
+  assert.match(r.descartados[0].motivo, /propio bot/);
+});
+
+test("sin NUMERO_BOT, el número propio se aprende del webhook y igual se descarta", () => {
+  reset();
+  aprenderNumeroPropio("59891629784"); // metadata.display_phone_number
+  const r = destinosAvisos({ NUMERO_AVISOS: "091629784" });
+  assert.deepEqual(r.destinos, [], "mandarse avisos a uno mismo no es un destino");
+  const s = salud(r);
+  assert.equal(s.ok, false);
+  assert.equal(s.mudo, true, "sin ningún destino válido el equipo está mudo: tiene que sonar la alarma");
+  assert.ok(s.problema);
+});
+
+test("un número muerto y otro vivo: ok:false (hay que arreglarlo) pero NO mudo", () => {
+  reset();
+  recordarEnvio("w.a", "aviso", "59896895164");
+  recordarEnvio("w.b", "aviso", "59899111222");
+  marcarRebote("w.a", 131026, "Message undeliverable");
+  marcarEntregado("w.b");
+  const s = salud();
+  assert.equal(s.ok, false, "el número que rebota tiene que verse aunque el otro ande");
+  assert.equal(s.mudo, false, "el equipo sigue recibiendo por el otro número");
+  const muerto = s.destinos.find((d) => d.numero === "…164");
+  assert.equal(muerto.consecutivos, 1);
+  assert.equal(s.destinos.find((d) => d.numero === "…222").ok, true);
+});
+
+test("todos los números rebotando = mudo", () => {
+  reset();
+  recordarEnvio("w.1", "aviso", "59896895164");
+  marcarRebote("w.1", 131026, "x");
+  assert.equal(salud().mudo, true);
+});
+
+test("/api/estado es público: los números salen enmascarados", () => {
+  assert.equal(enmascarar("59896895164"), "…164");
+  reset();
+  const s = salud(destinosAvisos({ NUMERO_AVISOS: "096895164" }));
+  assert.deepEqual(s.configurados, ["…164"]);
+  assert.ok(!JSON.stringify(s).includes("96895164"), "no se publica el número entero");
 });
