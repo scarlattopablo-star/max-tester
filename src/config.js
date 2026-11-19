@@ -267,6 +267,12 @@ export const PEDIR_VEHICULO = `¿Para qué marca y modelo de auto es? Así te co
 // que Max ya dijo queda peor que no decirlo.
 export const AVISO_PASO_ASESOR = `Te paso con un asesor para que te confirme si lo podemos hacer y el precio exacto.`;
 
+// CUBREASIENTOS EN STOCK QUE NO ESTÁN EN MERCADO LIBRE (pedido de Pablo, 19 nov 2026).
+// La lista de autos está en src/stock_sin_publicar.js. Sin precio: lo da el asesor.
+// ✏️ Editable acá.
+export const AVISO_STOCK_SIN_PUBLICAR = (auto) =>
+  `¡Sí! Para tu ${auto} tenemos cubreasientos en stock. Te paso con un asesor para que te informe bien los modelos, colores y el precio.`;
+
 // ───────────────────────────────────────────────────────────────────
 // AVISO DE ENVÍO — texto EXACTO que el CÓDIGO agrega al cerrar una venta
 // que va POR ENVÍO. Lo manda el código, NO el modelo, para que el plazo salga
