@@ -5,8 +5,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_AGOTADO_ALFOMBRA, AVISO_ALFOMBRA_NO_DISPONIBLE, AVISO_CUBREASIENTO_NO_DISPONIBLE, AVISO_DEMORA, TEXTO_MATERIAL_EXCLUSIVO, MUESTRA_COLORES, TELEFONO_CONSULTAS, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, DIAS_CERRADO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_AGOTADO_ALFOMBRA, AVISO_ALFOMBRA_NO_DISPONIBLE, AVISO_CUBREASIENTO_NO_DISPONIBLE, AVISO_DEMORA, TEXTO_MATERIAL_EXCLUSIVO, MUESTRA_COLORES, TELEFONO_CONSULTAS, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, AVISO_STOCK_SIN_PUBLICAR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, DIAS_CERRADO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
+import { stockSinPublicar, resumenParaEquipo } from "./stock_sin_publicar.js";
 import { registrarPedido } from "./pedidos.js";
 import { registrarDerivacion } from "./derivaciones.js";
 import { productos as productosML, agotados as agotadosML, agotadoPorId, esperarCatalogoFresco } from "./catalogo_vivo.js";
@@ -1084,6 +1085,9 @@ export function preventaTesla(consulta, dijoElCliente = "") {
   };
 }
 
+// ¿Alguno de estos productos es un cubreasiento?
+const hayCubreasientoEn = (prods) => (prods || []).some((p) => CATEGORIAS.cubreasiento.test(_normTxt(String(p?.nombre || ""))));
+
 export function sinStockOInexistente(consulta, dijoElCliente = "", recientesMax = "") {
   const pv = preventaTesla(consulta, dijoElCliente);
   if (pv) return pv;
@@ -1118,6 +1122,19 @@ export function sinStockOInexistente(consulta, dijoElCliente = "", recientesMax 
   // publicado (regla del dueño del 18 ago 2026), pero el camino es la derivación, NO
   // el "agotado, ¿te aviso cuando llegue?" — de eso no hay nada que esperar.
   const esCubreasiento = esConsultaDeCubreasiento(consulta);
+  // CUBREASIENTO EN STOCK QUE NO ESTÁ EN MERCADO LIBRE (pedido de Pablo, 19 nov 2026):
+  // hay en el local aunque ML no lo muestre. SÍ HAY, sin precio, derecho al asesor.
+  // Si la búsqueda trae solo el auto ("Renault Clio"), el producto lo dice el cliente.
+  const pideCubreasiento = esCubreasiento || (!nombreCategoria(consulta) && esConsultaDeCubreasiento(dijoElCliente));
+  const enStock = pideCubreasiento ? stockSinPublicar(`${consulta} ${dijoElCliente}`) : null;
+  if (enStock) {
+    return {
+      encontrado: false,
+      agotado: false,
+      stockSinPublicar: enStock.auto,
+      mensaje: `(Nota interna del sistema.) SÍ HAY cubreasientos en stock para ${enStock.auto} (están en el local, aunque no aparezcan acá). El sistema YA le manda al cliente: "${AVISO_STOCK_SIN_PUBLICAR(enStock.auto)}". ⛔ NO digas que no tenemos, que está agotado, que no hay stock ni que se hace a medida. ⛔ NO des precio, ⛔ NO mandes fotos y ⛔ NO enumeres líneas: eso se lo informa el asesor. ⛔ NO le preguntes si quiere que lo pases: llamá a "derivar_a_humano" (motivo "otro") con el vehículo. Como mucho, una frase corta y amable antes.`,
+    };
+  }
   const ago = esCubreasiento ? null : buscarAgotado(consulta);
   // ALFOMBRA agotada: ya está entrando (regla del dueño del 5 oct 2026). Sigue siendo
   // un producto que EXISTE (agotado: true, para que no cuente como "no lo tenemos"),
@@ -1448,6 +1465,7 @@ Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramie
   · Cuando el cliente conteste que SÍ, llamá a "avisar_cuando_llegue" con el producto_id EXACTO que te dio la herramienta y confirmale corto ("Listo, quedás anotado: te escribo apenas entre"). Si dice que no, seguí la charla normal.
   · ⛔ NUNCA agregues plazos ni fechas ("en 3 días", "la semana que viene", "el martes"): no los sabemos y el cliente te los reclama.
 - 🚫 CASO 3 bis — te devuelve **textoSinCubreasiento** (decisión de Pablo del 15 oct 2026, cualquier marca MENOS JMC): de ese vehículo NO tenemos cubreasientos. El SISTEMA le manda al cliente el texto oficial ("De momento no tenemos cubreasientos para ese vehículo..." + el teléfono ${TELEFONO_CONSULTAS}). ⛔ NO lo repitas, ⛔ NO digas que se confecciona a medida ni que se puede hacer, ⛔ NO ofrezcas líneas, fotos, precios ni asesor y ⛔ NO derives. Si insiste, que llame al ${TELEFONO_CONSULTAS}.
+- ✅ CASO 3 ter — te devuelve **stockSinPublicar** (pedido de Pablo del 19 nov 2026): de ese vehículo SÍ HAY cubreasientos en stock en el local, aunque no aparezcan en la búsqueda. El SISTEMA le manda al cliente que hay y que lo pasás con un asesor. ⛔ NO digas que no tenemos, que está agotado ni que se hace a medida, ⛔ NO des precio, fotos ni líneas (eso lo informa el asesor) y ⛔ NO le preguntes si quiere el asesor: llamá a "derivar_a_humano" (motivo "otro") con el vehículo.
 - 🧵 CASO 3 — te devuelve **aMedida: true** (desde el 15 oct 2026 es SOLO para JMC, que la casa hace en todos los modelos): para ese vehículo no hay ninguna publicación cargada, pero los cubreasientos NO son una caja que se agota: se CONFECCIONAN A MEDIDA para cada auto. ⛔⛔ PROHIBIDÍSIMO decirle que está agotado, que no hay stock, que no lo tenemos o que no trabajamos ese modelo (el 28 ago 2026 le dijiste "está agotado" a dos clientes que preguntaban por el capitoneado y tuvo que meterse el equipo en la charla a desmentirte: "perdón que el bot está dando fallas, tenemos sí en stock capitoneado negro"). ⛔ NO ofrezcas avisarle cuando llegue: no hay nada que esperar, se fabrica.
   · Lo que SÍ decís, corto y natural: que los cubreasientos se hacen a medida y que para su vehículo se lo confirma un asesor ("Para ese modelo te lo confirma un asesor, que te dice si lo podemos confeccionar y el precio"). ⛔ NO prometas que se puede hacer: a veces no se puede (Jack Ytterby, 15 oct).
   · ⛔ SIN PRECIO y SIN FOTOS, y ⛔ sin enumerarle las líneas: para ese vehículo el precio exacto lo confirma un asesor (regla del dueño del 18 ago 2026). ⛔ Y NO LE EXPLIQUES POR QUÉ ("no lo tengo cargado", "no está cargado", "no está publicado"): son palabras de adentro, al cliente le suenan a excusa.
@@ -2006,7 +2024,7 @@ const MUESTRAN_LINEAS = new Set([
 // "enseguida se comunican con vos" — sin decirle nunca al cliente que su cubreasiento
 // SE PUEDE HACER. La red de seguridad de las frases se cuelga de esta misma señal.
 const derivaDirecto = (turno) =>
-  !!(turno?.cubreasientoAMedida || turno?.frenoLinea || (turno?.cubreasientoSinCatalogo && !turno?.hayCatalogo));
+  !!(turno?.cubreasientoAMedida || turno?.stockSinPublicar || turno?.frenoLinea || (turno?.cubreasientoSinCatalogo && !turno?.hayCatalogo));
 
 export function sinCatalogoParaSuAuto(ctx = {}) {
   const turno = ctx._turno || {};
@@ -2015,6 +2033,16 @@ export function sinCatalogoParaSuAuto(ctx = {}) {
   // JMC: excepción del dueño, se ofrece igual (y se deriva, como siempre).
   const dicho = String(ctx._ultimoUsuario || "") + " " + String(ctx.textoCharla || "");
   if (/\bjmc\b/i.test(dicho)) return null;
+  // Stock sin publicar (19 nov 2026): hay en el local. Ni líneas ni "no tenemos": asesor.
+  const enStock = turno.stockSinPublicar || stockSinPublicar(`${ctx._ultimoUsuario || ""} ${ctx.dichoPorElCliente || ""}`)?.auto;
+  if (enStock) {
+    if (ctx._turno) ctx._turno.stockSinPublicar = enStock;
+    return {
+      ok: false,
+      stockSinPublicar: enStock,
+      mensaje: `(Nota interna del sistema, NO se la copies al cliente.) SÍ HAY cubreasientos en stock para ${enStock}, pero las líneas, colores y precio se los informa un asesor. El sistema YA le manda al cliente que hay y que lo pasás con un asesor. ⛔ NO muestres líneas, fotos ni precios y ⛔ NO digas que no tenemos. Llamá a "derivar_a_humano" (motivo "otro") con el vehículo.`,
+    };
+  }
   // Desde el 15 oct 2026 (decisión de Pablo): fuera de JMC, un auto sin cubreasientos en
   // Mercado Libre se contesta "de momento no tenemos" (texto del sistema), sin asesor.
   if (ctx._turno) ctx._turno.sinCubreasiento = true;
@@ -2176,6 +2204,8 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
   // Lo lee el guard de derivar_a_humano y el cierre de armarRespuesta, que si no
   // descartan la derivación cuando Max la escribe como pregunta.
   if (turno && r?.aMedida) turno.cubreasientoAMedida = true;
+  // Stock sin publicar: también DERECHO al asesor, pero diciéndole que SÍ HAY.
+  if (turno && r?.stockSinPublicar) turno.stockSinPublicar = r.stockSinPublicar;
   // ALFOMBRA que está entrando: también va DERECHO al asesor (regla del 5 oct 2026).
   if (turno && r?.alfombraEntrando) turno.alfombraEntrando = true;
   if (turno && BUSCAN_CATALOGO.has(nombre)) {
@@ -2200,7 +2230,9 @@ export async function ejecutarHerramienta(nombre, input, ctx = {}) {
       if (!otraCategoria && CATEGORIAS.cubreasiento.test(consulta)) {
         // JMC: se deriva como siempre (la casa los hace todos). Cualquier otro auto:
         // "de momento no tenemos" (decisión de Pablo, 15 oct 2026).
-        if (/\bjmc\b/i.test(`${consulta} ${_normTxt(sinNotasDelSistema(ctx.dichoPorElCliente || ""))}`)) turno.cubreasientoSinCatalogo = true;
+        const enStock = turno.stockSinPublicar || stockSinPublicar(`${consulta} ${sinNotasDelSistema(ctx.dichoPorElCliente || "")}`)?.auto;
+        if (enStock) turno.stockSinPublicar = enStock;
+        else if (/\bjmc\b/i.test(`${consulta} ${_normTxt(sinNotasDelSistema(ctx.dichoPorElCliente || ""))}`)) turno.cubreasientoSinCatalogo = true;
         else turno.sinCubreasiento = true;
       }
     }
@@ -2351,6 +2383,13 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       if (!encontrados.length) return { ...sinStockOInexistente(consulta, ctx._ultimoUsuario, ctx._recientesMax) };
       // Si no sabemos QUÉ AUTO tiene, lo que encontramos es de un modelo cualquiera:
       // darle ese precio es mentirle. Se le pregunta el vehículo primero.
+      // Un auto de la lista de stock sin publicar (Corsa, QQ, March…) puede no estar en
+      // ningún título de ML: no es "no sé qué auto es", es que SÍ HAY y va al asesor.
+      // Y si de ese auto solo apareció la ALFOMBRA (Virtus, 301), el cubreasiento igual hay.
+      if (!identificaModelo(consulta) || !hayCubreasientoEn(encontrados)) {
+        const st = sinStockOInexistente(consulta, ctx._ultimoUsuario, ctx._recientesMax);
+        if (st.stockSinPublicar) return { ...st };
+      }
       if (!identificaModelo(consulta)) return { encontrado: false, falta_modelo: true, mensaje: "Todavía no sabés qué vehículo tiene, así que NO le des precio ni le nombres productos: lo que encontré es de otros modelos y le estarías cotizando cualquier cosa. Preguntale marca y modelo (y el año si es camioneta) en una frase corta y amable, y recién ahí volvé a buscar." };
       // Cabina simple y doble son autos distintos: si vinieron las dos y nadie dijo
       // cuál, se pregunta antes de cotizar (7 ago 2026, Strada Freedom).
@@ -2410,6 +2449,12 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       if (!hallados.length) return { ok: false, ...sinStockOInexistente(consulta, ctx._ultimoUsuario, ctx._recientesMax) };
       // Mismo criterio que consultar_precio: sin saber el vehículo, las fotos serían de
       // otro auto. Antes de mostrar nada, se pregunta el modelo.
+      // Un auto de la lista de stock sin publicar (Corsa, QQ, March…) puede no estar en
+      // ningún título de ML: no es "no sé qué auto es", es que SÍ HAY y va al asesor.
+      if (!identificaModelo(consulta) || !hayCubreasientoEn(hallados)) {
+        const st = sinStockOInexistente(consulta, ctx._ultimoUsuario, ctx._recientesMax);
+        if (st.stockSinPublicar) return { ok: false, ...st };
+      }
       if (!identificaModelo(consulta)) return { ok: false, falta_modelo: true, mensaje: "Todavía no sabés qué vehículo tiene: las fotos que encontré son de otros modelos y mostrárselas lo confunde. Preguntale marca y modelo en una frase corta y amable, y después buscá de nuevo." };
       // Las fotos van con el PRECIO en el caption, así que mostrar las dos cabinas
       // juntas es cotizarle las dos: mismo guard que en consultar_precio.
@@ -3127,7 +3172,7 @@ function asesorDeMas(ctx = {}, acciones = []) {
   // Si Max le OFRECIÓ el asesor en el mensaje anterior, el "sí" del cliente es para eso.
   if (_OFRECIO_ASESOR.test(String(ctx.textoCharla || "").slice(-700))) return false;
   const t = ctx._turno || {};
-  if (t.alfombraEntrando || t.preventa || t.cubreasientoAMedida || t.frenoLinea) return false;
+  if (t.alfombraEntrando || t.preventa || t.cubreasientoAMedida || t.stockSinPublicar || t.frenoLinea) return false;
   const pend = t.derivacionPendiente;
   if (pend && DERIVACION_DIRECTA.has(String(pend.motivo || ""))) return false;
   const nombres = acciones.flatMap((a) => [...(a.resultado?.resultados || []), ...(a.resultado?.fotos || [])]).map((x) => x?.nombre);
@@ -3356,6 +3401,8 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
     ? `⚠️ Max estuvo por prometer ${invento} (NO lo hacemos). Se le borró esa frase y se le dijo al cliente que lo consulta un asesor. Revisá la conversación y respondele vos.`
     : inventado != null
       ? `⚠️ Max estuvo por dar un precio que NO salió del catálogo ($${inventado.toLocaleString("es-UY")}). Se le borró esa frase antes de que saliera. Pasale vos el precio correcto.`
+      : (ctx._turno?.stockSinPublicar && !ctx._turno?.hayCatalogo)
+        ? resumenParaEquipo(stockSinPublicar(ctx._turno.stockSinPublicar) || { auto: ctx._turno.stockSinPublicar })
       : (ctx._turno?.frenoLinea || (ctx._turno?.cubreasientoSinCatalogo && !ctx._turno?.hayCatalogo))
         ? "Cliente que preguntó por CUBREASIENTOS para un vehículo del que NO tenemos nada en el catálogo. Max no le ofreció ninguna línea (regla del dueño del 18 ago 2026): confirmale vos la disponibilidad y el precio para su auto."
         : ctx._turno?.alfombraEntrando
@@ -3436,7 +3483,7 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // que la alfombra, el texto lo pone el CÓDIGO y se le caen a Max las oraciones que
   // prometan que se hace, ofrezcan asesor o digan lo mismo con otras palabras.
   const sinCubreasiento = (acciones.find((a) => a.resultado?.textoSinCubreasiento)?.resultado?.textoSinCubreasiento)
-    || (ctx._turno?.sinCubreasiento && !ctx._turno?.hayCatalogo ? AVISO_CUBREASIENTO_NO_DISPONIBLE : null);
+    || (ctx._turno?.sinCubreasiento && !ctx._turno?.hayCatalogo && !ctx._turno?.stockSinPublicar ? AVISO_CUBREASIENTO_NO_DISPONIBLE : null);
   // Si ya se lo dijimos en los últimos mensajes, no se le repite el texto entero.
   const avisoSinCubreasiento = sinCubreasiento && String(ctx._recientesMax || "").includes(AVISO_CUBREASIENTO_NO_DISPONIBLE)
     ? `Como te comentaba, de momento no tenemos cubreasientos para ese vehículo.`
@@ -3508,7 +3555,13 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
   // turnos de la charla, repitiendo lo mismo dos y tres veces. Ahora: solo con un
   // auto que nombró EL CLIENTE, y cada frase una sola vez por visita.
   const autoDelCliente = nombroVehiculo(sinNotasDelSistema(`${ctx.dichoPorElCliente || ""} ${ctx._ultimoUsuario || ""}`));
-  if (derivaDirecto(ctx._turno) && autoDelCliente) {
+  if (ctx._turno?.stockSinPublicar && !ctx._turno?.hayCatalogo) {
+    // SÍ HAY (stock sin publicar): se le caen a Max las frases de "no tenemos", "a
+    // medida" o precio, y va el texto fijo — una sola vez por visita.
+    const fijo = AVISO_STOCK_SIN_PUBLICAR(ctx._turno.stockSinPublicar);
+    if (limpio) limpio = _sacarOraciones(limpio, /no (tenemos|contamos|hay|trabajamos)|agotad|sin stock|a medida|confeccion|fabric|\$\s?\d|precio|asesor|compa[ñn]er|vendedor/i);
+    limpio = [limpio, String(ctx._recientesMax || "").includes(fijo) ? null : fijo].filter(Boolean).join("\n\n");
+  } else if (derivaDirecto(ctx._turno) && autoDelCliente) {
     // Lo que Max ya dijo en sus últimos mensajes cuenta igual, con sus palabras o con las fijas.
     const conRecientes = `${limpio} ${ctx._recientesMax || ""}`;
     const diceMedida = /a medida|confeccion|fabric/i.test(conRecientes);
