@@ -12,13 +12,13 @@ import { agregar, cargarConversaciones } from "./memoria.js";
 import { registrarMensajeMax } from "./metricas.js";
 import { cargarEstado, esHumano, marcarHumano } from "./previas.js";
 import { registrarTransporte } from "./notificador.js";
-import { avisarAcciones, pideAtencionDelEquipo } from "./avisos_equipo.js";
+import { avisarAcciones, pideAtencionDelEquipo, pausarAlDerivar } from "./avisos_equipo.js";
 import { esPdf, notaDocumento, dijoQueTransfirio } from "./ws_mensaje.js";
 import { guardarComprobanteDataUri } from "./comprobantes.js";
 import { registrarCliente } from "./clientes.js";
 import { recordarEnviado, marcaDeCita } from "./citas.js";
 import { diag } from "./diag.js";
-import { recordarEnvio as recordarAvisoEquipo, marcarEntregado as avisoEntregado, marcarRebote as avisoRebotado, destinosAvisos, aprenderNumeroPropio, numeroPropioBot } from "./avisos_salud.js";
+import { recordarEnvio as recordarAvisoEquipo, marcarEntregado as avisoEntregado, marcarRebote as avisoRebotado, salud as saludAvisos, destinosAvisos, aprenderNumeroPropio, numeroPropioBot } from "./avisos_salud.js";
 import {
   enviarTextoMeta, enviarImagenMeta, enviarVideoMeta, enviarPlantillaMeta,
   marcarLeidoEscribiendo, mediaComoDataUri, aWaId, metaConfigurado,
@@ -298,6 +298,15 @@ async function procesar(tel) {
       fotoRecibida: imagenes.length > 0, respuestaMax: respuesta,
       fallbackConversacion: "Buscá la conversación en la bandeja de Meta Business Suite.",
     });
+    // Derivó: el asesor le escribe desde su número con el link del aviso. Max se
+    // calla 3 h en este chat para no hablarle encima (ver pausarAlDerivar).
+    if (pausarAlDerivar(acciones, saludAvisos())) {
+      await marcarHumano(tel);
+      diag("pausa_al_derivar", { jid: tel });
+      console.log(`🤫 ${tel}: Max derivó → en pausa 3 h en este chat`);
+    } else if (acciones.some((a) => a?.herramienta === "derivar_a_humano")) {
+      console.log(`⚠ ${tel}: Max derivó pero NO se pausa — el canal de avisos no está entregando`);
+    }
   } catch (e) {
     diag("error", { jid: tel, detalle: e.message });
     console.log(`⚠ Error respondiendo a ${tel}: ${e.message}`);
