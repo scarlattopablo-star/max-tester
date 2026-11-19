@@ -1,0 +1,105 @@
+# ALARMA: ¿le están llegando los avisos de Max al equipo?
+#
+# POR QUÉ EXISTE (19 nov 2026). Los avisos al equipo (derivaciones, ventas, turnos,
+# TRANSFERENCIAS) rebotaron con code 131026 desde el 18 sep. /api/estado mostraba
+# avisos.ok:false desde el 21 sep... pero nadie mira /api/estado. Se encontró dos
+# meses después con 470 rebotes seguidos. La alarma no puede depender de que alguien
+# entre a mirar, ni de WhatsApp (que es justo lo que está roto).
+#
+# QUÉ HACE: cada ~30 min lee /api/estado → avisos. Si un número de avisos rebota 3
+# veces seguidas, o no hay ningún destino válido, ABRE UN ISSUE mencionando al dueño
+# del repo (le llega un MAIL) y el run falla (otro mail). Mientras siga roto, recuerda
+# una vez cada 24 h. Cuando los avisos vuelven a entregarse, cierra el issue solo.
+name: alarma avisos al equipo
+
+on:
+  schedule:
+    - cron: "7,37 * * * *" # best effort: GitHub lo larga cuando puede
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+
+concurrency:
+  group: alarma-avisos
+  cancel-in-progress: false
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      ETIQUETA: alarma-avisos
+    steps:
+      - name: Leer la salud de los avisos
+        run: |
+          URL="https://max-tester.onrender.com/api/estado"
+          for intento in 1 2 3 4; do
+            code=$(curl -s -o /tmp/estado.json -w "%{http_code}" --max-time 90 "$URL") || code="000"
+            [ "$code" = "200" ] && break
+            sleep 20
+          done
+          if [ "$code" != "200" ]; then
+            # Que Max esté caído lo grita keep-max-awake; acá no se puede juzgar a los avisos.
+            echo "::warning::/api/estado no respondió (HTTP $code); no puedo revisar los avisos en este run."
+            exit 0
+          fi
+          jq '.avisos' /tmp/estado.json | tee /tmp/avisos.json
+
+          mudo=$(jq -r '.mudo // false' /tmp/avisos.json)
+          consecutivos=$(jq -r '.consecutivos // 0' /tmp/avisos.json)
+          problema=$(jq -r '.problema // ""' /tmp/avisos.json)
+          alarma=no
+          if [ "$mudo" = "true" ] || [ "$consecutivos" -ge 3 ] || [ -n "$problema" ]; then alarma=si; fi
+          echo "mudo=$mudo consecutivos=$consecutivos problema=$problema → alarma=$alarma"
+
+          gh label create "$ETIQUETA" --color C81E1E --description "Los avisos de Max al equipo no llegan" --force >/dev/null 2>&1 || true
+          abierto=$(gh issue list --label "$ETIQUETA" --state open --json number,updatedAt --limit 1)
+          num=$(echo "$abierto" | jq -r '.[0].number // empty')
+
+          if [ "$alarma" = "no" ]; then
+            if [ -n "$num" ]; then
+              gh issue comment "$num" --body "✅ Los avisos al equipo volvieron a entregarse. Cierro la alarma."
+              gh issue close "$num"
+            fi
+            echo "Avisos OK."
+            exit 0
+          fi
+
+          destinos=$(jq -r '[.destinos[]? | "\(.numero): \(.consecutivos) rebotes seguidos, último OK \(.ultimoOk // "nunca")"] | join("\n- ")' /tmp/avisos.json)
+          descartados=$(jq -r '[.descartados[]? | "\(.numero): \(.motivo)"] | join("\n- ")' /tmp/avisos.json)
+          rebote=$(jq -r '.ultimoRebote | if . then "\(.cuando) · code \(.code) · \(.detalle)" else "—" end' /tmp/avisos.json)
+          {
+            echo "@${{ github.repository_owner }} **Los avisos de Max al equipo NO están llegando.** Derivaciones, ventas, turnos y transferencias no le llegan a nadie por WhatsApp."
+            echo ""
+            [ "$mudo" = "true" ] && echo "🔴 **MUDO:** ningún número de avisos está recibiendo." && echo ""
+            [ -n "$problema" ] && echo "⚠️ $problema" && echo ""
+            echo "**Último rebote:** $rebote"
+            echo ""
+            [ -n "$destinos" ] && echo "**Destinos:**" && echo "- $destinos" && echo ""
+            [ -n "$descartados" ] && echo "**Descartados:**" && echo "- $descartados" && echo ""
+            echo "**Qué hacer:**"
+            echo "1. code 131026 = el teléfono destino no puede recibir (no tiene WhatsApp, versión vieja, términos sin aceptar, o es el propio número de Max)."
+            echo "2. En Render → max-tester → Environment, revisar \`NUMERO_AVISOS\` (puede ser una lista: \`096xxxxxx,099xxxxxx\`) y cargar \`NUMERO_AVISOS_RESPALDO\`. **Nunca** el 091 629 784 (es Max)."
+            echo "3. Mientras tanto, revisar el panel /admin: las derivaciones y transferencias quedan registradas ahí."
+            echo ""
+            echo "Detalle en vivo: https://max-tester.onrender.com/api/estado"
+          } > /tmp/cuerpo.md
+
+          if [ -z "$num" ]; then
+            gh issue create --title "🚨 Los avisos de Max al equipo no llegan" --label "$ETIQUETA" --body-file /tmp/cuerpo.md
+            echo "::error::Los avisos al equipo no llegan. Abrí un issue."
+            exit 1
+          fi
+          # Ya hay alarma abierta: recordar una vez por día, no cada media hora.
+          upd=$(echo "$abierto" | jq -r '.[0].updatedAt')
+          horas=$(( ( $(date +%s) - $(date -d "$upd" +%s) ) / 3600 ))
+          if [ "$horas" -ge 24 ]; then
+            { echo "⏰ **Sigue roto** (recordatorio diario)."; echo ""; cat /tmp/cuerpo.md; } > /tmp/recordatorio.md
+            gh issue comment "$num" --body-file /tmp/recordatorio.md
+            echo "::error::Los avisos al equipo siguen sin llegar (issue #$num)."
+            exit 1
+          fi
+          echo "::warning::Alarma ya abierta (issue #$num), último aviso hace ${horas} h."

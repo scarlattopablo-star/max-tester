@@ -18,7 +18,7 @@ import { guardarComprobanteDataUri } from "./comprobantes.js";
 import { registrarCliente } from "./clientes.js";
 import { recordarEnviado, marcaDeCita } from "./citas.js";
 import { diag } from "./diag.js";
-import { recordarEnvio as recordarAvisoEquipo, marcarEntregado as avisoEntregado, marcarRebote as avisoRebotado } from "./avisos_salud.js";
+import { recordarEnvio as recordarAvisoEquipo, marcarEntregado as avisoEntregado, marcarRebote as avisoRebotado, destinosAvisos, aprenderNumeroPropio, numeroPropioBot } from "./avisos_salud.js";
 import {
   enviarTextoMeta, enviarImagenMeta, enviarVideoMeta, enviarPlantillaMeta,
   marcarLeidoEscribiendo, mediaComoDataUri, aWaId, metaConfigurado,
@@ -39,8 +39,11 @@ let ultimaConfirmacionAvisos = 0; // para confirmar el canal de avisos a lo sumo
 // Número propio (el 091 dentro de la WABA): en coexistence, los mensajes que el
 // equipo manda desde la app del celular también llegan al webhook con from = este
 // número. Los usamos para pausar a Max (handoff humano).
+// Sale de NUMERO_BOT o, si no está, de lo que trae el webhook en
+// metadata.display_phone_number. YA NO cae a NUMERO_AVISOS: ese tiene que ser el
+// celular de un asesor, NO el del bot (ver avisos_salud.js, 19 nov 2026).
 function numeroPropio() {
-  return aWaId(process.env.NUMERO_BOT || process.env.NUMERO_AVISOS || "");
+  return numeroPropioBot();
 }
 
 // CHAT QUE TOMÓ UN ASESOR: Max no contesta, pero el ADJUNTO se guarda igual.
@@ -172,28 +175,16 @@ async function mandarAvisoA(destino, texto) {
 }
 
 // Un aviso al equipo que REBOTÓ. No es un mensaje perdido más: es el equipo
-// quedándose sin derivaciones ni avisos de transferencia. Se grita en el log, se
-// deja en /api/diag y se reintenta por NUMERO_AVISOS_RESPALDO.
-// (18 sep 2026: el 096 empezó a rebotar todo con code 131026 y el equipo estuvo
-// 3 días sin enterarse de nada porque el rebote no despertaba a nadie.)
+// quedándose sin derivaciones ni avisos de transferencia. Se grita en el log y se
+// deja en /api/diag. Ya no hace falta reenviarlo: desde el 19 nov 2026 cada aviso
+// sale a TODOS los destinos (NUMERO_AVISOS + NUMERO_AVISOS_RESPALDO), así que si
+// hay más de un número los otros ya lo recibieron. La alarma que despierta a
+// alguien es el workflow `alarma-avisos` (lee avisos en /api/estado).
+// (18 sep 2026: el 096 empezó a rebotar todo con code 131026 y nadie se enteró
+// en dos meses porque el rebote solo quedaba acá.)
 async function rescatarAviso(rebote, destinoOriginal, detalle) {
   diag("aviso_equipo_rebotado", { jid: destinoOriginal, detalle: `${detalle} · ${rebote.consecutivos} seguidos` });
-  console.log(`🚨 AVISO AL EQUIPO REBOTADO (${rebote.consecutivos} seguidos) — el equipo NO se está enterando. Destino ${destinoOriginal}: ${detalle}`);
-
-  const respaldo = aWaId(process.env.NUMERO_AVISOS_RESPALDO || "");
-  if (!respaldo || respaldo === aWaId(destinoOriginal)) {
-    console.log(`🚨 Sin NUMERO_AVISOS_RESPALDO: este aviso se perdió → ${String(rebote.texto).replace(/\s+/g, " ").slice(0, 120)}`);
-    return;
-  }
-  // El rescate NO se recuerda en avisos_salud: si el respaldo también rebota, el
-  // status no dispara otro rescate y no se arma un ida y vuelta infinito.
-  try {
-    await mandarAvisoA(respaldo, `🚨 (rebotó al ${destinoOriginal})\n${rebote.texto}`);
-    diag("aviso_equipo_rescatado", { jid: respaldo });
-    console.log(`✅ aviso rescatado por el número de respaldo ${respaldo}`);
-  } catch (e) {
-    console.log(`🚨 el respaldo ${respaldo} TAMPOCO pudo: ${e.message} → ${String(rebote.texto).replace(/\s+/g, " ").slice(0, 120)}`);
-  }
+  console.log(`🚨 AVISO AL EQUIPO REBOTADO (${rebote.consecutivos} seguidos) — destino ${destinoOriginal}: ${detalle} → ${String(rebote.texto).replace(/\s+/g, " ").slice(0, 120)}`);
 }
 
 // caption: si el mensaje que se envió era una FOTO o un VIDEO de un producto, se
@@ -376,8 +367,7 @@ async function procesarEntrante(msg, value) {
   // que la Cloud API exige para entregarle los avisos como texto libre (fuera de esa
   // ventana Meta los descarta en silencio, code 131047). Le confirmamos el canal (a
   // lo sumo una vez cada 12 h) para que el equipo sepa que quedó activo.
-  const numAvisos = aWaId(process.env.NUMERO_AVISOS || "");
-  if (numAvisos && tel === numAvisos) {
+  if (destinosAvisos().destinos.includes(tel)) {
     console.log("🔔 mensaje del número de avisos → ventana de 24 h abierta para los avisos");
     diag("canal_avisos_abierto", { jid: tel });
     if (Date.now() - ultimaConfirmacionAvisos > 12 * 3600_000) {
@@ -511,10 +501,31 @@ export function montarWebhook(app) {
   // al menos llega con la ventana abierta. PLANTILLA_AVISO="" la desactiva.
   // ⚠️ El 200 de Meta NO significa entregado: el rebote llega DESPUÉS, por el
   // webhook de statuses. Por eso cada aviso se recuerda por su id (avisos_salud.js):
-  // si rebota, ahí abajo se reintenta por el número de respaldo y queda la alarma.
+  // si rebota, queda la alarma (avisos en /api/estado + workflow alarma-avisos).
+  // Sale a TODOS los destinos: un teléfono muerto ya no deja mudo al equipo.
+  // Sin el default "091629784" de antes: ese es el número del bot (se mandaba los
+  // avisos a sí mismo). Sin destinos válidos se grita y /api/estado queda mudo:true.
+  const cfg = destinosAvisos();
+  console.log(`🔔 avisos al equipo → ${cfg.destinos.length ? cfg.destinos.join(", ") : "NINGÚN DESTINO VÁLIDO"}`);
+  for (const d of cfg.descartados) console.log(`🚨 NUMERO_AVISOS descartado ${d.numero}: ${d.motivo}`);
   registrarTransporte(async (texto) => {
-    const destino = process.env.NUMERO_AVISOS || "091629784";
-    recordarAvisoEquipo(await mandarAvisoA(destino, texto), texto);
+    const { destinos, descartados } = destinosAvisos();
+    if (!destinos.length) {
+      diag("aviso_equipo_sin_destino", { detalle: descartados.map((d) => `${d.numero}: ${d.motivo}`).join(" · ") || "NUMERO_AVISOS vacío" });
+      throw new Error("sin_destinos_de_avisos");
+    }
+    let alguno = false;
+    let ultimoError = null;
+    for (const destino of destinos) {
+      try {
+        recordarAvisoEquipo(await mandarAvisoA(destino, texto), texto, destino);
+        alguno = true;
+      } catch (e) {
+        ultimoError = e;
+        console.log(`⚠ aviso a ${destino} no salió: ${e.message}`);
+      }
+    }
+    if (!alguno) throw ultimoError || new Error("aviso_no_salio");
   });
 
   // 1) VERIFICACIÓN del webhook (Meta hace un GET cuando lo configurás).
@@ -538,6 +549,9 @@ export function montarWebhook(app) {
       for (const entry of entradas) {
         for (const ch of entry.changes || []) {
           const value = ch.value || {};
+          // El webhook dice cuál es NUESTRO número: con eso se reconoce el eco del
+          // equipo en coexistence y se evita mandarse avisos a uno mismo.
+          if (value.metadata?.display_phone_number) aprenderNumeroPropio(value.metadata.display_phone_number);
           // messages = mensajes de clientes → los atiende Max.
           for (const msg of value.messages || []) {
             procesarEntrante(msg, value).catch((e) => console.log("⚠ error procesando entrante:", e.message));

@@ -20,6 +20,23 @@ webhook `/webhook` montado desde `web.js` con `WA_PROVIDER=meta`).
 Ya no hay QR ni sesión que revincular. Todo lo que este archivo diga más abajo sobre Baileys,
 QR, `WHATSAPP_ON` o revinculación es **historia, no instrucciones**.
 
+## 🚨 SESIÓN 19 nov — LOS AVISOS AL EQUIPO ESTUVIERON MUDOS ~2 MESES (LO MÁS NUEVO)
+
+- **Hallazgo:** `/api/estado` → `avisos.ok:false`, **470 rebotes seguidos** (code 131026 "Message
+  undeliverable"), `ultimoOk:null` desde el arranque del 27 oct. Probablemente roto desde el **18 sep**
+  (mismo código). La alarma del 21 sep existía pero solo en `/api/estado` y nadie la miraba.
+- **Causa probable:** `NUMERO_AVISOS` apunta a un número que no puede recibir. El default del código y de
+  `.env.example` era `091629784` = **el número de Max** (Coexistence): mandarse un aviso a uno mismo rebota
+  siempre. No se pudo ver el valor real en Render (sin sesión).
+- **La plantilla `aviso_equipo_max` SIGUE EXISTIENDO en Meta** (crearla de nuevo da "Content in This
+  Language Already Exists"). Que `plantillas_360.mjs listar` dé 0 es un problema del listado de 360dialog.
+- **Arreglo (rama `fix/avisos-no-pueden-callar`):** `NUMERO_AVISOS` acepta lista y cada aviso sale a TODOS
+  (+ `NUMERO_AVISOS_RESPALDO`); el número propio se aprende del webhook (`metadata.display_phone_number`) y
+  se descarta como destino; sin default 091; salud POR NÚMERO en `/api/estado` → `avisos.destinos`,
+  `mudo`, `configurados`, `descartados` (enmascarados); workflow **`alarma-avisos`** cada ~30 min → issue
+  + mail si rebota 3 seguidas o no hay destinos, recordatorio diario, se cierra solo al volver.
+- **Falta (Pablo):** cargar en Render `NUMERO_AVISOS` con 1–2 celulares de asesores con WhatsApp.
+
 ## 📦 SESIÓN 27 oct — EL ENVÍO DAC NUNCA ESTÁ INCLUIDO (LO MÁS NUEVO)
 
 - **Caso:** un cliente preguntó "¿y DAC lo pagás tú?" y Max contestó "DAC lo pagamos nosotros
