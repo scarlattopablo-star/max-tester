@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_AGOTADO_ALFOMBRA, AVISO_ALFOMBRA_NO_DISPONIBLE, AVISO_CUBREASIENTO_NO_DISPONIBLE, AVISO_DEMORA, TEXTO_MATERIAL_EXCLUSIVO, MUESTRA_COLORES, TELEFONO_CONSULTAS, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, AVISO_STOCK_SIN_PUBLICAR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, DIAS_CERRADO, tiendaMLPorModelo } from "./config.js";
+import { NEGOCIO, proveedorIA, ASISTENTE, ENVIOS, CUBREASIENTOS, AVISO_COLOCACION, AVISO_ENVIO, PLAZO_ENVIO, AVISO_DISPONIBILIDAD, AVISO_AGOTADO, AVISO_AGOTADO_ALFOMBRA, AVISO_ALFOMBRA_NO_DISPONIBLE, AVISO_ALFOMBRA_YUAN_PRO, AVISO_ALFOMBRA_YUAN_PRO_HIBRIDA, AVISO_CUBREASIENTO_NO_DISPONIBLE, AVISO_DEMORA, TEXTO_MATERIAL_EXCLUSIVO, MUESTRA_COLORES, TELEFONO_CONSULTAS, ALFOMBRAS_ENTRANDO, AVISO_ALFOMBRA_ENTRANDO, AVISO_A_MEDIDA, AVISO_PASO_ASESOR, AVISO_STOCK_SIN_PUBLICAR, PEDIR_VEHICULO, NO_HACEMOS, FRASE_CONSULTO, DIAS_CERRADO, tiendaMLPorModelo } from "./config.js";
 import { solicitarTurno } from "./agenda.js";
 import { stockSinPublicar, resumenParaEquipo } from "./stock_sin_publicar.js";
 import { registrarPedido } from "./pedidos.js";
@@ -938,6 +938,31 @@ function _buscarPrecio(consulta, lista = null) {
   return aplicarCab(base).slice(0, 6).map(_mapProd);
 }
 
+// ── ALFOMBRAS DEL BYD YUAN PRO: SOLO LA ELÉCTRICA (Rodrigo, 24 nov 2026) ────────
+// "ALFOMBRA BYD YUAN PRO, NO SIRVE PARA LA HIBRIDA DMI. SOLO ELECTRRICA, para que
+// informe bien". Dos cosas, las dos por código:
+//   · si el cliente dijo que su Yuan Pro es la HÍBRIDA (DM-i), las alfombras del Yuan
+//     Pro se sacan de la búsqueda: para él no hay (texto fijo, sin asesor);
+//   · si no lo dijo, cada vez que se le cotiza o muestra una, va la aclaración fija.
+export const esAlfombraYuanPro = (nombre) => { const t = _normTxt(nombre); return /alfombra/.test(t) && /yuan\s*pro\b/.test(t); };
+const _DICE_HIBRIDA = /h[ií]brid|\bdm\s*-?\s*i\b|\bdmi\b|\bphev\b|enchufable/i;
+function yuanProHibrida(lista, consulta, ctx) {
+  if (!lista.some((x) => esAlfombraYuanPro(x.nombre))) return null;
+  const charla = `${consulta || ""} ${ctx?._ultimoUsuario || ""} ${ctx?.textoCharla || ""}`;
+  if (!_DICE_HIBRIDA.test(charla)) return null;
+  const resto = lista.filter((x) => !esAlfombraYuanPro(x.nombre));
+  if (resto.length) return { resto };
+  return {
+    sinNada: {
+      encontrado: false,
+      agotado: false,
+      categoriaPedida: "alfombra",
+      textoSinAlfombra: AVISO_ALFOMBRA_YUAN_PRO_HIBRIDA,
+      mensaje: `El cliente tiene la Yuan Pro HÍBRIDA (DM-i) y las alfombras del Yuan Pro son SOLO para la eléctrica: para su auto no hay. El sistema YA le manda el texto oficial (con el teléfono ${TELEFONO_CONSULTAS}). ⛔ NO lo repitas ni lo reformules, ⛔ NO le ofrezcas las de la eléctrica, ⛔ NO ofrezcas aviso ni asesor y ⛔ NO derives.`,
+    },
+  };
+}
+
 // VERSIONES de un modelo que son OTRO AUTO (Yuan Pro ≠ Yuan Plus, Tiggo 7 ≠ Tiggo 7
 // Pro). ⚠️ "sport" queda afuera de esta lista aunque sea una variante de búsqueda: en
 // los títulos es la LÍNEA de tapizado ("Cuero Sport"), no la versión del vehículo.
@@ -1459,6 +1484,7 @@ Si el cliente pide una de estas cosas: decile la verdad con amabilidad (sin dram
 Cuando "consultar_precio" o "enviar_foto" no te devuelven productos, la herramienta te dice cuál de los CUATRO casos es. No son lo mismo y se responden distinto:
 - 🚗 CASO 0 — te devuelve **falta_modelo: true**: todavía no sabés qué auto tiene. ⛔ PROHIBIDO dar precio, nombrar un producto o mandar fotos: lo que hay en el sistema es de OTROS modelos y le estarías cotizando el de otro auto. Preguntale marca y modelo en una frase corta y amable ("¿Para qué vehículo es? Decime marca y modelo así te paso el precio exacto") y cuando te conteste, buscá de nuevo. Esto NO es decirle que no tenemos: es que todavía no sabés qué buscar.
 ⚠️ ORDEN DE PRIORIDAD (no lo inviertas): si la herramienta dice **agotado: true**, ESO MANDA SIEMPRE y vas al CASO 1 — aunque el vehículo sea JMC, aunque sea una Strada. Las excepciones de más abajo son SOLO para el CASO 2. Un producto agotado es un producto que existe: ofrecele el aviso, no lo mandes al asesor. Y si dice **aMedida: true**, vas al CASO 3 y ahí NO se habla de stock para nada.
+- 🧶 ALFOMBRAS DEL BYD YUAN PRO (Rodrigo, 24 nov 2026): son SOLO para la Yuan Pro 100% ELÉCTRICA. ⛔ NO sirven para la Yuan Pro HÍBRIDA (DM-i): nunca digas ni insinúes que le calzan. Cuando se las muestres, el SISTEMA agrega la aclaración (no la repitas). Si el cliente te dice que la suya es la híbrida, para él no hay alfombra (el sistema le manda el texto oficial).
 - 🧶 ALFOMBRAS: NUNCA "ESTÁN ENTRANDO" (correcciones de Rodrigo, 14 oct 2026 — reemplaza la regla del 5 oct): ⛔ NUNCA digas ni insinúes que una alfombra está entrando, ingresando, en camino o que llega pronto. Las alfombras CON stock se venden normal y las A PEDIDO con los días que da Mercado Libre (sección DISPONIBILIDAD). Si está AGOTADA es el CASO 1 (el sistema le dice que no hay disponibilidad y le ofrece el aviso). Si para su vehículo no hay ninguna, es el CASO 2.
 - 📦 CASO 1 — te devuelve **agotado: true** (con producto y producto_id): esa publicación EXISTE pero se quedó sin stock. ⛔ PROHIBIDO derivar y PROHIBIDO dar precio.
   · El aviso de agotado lo manda EL SISTEMA, con el texto exacto del dueño, y termina preguntándole al cliente si quiere que le avisemos. ⛔ NO lo escribas vos, NO lo repitas y NO lo reformules: si lo hacés, el cliente lee dos veces lo mismo. Vos como mucho ponés UNA frase corta ANTES, nombrando el producto ("Justo la alfombra bandeja 3D para tu Yuan Pro..."). Podés no escribir nada y está perfecto.
@@ -2379,8 +2405,11 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // Va ANTES de buscar: ver el comentario de preventaTesla().
       const pvPrecio = preventaTesla(consulta, ctx._ultimoUsuario);
       if (pvPrecio) return pvPrecio;
-      const encontrados = porCarroceria(buscarPrecio(consulta), ctx);
+      let encontrados = porCarroceria(buscarPrecio(consulta), ctx);
       if (!encontrados.length) return { ...sinStockOInexistente(consulta, ctx._ultimoUsuario, ctx._recientesMax) };
+      const hibPrecio = yuanProHibrida(encontrados, consulta, ctx);
+      if (hibPrecio?.sinNada) return hibPrecio.sinNada;
+      if (hibPrecio?.resto) encontrados = hibPrecio.resto;
       // Si no sabemos QUÉ AUTO tiene, lo que encontramos es de un modelo cualquiera:
       // darle ese precio es mentirle. Se le pregunta el vehículo primero.
       // Un auto de la lista de stock sin publicar (Corsa, QQ, March…) puede no estar en
@@ -2443,10 +2472,13 @@ async function _ejecutarHerramienta(nombre, input, ctx = {}) {
       // Mandar una foto ES cotizar (el pie lleva el precio), asi que el mismo freno.
       const pvFoto = preventaTesla(consulta, ctx._ultimoUsuario);
       if (pvFoto) return { ok: false, ...pvFoto };
-      const hallados = porCarroceria(buscarPrecio(consulta), ctx);
+      let hallados = porCarroceria(buscarPrecio(consulta), ctx);
       // Solo cuando NO hay nada del producto miramos si está agotado o si no lo
       // trabajamos: si hay productos pero ninguno tiene foto, es otro problema.
       if (!hallados.length) return { ok: false, ...sinStockOInexistente(consulta, ctx._ultimoUsuario, ctx._recientesMax) };
+      const hibFoto = yuanProHibrida(hallados, consulta, ctx);
+      if (hibFoto?.sinNada) return { ok: false, ...hibFoto.sinNada };
+      if (hibFoto?.resto) hallados = hibFoto.resto;
       // Mismo criterio que consultar_precio: sin saber el vehículo, las fotos serían de
       // otro auto. Antes de mostrar nada, se pregunta el modelo.
       // Un auto de la lista de stock sin publicar (Corsa, QQ, March…) puede no estar en
@@ -3569,8 +3601,13 @@ export function armarRespuesta(texto, acciones, ctx = {}) {
     limpio = [diceMedida ? null : AVISO_A_MEDIDA, limpio, diceAsesor ? null : AVISO_PASO_ASESOR]
       .filter(Boolean).join("\n\n");
   }
+  // ALFOMBRA DEL YUAN PRO cotizada o mostrada: va la aclaración de que es solo para la
+  // eléctrica (Rodrigo, 24 nov 2026). Una vez: si ya se la dijimos hace poco, no se repite.
+  const mostroAlfYuanPro = acciones.some((a) => [...(a.resultado?.resultados || []), ...(a.resultado?.fotos || [])]
+    .some((x) => esAlfombraYuanPro(x?.nombre)));
+  const avisoYuanPro = mostroAlfYuanPro && !String(ctx._recientesMax || "").includes(AVISO_ALFOMBRA_YUAN_PRO) ? AVISO_ALFOMBRA_YUAN_PRO : null;
   // Orden: primero CUÁNDO lo tiene (disponibilidad), después cómo se despacha y se coloca.
-  let textoFinal = [limpio, ...oficiales, avisoMaterialExclusivo, avisoDisponibilidad, avisoColocacion, avisoEnvio, avisoAgotado, avisoSinAlfombra, avisoSinCubreasiento].filter(Boolean).join("\n\n")
+  let textoFinal = [limpio, ...oficiales, avisoYuanPro, avisoMaterialExclusivo, avisoDisponibilidad, avisoColocacion, avisoEnvio, avisoAgotado, avisoSinAlfombra, avisoSinCubreasiento].filter(Boolean).join("\n\n")
     || (imagenesEnviar.length || videosEnviar.length ? "" : RESPUESTA_FALLBACK);
   // Acá se resuelve la derivación que quedó pendiente, con el mensaje final a la
   // vista: si Max terminó PREGUNTÁNDOLE al cliente si quiere el asesor, no se deriva

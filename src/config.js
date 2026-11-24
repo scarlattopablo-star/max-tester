@@ -217,6 +217,13 @@ Costo colocado: $19.800 IVA incluido.`;
 export const AVISO_CUBREASIENTO_NO_DISPONIBLE = `De momento no tenemos cubreasientos para ese vehículo. Si querés realizar otra consulta o necesitás confirmar alguna información, podés comunicarte directamente por teléfono con nosotros al ${TELEFONO_CONSULTAS}.`;
 export const AVISO_ALFOMBRA_NO_DISPONIBLE = `De momento no contamos con alfombras disponibles para ese modelo. Si querés realizar otra consulta o necesitás confirmar alguna información, podés comunicarte directamente por teléfono con nosotros al ${TELEFONO_CONSULTAS}.`;
 
+// ALFOMBRAS DEL BYD YUAN PRO (Rodrigo, 24 nov 2026): "ALFOMBRA BYD YUAN PRO, NO SIRVE
+// PARA LA HIBRIDA DMI. SOLO ELECTRICA". Cada vez que Max cotiza o muestra una alfombra
+// del Yuan Pro el sistema agrega la aclaración; si el cliente ya dijo que la suya es
+// la híbrida, para él no hay alfombra.
+export const AVISO_ALFOMBRA_YUAN_PRO = `Importante: las alfombras del BYD Yuan Pro son solo para la versión 100% eléctrica. No sirven para la Yuan Pro híbrida (DM-i).`;
+export const AVISO_ALFOMBRA_YUAN_PRO_HIBRIDA = `Las alfombras que tenemos para el BYD Yuan Pro son solo para la versión 100% eléctrica: para la híbrida (DM-i) de momento no contamos con alfombras. Si querés realizar otra consulta o necesitás confirmar alguna información, podés comunicarte directamente por teléfono con nosotros al ${TELEFONO_CONSULTAS}.`;
+
 // Cuando Max pasa la charla a una persona puede haber demora: se le ofrece el teléfono.
 export const AVISO_DEMORA = `Si estamos demorando en responder y necesitás resolver tu consulta con mayor rapidez, te recomendamos comunicarte por teléfono al ${TELEFONO_CONSULTAS}.`;
 
