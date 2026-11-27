@@ -18,6 +18,9 @@ actualizarCatalogo([
   { id: "MLU4", n: "Alfombra Geely Ex2 Bandeja 3d Premium Para Auto Negro", p: 4300 },
   { id: "MLU5", n: "Alfombra Bandeja 5d  Geely Ex2 Cubre El Socalo Negro", p: 4900 },
   { id: "MLU6", n: "Alfombra Montana Bandeja Negro", p: 3612 },
+  { id: "MLU7", n: "Alfombra Gac Aion Ut Bandeja 4d Antiderrame Premium Negro", p: 3588 },
+  { id: "MLU8", n: "Alfombra Gac Aion Ut  Bandeja 4d Antiderrame Y Baúl Negro", p: 4214 },
+  { id: "MLU9", n: "Alfombra Baul Gac Aion Ut Negro", p: 2900 },
 ], "test");
 
 const ids = (q) => buscarPrecio(q).map((r) => r.id).sort();
@@ -40,6 +43,12 @@ test("pidió una versión que no hay: muestra la que hay (el nombre dice cuál e
 });
 test("el título sin versión no se pierde ('Montana Bandeja' es la rígida)", () => {
   assert.deepEqual(ids("alfombra 3d montana"), ["MLU6"]);
+});
+
+// Rodrigo, 27 nov 2026: "bandeja 3D" del anuncio para el Aion UT. Solo hay 4D de piso y
+// una de baúl sin versión en el título: quedaba solo el baúl y Max dijo que de piso no había.
+test("pidió 3D y solo hay 4D + una de baúl sin versión: NO se pierden las de piso", () => {
+  assert.deepEqual(ids("alfombra bandeja 3d aion ut"), ["MLU7", "MLU8", "MLU9"]);
 });
 
 console.log(`\n${ok} OK`);
