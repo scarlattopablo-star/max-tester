@@ -923,8 +923,12 @@ function _buscarPrecio(consulta, lista = null) {
     // Pidió 3D/4D/5D: fuera las publicaciones que dicen OTRA versión (las que no dicen
     // ninguna se quedan: "Alfombra Montana Bandeja" es la rígida). Si de ese modelo no
     // hay la que pidió, se muestra lo que hay y el nombre dice qué versión es.
+    // ⚠️ Solo se filtra si ALGUNA publicación del modelo dice la versión pedida. Antes
+    // bastaba con que quedara una sin versión: "bandeja 3D aion ut" dejaba solo la de
+    // BAÚL (su título no dice versión) y tiraba las de piso 4D, y Max le dijo al cliente
+    // que de piso no había (Rodrigo, 27 nov 2026).
     const dPedida = versionAlfombra(texto);
-    if (dPedida) {
+    if (dPedida && res.some((item) => versionAlfombra(item.n) === dPedida)) {
       const f = res.filter((item) => { const d = versionAlfombra(item.n); return !d || d === dPedida; });
       if (f.length) res = f;
     }
